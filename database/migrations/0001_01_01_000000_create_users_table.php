@@ -17,8 +17,33 @@ return new class extends Migration
             $table->string('email')->unique();
             $table->timestamp('email_verified_at')->nullable();
             $table->string('password');
+            $table->enum('role', ['student', 'doctor', 'clinical_staff', 'academic_staff', 'admin'])->default('student');
+            
+            // Student-specific fields
+            $table->string('university_id')->unique()->nullable();
+            $table->string('department')->nullable();
+            
+            // Doctor-specific fields
+            $table->string('medical_license_number')->unique()->nullable();
+            $table->string('specialization')->nullable();
+            
+            // Staff-specific fields
+            $table->string('employee_id')->unique()->nullable();
+            $table->string('faculty')->nullable();
+            
+            // Common fields
+            $table->string('phone')->nullable();
+            $table->enum('status', ['active', 'inactive', 'pending_verification'])->default('pending_verification');
+            $table->json('permissions')->nullable(); // For role-based permissions
+            
             $table->rememberToken();
             $table->timestamps();
+            
+            // Indexes for better performance
+            $table->index(['role', 'status']);
+            $table->index('university_id');
+            $table->index('employee_id');
+            $table->index('medical_license_number');
         });
 
         Schema::create('password_reset_tokens', function (Blueprint $table) {

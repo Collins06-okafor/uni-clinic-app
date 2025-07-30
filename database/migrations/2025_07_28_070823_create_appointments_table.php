@@ -13,7 +13,15 @@ return new class extends Migration
     {
         Schema::create('appointments', function (Blueprint $table) {
             $table->id();
+            $table->unsignedBigInteger('patient_id');
+            $table->unsignedBigInteger('doctor_id');
+            $table->date('date');
+            $table->string('reason');
             $table->timestamps();
+
+            // Optional: Add foreign keys if needed (uncomment if users table exists)
+            // $table->foreign('patient_id')->references('id')->on('users')->onDelete('cascade');
+            // $table->foreign('doctor_id')->references('id')->on('users')->onDelete('cascade');
         });
     }
 
