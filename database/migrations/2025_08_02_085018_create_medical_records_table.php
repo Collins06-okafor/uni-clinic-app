@@ -6,37 +6,30 @@ use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
 {
-    /**
-     * Run the migrations.
-     */
     public function up(): void
     {
         Schema::create('medical_records', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('patient_id')->constrained('users');
-            $table->foreignId('doctor_id')->constrained('users');
-            $table->text('diagnosis');
-            $table->text('treatment');
-            $table->text('notes')->nullable();
-            $table->date('visit_date');
+
+            // Foreign key columns
+            $table->foreignId('patient_id')->constrained('users')->onDelete('cascade');
+            $table->foreignId('doctor_id')->nullable()->constrained('users')->onDelete('set null');
+            $table->foreignId('created_by')->constrained('users')->onDelete('restrict');
+
+            // Medical record fields
+            $table->string('type'); // vital_signs, medication, etc.
+            $table->json('content')->nullable();
+            $table->string('diagnosis')->nullable();
+            $table->string('treatment')->nullable();
+            $table->date('visit_date')->nullable();
+
+            // Index for quick lookups
+            $table->index(['patient_id', 'visit_date']);
+
             $table->timestamps();
-
-            // Foreign keys
-            $table->foreign('patient_id')
-                ->references('id')
-                ->on('users')
-                ->onDelete('cascade');
-
-            $table->foreign('doctor_id')
-                ->references('id')
-                ->on('users')
-                ->onDelete('cascade');
         });
     }
 
-    /**
-     * Reverse the migrations.
-     */
     public function down(): void
     {
         Schema::dropIfExists('medical_records');

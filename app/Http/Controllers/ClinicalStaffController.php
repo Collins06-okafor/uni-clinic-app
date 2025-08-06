@@ -379,11 +379,11 @@ public function recordMedication(Request $request, $patientId): JsonResponse
    public function updateVitalSigns(Request $request, $patientId): JsonResponse
 {
     $validated = $request->validate([
-        'blood_pressure_systolic' => 'sometimes|required|integer|min:60|max:250',
-        'blood_pressure_diastolic' => 'sometimes|required|integer|min:40|max:150',
-        'heart_rate' => 'sometimes|required|integer|min:30|max:200',
-        'temperature' => 'sometimes|required|numeric|min:90|max:110',
-        'temperature_unit' => 'sometimes|required|in:F,C',
+        'blood_pressure_systolic' => 'required|integer|min:60|max:250',
+        'blood_pressure_diastolic' => 'required|integer|min:40|max:150',
+        'heart_rate' => 'required|integer|min:30|max:200',
+        'temperature' => 'required|numeric|min:90|max:110',
+        'temperature_unit' => 'required|in:F,C',
         'respiratory_rate' => 'nullable|integer|min:8|max:40',
         'oxygen_saturation' => 'nullable|integer|min:70|max:100',
         'notes' => 'nullable|string|max:500',
@@ -401,7 +401,6 @@ public function recordMedication(Request $request, $patientId): JsonResponse
         $doctorId = $todayAppointment ? $todayAppointment->doctor_id : null;
     }
 
-    // Remove doctor_id from content
     unset($validated['doctor_id']);
 
     $record = MedicalRecord::create([
@@ -409,6 +408,9 @@ public function recordMedication(Request $request, $patientId): JsonResponse
         'doctor_id' => $doctorId,
         'type' => 'vital_signs',
         'content' => $validated,
+        'diagnosis' => 'Vital signs recording',
+        'treatment' => 'N/A',
+        'visit_date' => now()->format('Y-m-d'), // Add current date
         'created_by' => $request->user()->id
     ]);
     
@@ -419,6 +421,126 @@ public function recordMedication(Request $request, $patientId): JsonResponse
     ], 201);
 }
 
+
+/**
+ * Create or update a student medical card
+ */
+public function updateMedicalCard(Request $request, $studentId): JsonResponse
+{
+    $validated = $request->validate([
+        'emergency_contact' => 'required|array',
+        'emergency_contact.name' => 'required|string|max:255',
+        'emergency_contact.relationship' => 'required|string|max:255',
+        'emergency_contact.phone' => 'required|string|max:20',
+        'emergency_contact.email' => 'nullable|email|max:255',
+        'medical_history' => 'nullable|array',
+        'current_medications' => 'nullable|array',
+        'allergies' => 'nullable|array',
+        'previous_conditions' => 'nullable|array',
+        'family_history' => 'nullable|array',
+        'insurance_info' => 'nullable|array',
+        'insurance_info.provider' => 'nullable|string|max:255',
+        'insurance_info.policy_number' => 'nullable|string|max:255',
+        'insurance_info.expiry' => 'nullable|date',
+    ]);
+
+    $student = User::findOrFail($studentId);
+    
+    // Create or update medical card
+    $medicalCard = $student->medicalCard()->updateOrCreate(
+        ['user_id' => $studentId],
+        $validated
+    );
+    
+    return response()->json([
+        'message' => 'Medical card updated successfully',
+        'medical_card' => $medicalCard,
+        'updated_by' => $request->user()->name,
+    ]);
+}
+
+/**
+ * Upload medical documents
+ */
+// In MedicalDocumentController.php
+public function uploadMedicalDocument(Request $request, $patientId)
+{
+    $validated = $request->validate([
+        'document_type' => 'required|in:vaccination,lab_result,prescription,imaging,report',
+        'file' => 'required|file|mimes:pdf,jpg,png,doc,docx|max:10240',
+        'date' => 'required|date',
+        'description' => 'nullable|string|max:500'
+    ]);
+
+    $filePath = $request->file('file')->store('medical_documents');
+
+    $document = MedicalDocument::create([
+        'patient_id' => $patientId,
+        'type' => $validated['document_type'],
+        'file_path' => $filePath,
+        'document_date' => $validated['date'],
+        'description' => $validated['description'] ?? null,
+        'uploaded_by' => auth()->id()
+    ]);
+
+    return response()->json([
+        'message' => 'Document uploaded successfully',
+        'document' => $document
+    ], 201);
+}
+
+/**
+ * Get medical card information
+ */
+public function getMedicalCard($studentId): JsonResponse
+{
+    $student = User::with(['medicalCard', 'medicalDocuments'])
+        ->findOrFail($studentId);
+        
+    return response()->json([
+        'student' => [
+            'id' => $student->id,
+            'name' => $student->name,
+            'student_id' => $student->student_id,
+            'department' => $student->department,
+        ],
+        'medical_card' => $student->medicalCard,
+        'documents' => $student->medicalDocuments->map(function($doc) {
+            return [
+                'id' => $doc->id,
+                'type' => $doc->type,
+                'description' => $doc->description,
+                'date' => $doc->document_date,
+                'uploaded_at' => $doc->created_at,
+                'uploaded_by' => $doc->uploader->name,
+                'download_url' => route('medical.download', $doc->id),
+            ];
+        }),
+    ]);
+}
+
+public function storeMedicalCard(Request $request, $userId)
+{
+    $validated = $request->validate([
+        'emergency_contact' => 'required|array',
+        'medical_history' => 'nullable|array',
+        'current_medications' => 'nullable|array',
+        'allergies' => 'nullable|array',
+        'previous_conditions' => 'nullable|array',
+        'family_history' => 'nullable|array',
+        'insurance_info' => 'nullable|array',
+    ]);
+
+    // Add user_id to the validated data
+    $validated['user_id'] = $userId;
+
+    $medicalCard = MedicalCard::create($validated);
+
+    return response()->json([
+        'message' => 'Medical card created successfully',
+        'data' => $medicalCard
+    ], 201);
+}
     /**
      * Get patient care tasks
      */

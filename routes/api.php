@@ -70,6 +70,8 @@ Route::middleware('role:student')->prefix('student')->group(function () {
         Route::put('/appointments/{id}/status', [DoctorController::class, 'updateAppointmentStatus']);
         Route::get('/statistics', [DoctorController::class, 'getStatistics']);
         Route::put('/availability', [DoctorController::class, 'updateAvailability']);
+        Route::get('/patients/{id}/medical-card', [ClinicalStaffController::class, 'getMedicalCard']);
+
     });
 
     // Academic Staff routes (Clinic-focused)
@@ -105,10 +107,14 @@ Route::middleware('role:academic_staff')->prefix('academic-staff')->group(functi
         Route::get('/medical-records/{id}', [ClinicalStaffController::class, 'getMedicalRecord']);
         Route::post('/patients/{patientId}/medication', [ClinicalStaffController::class, 'recordMedication']);
         Route::get('/medication-schedule', [ClinicalStaffController::class, 'getMedicationSchedule']);
-        Route::put('/patients/{patientId}/vital-signs', [ClinicalStaffController::class, 'updateVitalSigns']);
-        Route::get('/care-tasks', [ClinicalStaffController::class, 'getCareTasks']);
+        Route::put('/patients/{id}/vital-signs', [ClinicalStaffController::class, 'updateVitalSigns']);        Route::get('/care-tasks', [ClinicalStaffController::class, 'getCareTasks']);
         Route::post('/tasks/{taskId}/complete', [ClinicalStaffController::class, 'completeTask']);
         Route::post('/appointments/{id}/confirm', [ClinicalStaffController::class, 'sendConfirmation']);
+        Route::post('/patients/{id}/medical-card', [ClinicalStaffController::class, 'updateMedicalCard']);
+        Route::post('/patients/{id}/medical-documents', [ClinicalStaffController::class, 'uploadMedicalDocument']);
+        Route::get('/patients/{id}/medical-card', [ClinicalStaffController::class, 'getMedicalCard']);
+        Route::get('/patients/{id}/medical-history', [PatientController::class, 'medicalHistory']);
+        Route::get('/patients/search', [PatientController::class, 'search']);
     });
 
     // Admin routes

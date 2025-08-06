@@ -31,6 +31,7 @@ class User extends Authenticatable
         'permissions',
         'email_verified_at',
         'doctor_id', // Add this for patient assignment
+        'medical_card_id'
     ];
 
     /**
@@ -101,6 +102,19 @@ class User extends Authenticatable
     {
         return $this->role === $role;
     }
+
+// Add to your User model
+public function medicalCard()
+{
+    return $this->hasOne(MedicalCard::class, 'user_id');
+}
+
+
+// Add this to your User model
+public function medicalDocuments()
+{
+    return $this->hasMany(MedicalDocument::class, 'patient_id');
+}
 
     /**
      * Check if user has any of the specified roles

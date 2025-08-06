@@ -6,20 +6,21 @@ use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
 {
-    /**
-     * Run the migrations.
-     */
     public function up()
     {
-        Schema::table('users', function (Blueprint $table) {
-            $table->renameColumn('university_id', 'student_id');
-        });
+        if (Schema::hasColumn('users', 'university_id')) {
+            Schema::table('users', function (Blueprint $table) {
+                $table->renameColumn('university_id', 'student_id');
+            });
+        }
     }
 
     public function down()
     {
-        Schema::table('users', function (Blueprint $table) {
-            $table->renameColumn('student_id', 'university_id');
-        });
+        if (Schema::hasColumn('users', 'student_id')) {
+            Schema::table('users', function (Blueprint $table) {
+                $table->renameColumn('student_id', 'university_id');
+            });
+        }
     }
 };
