@@ -10,13 +10,6 @@ use App\Http\Controllers\ClinicalStaffController;
 use App\Http\Controllers\AppointmentController;
 use App\Http\Controllers\AdminController;
 
-
-/*
-|--------------------------------------------------------------------------
-| API Routes
-|--------------------------------------------------------------------------
-*/
-
 // Public routes (no authentication required)
 Route::prefix('auth')->group(function () {
     Route::post('/register', [AuthController::class, 'register']);
@@ -48,43 +41,58 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::prefix('appointments')->group(function () {
         Route::get('/', [AppointmentController::class, 'index']);
         Route::post('/', [AppointmentController::class, 'store'])->middleware('role:student|doctor|clinical_staff');
-
         Route::get('/{id}', [AppointmentController::class, 'show']);
         Route::put('/{id}', [AppointmentController::class, 'update'])->middleware('role:doctor,clinical_staff,admin');
         Route::delete('/{id}', [AppointmentController::class, 'destroy'])->middleware('role:doctor,clinical_staff,admin');
     });
 
-    // Student-specific routes
-    Route::middleware('role:student')->prefix('student')->group(function () {
-        Route::get('/dashboard', [StudentController::class, 'dashboard']);
-        Route::get('/courses', [StudentController::class, 'getCourses']);
-        Route::get('/grades', [StudentController::class, 'getGrades']);
-        Route::post('/assignments/{id}/submit', [StudentController::class, 'submitAssignment']);
-        Route::get('/medical-history', [StudentController::class, 'getMedicalHistory']);
-        Route::get('/appointments', [StudentController::class, 'getAppointments']);
-    });
+   // Student-specific routes
+Route::middleware('role:student')->prefix('student')->group(function () {
+    Route::get('/dashboard', [StudentController::class, 'dashboard']);
+    Route::get('/medical-history', [StudentController::class, 'getMedicalHistory']);
+    Route::get('/appointments', [StudentController::class, 'getAppointments']);
+    Route::post('/appointments/schedule', [StudentController::class, 'scheduleAppointment']);
+    Route::put('/appointments/{appointment}/reschedule', [StudentController::class, 'rescheduleAppointment']);
+    Route::get('/doctors/availability', [StudentController::class, 'getDoctorAvailability']);
+});
 
     // Doctor-specific routes
-    Route::middleware('role:doctor')->prefix('doctor')->group(function () {
+     Route::middleware('role:doctor')->prefix('doctor')->group(function () {
         Route::get('/dashboard', [DoctorController::class, 'dashboard']);
         Route::get('/patients', [DoctorController::class, 'getPatients']);
         Route::get('/patients/{id}', [DoctorController::class, 'getPatient']);
+        Route::post('/patients/{patient}/assign', [DoctorController::class, 'assignPatient']); // ADD THIS LINE
         Route::post('/patients/{id}/records', [DoctorController::class, 'createMedicalRecord']);
         Route::get('/appointments', [DoctorController::class, 'getAppointments']);
         Route::post('/prescriptions', [DoctorController::class, 'createPrescription']);
+        Route::get('/prescriptions', [DoctorController::class, 'getPrescriptions']);
         Route::get('/schedule', [DoctorController::class, 'getSchedule']);
+        Route::put('/appointments/{id}/status', [DoctorController::class, 'updateAppointmentStatus']);
+        Route::get('/statistics', [DoctorController::class, 'getStatistics']);
+        Route::put('/availability', [DoctorController::class, 'updateAvailability']);
     });
 
-    // Academic Staff routes
-    Route::middleware('role:academic_staff')->prefix('academic')->group(function () {
-        Route::get('/dashboard', [AcademicStaffController::class, 'dashboard']);
-        Route::get('/courses', [AcademicStaffController::class, 'getCourses']);
-        Route::post('/courses', [AcademicStaffController::class, 'createCourse']);
-        Route::get('/students', [AcademicStaffController::class, 'getStudents']);
-        Route::post('/assignments', [AcademicStaffController::class, 'createAssignment']);
-        Route::put('/assignments/{id}/grade', [AcademicStaffController::class, 'gradeAssignment']);
-        Route::post('/announcements', [AcademicStaffController::class, 'createAnnouncement']);
-    });
+    // Academic Staff routes (Clinic-focused)
+Route::middleware('role:academic_staff')->prefix('academic-staff')->group(function () {
+    // Dashboard
+    Route::get('/dashboard', [AcademicStaffController::class, 'dashboard']);
+    
+    // Medical history
+    Route::get('/medical-history', [AcademicStaffController::class, 'getMedicalHistory']);
+    
+    // Appointments
+    Route::get('/appointments', [AcademicStaffController::class, 'getAppointments']);
+    Route::post('/appointments/schedule', [AcademicStaffController::class, 'scheduleAppointment']);
+    Route::put('/appointments/{appointment}/reschedule', [AcademicStaffController::class, 'rescheduleAppointment']);
+    Route::delete('/appointments/{appointment}', [AcademicStaffController::class, 'cancelAppointment']);
+    
+    // Doctor availability
+    Route::get('/doctors/availability', [AcademicStaffController::class, 'getDoctorAvailability']);
+    Route::get('/doctors/{doctor}/available-slots', [AcademicStaffController::class, 'getAvailableSlots']);
+    
+    // Profile
+    Route::put('/profile', [AcademicStaffController::class, 'updateProfile']);
+});
 
     // Clinical Staff routes
     Route::middleware('role:clinical_staff')->prefix('clinical')->group(function () {
@@ -92,8 +100,15 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/patients', [ClinicalStaffController::class, 'getPatients']);
         Route::put('/patients/{id}', [ClinicalStaffController::class, 'updatePatient']);
         Route::get('/appointments', [ClinicalStaffController::class, 'getAppointments']);
+        Route::put('/appointments/{id}', [ClinicalStaffController::class, 'updateAppointment']);
         Route::post('/appointments/schedule', [ClinicalStaffController::class, 'scheduleAppointment']);
         Route::get('/medical-records/{id}', [ClinicalStaffController::class, 'getMedicalRecord']);
+        Route::post('/patients/{patientId}/medication', [ClinicalStaffController::class, 'recordMedication']);
+        Route::get('/medication-schedule', [ClinicalStaffController::class, 'getMedicationSchedule']);
+        Route::put('/patients/{patientId}/vital-signs', [ClinicalStaffController::class, 'updateVitalSigns']);
+        Route::get('/care-tasks', [ClinicalStaffController::class, 'getCareTasks']);
+        Route::post('/tasks/{taskId}/complete', [ClinicalStaffController::class, 'completeTask']);
+        Route::post('/appointments/{id}/confirm', [ClinicalStaffController::class, 'sendConfirmation']);
     });
 
     // Admin routes
@@ -102,6 +117,7 @@ Route::middleware('auth:sanctum')->group(function () {
         
         // User management
         Route::get('/users', [AdminController::class, 'getUsers']);
+        Route::post('/users', [AdminController::class, 'createUser']); // Add this line for user creation
         Route::get('/users/{id}', [AdminController::class, 'getUser']);
         Route::put('/users/{id}/status', [AdminController::class, 'updateUserStatus']);
         Route::put('/users/{id}/role', [AdminController::class, 'updateUserRole']);
@@ -116,58 +132,18 @@ Route::middleware('auth:sanctum')->group(function () {
         // Role and permission management
         Route::get('/roles', [AdminController::class, 'getRoles']);
         Route::post('/users/{id}/permissions', [AdminController::class, 'assignPermissions']);
-    });
 
-    // Routes accessible by medical staff (doctors + clinical staff)
-    Route::middleware('role:doctor,clinical_staff')->prefix('medical')->group(function () {
-        Route::get('/patients', function (Request $request) {
-            // Common patient listing for medical staff
-            return response()->json(['message' => 'Medical patients list']);
-        });
-        
-        Route::get('/emergency-contacts', function (Request $request) {
-            return response()->json(['message' => 'Emergency contacts']);
-        });
-    });
+         // Backup routes
+    Route::post('/backups', [AdminController::class, 'createBackup']);
+    Route::get('/backups', [AdminController::class, 'getBackups']);
+    Route::get('/backups/{backupId}/status', [AdminController::class, 'getBackupStatus']);
+    Route::post('/backups/{backupId}/restore', [AdminController::class, 'restoreBackup']);
 
-    // Routes accessible by academic management (academic staff + admin)
-    Route::middleware('role:academic_staff,admin')->prefix('academic-management')->group(function () {
-        Route::get('/departments', function (Request $request) {
-            return response()->json(['message' => 'Departments list']);
-        });
-        
-        Route::get('/faculty-statistics', function (Request $request) {
-            return response()->json(['message' => 'Faculty statistics']);
-        });
-    });
-
-    // Routes accessible by all staff (excluding students)
-    Route::middleware('role:doctor,clinical_staff,academic_staff,admin')->prefix('staff')->group(function () {
-        Route::get('/announcements', function (Request $request) {
-            return response()->json(['message' => 'Staff announcements']);
-        });
-        
-        Route::get('/calendar', function (Request $request) {
-            return response()->json(['message' => 'Staff calendar']);
-        });
-    });
-
-    // Simple ping test (accessible by all authenticated users)
-    Route::get('/ping', function () {
-        return response()->json([
-            'message' => 'Server is alive',
-            'timestamp' => now(),
-            'user' => auth()->user()->name,
-            'roles' => auth()->user()->getRoleNames(),
-        ]);
+    // Notification routes
+    Route::post('/notifications', [AdminController::class, 'sendBulkNotification']);
+    Route::get('/notifications/{notificationId}/status', [AdminController::class, 'getNotificationStatus']);
     });
 });
-
-/*
-|--------------------------------------------------------------------------
-| Additional utility routes
-|--------------------------------------------------------------------------
-*/
 
 // Health check (public)
 Route::get('/health', function () {

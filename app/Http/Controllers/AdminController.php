@@ -15,91 +15,35 @@ class AdminController extends Controller
      */
     public function dashboard(Request $request): JsonResponse
     {
-        // In real implementation, fetch from database with proper queries
         return response()->json([
             'message' => 'Welcome to Admin Dashboard',
             'admin' => [
                 'name' => $request->user()->name,
-                'employee_id' => $request->user()->employee_id,
+                'staff_no' => $request->user()->staff_no,
                 'email' => $request->user()->email,
                 'last_login' => now()->subHours(2)
             ],
             'system_overview' => [
-                'total_users' => 1250,
-                'active_users' => 1180,
-                'pending_verifications' => 15,
-                'inactive_users' => 55,
-                'new_registrations_today' => 5,
-                'new_registrations_this_week' => 23,
-                'new_registrations_this_month' => 87
+                'total_users' => User::count(),
+                'active_users' => User::where('status', 'active')->count(),
+                'pending_verifications' => User::where('status', 'pending_verification')->count(),
+                'inactive_users' => User::where('status', 'inactive')->count(),
+                'new_registrations_today' => User::whereDate('created_at', today())->count(),
+                'new_registrations_this_week' => User::whereBetween('created_at', [now()->startOfWeek(), now()->endOfWeek()])->count(),
+                'new_registrations_this_month' => User::whereMonth('created_at', now()->month)->count()
             ],
             'user_breakdown' => [
                 'students' => [
-                    'total' => 980,
-                    'active' => 950,
-                    'pending' => 12,
-                    'inactive' => 18
+                    'total' => User::where('role', 'student')->count(),
+                    'active' => User::where('role', 'student')->where('status', 'active')->count(),
+                    'pending' => User::where('role', 'student')->where('status', 'pending_verification')->count(),
+                    'inactive' => User::where('role', 'student')->where('status', 'inactive')->count()
                 ],
                 'doctors' => [
-                    'total' => 45,
-                    'active' => 43,
-                    'pending' => 1,
-                    'inactive' => 1
-                ],
-                'clinical_staff' => [
-                    'total' => 78,
-                    'active' => 76,
-                    'pending' => 1,
-                    'inactive' => 1
-                ],
-                'academic_staff' => [
-                    'total' => 120,
-                    'active' => 118,
-                    'pending' => 1,
-                    'inactive' => 1
-                ],
-                'admins' => [
-                    'total' => 27,
-                    'active' => 27,
-                    'pending' => 0,
-                    'inactive' => 0
-                ]
-            ],
-            'system_health' => [
-                'uptime' => '99.98%',
-                'average_response_time' => '125ms',
-                'error_rate' => '0.02%',
-                'last_backup' => now()->subHours(2)->format('Y-m-d H:i:s'),
-                'database_size' => '2.3 GB',
-                'storage_used' => '15.7 GB',
-                'memory_usage' => '68%',
-                'cpu_usage' => '23%'
-            ],
-            'recent_activities' => [
-                'New user registration: john.doe@university.edu (Student) - 2 hours ago',
-                'Doctor account activated: dr.smith@hospital.com - 4 hours ago',
-                'System backup completed successfully - 6 hours ago',
-                'Security scan completed - No threats detected - 12 hours ago',
-                'Database optimization completed - 24 hours ago'
-            ],
-            'pending_actions' => [
-                [
-                    'type' => 'user_verification',
-                    'count' => 15,
-                    'description' => 'Email verifications pending',
-                    'priority' => 'medium'
-                ],
-                [
-                    'type' => 'account_activation',
-                    'count' => 3,
-                    'description' => 'Doctor accounts awaiting activation',
-                    'priority' => 'high'
-                ],
-                [
-                    'type' => 'system_update',
-                    'count' => 1,
-                    'description' => 'Security updates available',
-                    'priority' => 'high'
+                    'total' => User::where('role', 'doctor')->count(),
+                    'active' => User::where('role', 'doctor')->where('status', 'active')->count(),
+                    'pending' => User::where('role', 'doctor')->where('status', 'pending_verification')->count(),
+                    'inactive' => User::where('role', 'doctor')->where('status', 'inactive')->count()
                 ]
             ]
         ]);
@@ -110,110 +54,21 @@ class AdminController extends Controller
      */
     public function getUsers(Request $request): JsonResponse
     {
-        $perPage = $request->get('per_page', 20);
-        $page = $request->get('page', 1);
-        $role = $request->get('role');
-        $status = $request->get('status');
-        $search = $request->get('search');
-        $department = $request->get('department');
-        $sortBy = $request->get('sort_by', 'created_at');
-        $sortOrder = $request->get('sort_order', 'desc');
-
-        // In real implementation, use Eloquent with proper pagination
-        $users = [
-            [
-                'id' => 1,
-                'name' => 'John Doe',
-                'email' => 'john.doe@university.edu',
-                'role' => 'student',
-                'status' => 'active',
-                'university_id' => 'STU123456',
-                'department' => 'Computer Science',
-                'phone' => '+1-555-0101',
-                'email_verified_at' => '2024-01-16T10:00:00Z',
-                'created_at' => '2024-01-15T10:00:00Z',
-                'last_login' => '2024-02-09T14:30:00Z'
-            ],
-            [
-                'id' => 2,
-                'name' => 'Dr. Sarah Smith',
-                'email' => 'sarah.smith@hospital.com',
-                'role' => 'doctor',
-                'status' => 'active',
-                'employee_id' => 'EMP001234',
-                'medical_license_number' => 'ML123456789',
-                'specialization' => 'General Medicine',
-                'phone' => '+1-555-0201',
-                'email_verified_at' => '2024-01-11T14:00:00Z',
-                'created_at' => '2024-01-10T14:30:00Z',
-                'last_login' => '2024-02-09T09:00:00Z'
-            ],
-            [
-                'id' => 3,
-                'name' => 'Prof. Michael Johnson',
-                'email' => 'michael.johnson@university.edu',
-                'role' => 'academic_staff',
-                'status' => 'active',
-                'employee_id' => 'EMP005678',
-                'faculty' => 'Mathematics',
-                'department' => 'Applied Mathematics',
-                'phone' => '+1-555-0301',
-                'email_verified_at' => '2024-01-06T16:00:00Z',
-                'created_at' => '2024-01-05T16:30:00Z',
-                'last_login' => '2024-02-08T11:15:00Z'
-            ],
-            [
-                'id' => 4,
-                'name' => 'Nurse Emily Davis',
-                'email' => 'emily.davis@hospital.com',
-                'role' => 'clinical_staff',
-                'status' => 'pending_verification',
-                'employee_id' => 'EMP009012',
-                'department' => 'Emergency Care',
-                'phone' => '+1-555-0401',
-                'email_verified_at' => null,
-                'created_at' => '2024-02-08T09:00:00Z',
-                'last_login' => null
-            ]
-        ];
+        $users = User::query()
+            ->when($request->role, fn($query, $role) => $query->where('role', $role))
+            ->when($request->status, fn($query, $status) => $query->where('status', $status))
+            ->paginate($request->per_page ?? 20);
 
         return response()->json([
-            'users' => $users,
+            'users' => $users->items(),
             'pagination' => [
-                'current_page' => $page,
-                'per_page' => $perPage,
-                'total' => 1250,
-                'last_page' => 63,
-                'from' => (($page - 1) * $perPage) + 1,
-                'to' => min($page * $perPage, 1250)
-            ],
-            'summary' => [
-                'total_users' => 1250,
-                'filtered_count' => count($users),
-                'by_role' => [
-                    'students' => 980,
-                    'doctors' => 45,
-                    'clinical_staff' => 78,
-                    'academic_staff' => 120,
-                    'admins' => 27
-                ],
-                'by_status' => [
-                    'active' => 1180,
-                    'inactive' => 55,
-                    'pending_verification' => 15
-                ]
-            ],
-            'filters_applied' => [
-                'role' => $role,
-                'status' => $status,
-                'search' => $search,
-                'department' => $department,
-                'sort_by' => $sortBy,
-                'sort_order' => $sortOrder
+                'total' => $users->total(),
+                'per_page' => $users->perPage(),
+                'current_page' => $users->currentPage(),
+                'last_page' => $users->lastPage()
             ]
         ]);
     }
-
     /**
      * Get detailed user information
      */
@@ -230,10 +85,9 @@ class AdminController extends Controller
                 'status' => 'active'
             ],
             'role_specific_info' => [
-                'university_id' => 'STU123456',
-                'department' => 'Computer Science',
-                'year' => 'Junior',
-                'gpa' => 3.75
+                'student_id' => 'STU123456',
+                'department' => 'computer engineering',
+                'year' => 'Junior'
             ],
             'account_info' => [
                 'email_verified_at' => '2024-01-16T10:00:00Z',
@@ -245,10 +99,8 @@ class AdminController extends Controller
             ],
             'permissions' => [
                 'view_own_profile',
-                'update_own_profile',
-                'view_courses',
-                'submit_assignments',
-                'view_grades'
+                'update_own_profile'
+                
             ],
             'activity_log' => [
                 [
@@ -273,44 +125,42 @@ class AdminController extends Controller
      * Create a new user
      */
     public function createUser(Request $request): JsonResponse
-    {
-        $validated = $request->validate([
-            'name' => 'required|string|max:255',
-            'email' => 'required|email|unique:users,email',
-            'password' => 'required|string|min:8|confirmed',
-            'role' => 'required|in:student,doctor,clinical_staff,academic_staff,admin',
-            'phone' => 'nullable|string|max:20',
-            'university_id' => 'nullable|string|unique:users,university_id|max:20',
-            'employee_id' => 'nullable|string|unique:users,employee_id|max:20',
-            'medical_license_number' => 'nullable|string|unique:users,medical_license_number|max:50',
-            'department' => 'nullable|string|max:100',
-            'faculty' => 'nullable|string|max:100',
-            'specialization' => 'nullable|string|max:100',
-            'status' => 'required|in:active,inactive,pending_verification',
-            'notify_user' => 'boolean'
-        ]);
+{
+    $validated = $request->validate([
+        'name' => 'required|string|max:255',
+        'email' => 'required|email|unique:users,email',
+        'password' => 'required|string|min:8|confirmed',
+        'role' => 'required|in:student,doctor,clinical_staff,academic_staff,admin',
+        'status' => 'sometimes|in:active,inactive,pending_verification',
+        'student_id' => 'required_if:role,student|unique:users,student_id|max:20',
+        'department' => 'required_if:role,student|string|max:100'
+    ]);
 
-        // In real implementation, create user in database
-        $userId = rand(1000, 9999);
-        
-        $this->logAdminAction($request->user(), 'user_created', [
-            'new_user_id' => $userId,
-            'role' => $validated['role'],
-            'email' => $validated['email']
-        ]);
+    $userData = [
+        'name' => $validated['name'],
+        'email' => $validated['email'],
+        'password' => bcrypt($validated['password']),
+        'role' => $validated['role'],
+        'status' => $validated['status'] ?? 'active'
+    ];
 
-        return response()->json([
-            'message' => 'User created successfully',
-            'user_id' => $userId,
-            'name' => $validated['name'],
-            'email' => $validated['email'],
-            'role' => $validated['role'],
-            'status' => $validated['status'],
-            'created_by' => $request->user()->name,
-            'created_at' => now(),
-            'email_sent' => $validated['notify_user'] ?? false
-        ], 201);
+    // Add role-specific fields
+    if ($validated['role'] === 'student') {
+        $userData['student_id'] = $validated['student_id'];
+        $userData['department'] = $validated['department'];
     }
+
+    $user = User::create($userData);
+
+    return response()->json([
+        'message' => 'User created successfully',
+        'id' => $user->id,
+        'name' => $user->name,
+        'email' => $user->email,
+        'role' => $user->role,
+        'status' => $user->status
+    ], 201);
+}
 
     /**
      * Update user status (activate, deactivate, etc.)
@@ -377,27 +227,80 @@ class AdminController extends Controller
      * Delete user account
      */
     public function deleteUser(Request $request, $userId): JsonResponse
-    {
-        $validated = $request->validate([
-            'reason' => 'required|string|max:500',
-            'confirm_deletion' => 'required|boolean|accepted'
-        ]);
+{
+    $validated = $request->validate([
+        'reason' => 'required|string|max:500',
+        'confirm_deletion' => 'required|boolean|accepted'
+    ]);
 
-        // In real implementation, soft delete or hard delete based on policy
+    try {
+        // Find the user
+        $user = User::findOrFail($userId);
         
+        // Prevent admin from deleting themselves
+        if ($user->id === $request->user()->id) {
+            return response()->json([
+                'message' => 'You cannot delete your own account',
+                'error' => 'SELF_DELETION_NOT_ALLOWED'
+            ], 403);
+        }
+        
+        // Store user info before deletion for logging
+        $userInfo = [
+            'id' => $user->id,
+            'name' => $user->name,
+            'email' => $user->email,
+            'role' => $user->role
+        ];
+        
+        // Check if this is a soft delete or hard delete
+        // You can implement soft delete by adding 'deleted_at' column to users table
+        // and using SoftDeletes trait in User model
+        
+        // Option 1: Hard Delete (permanent removal)
+        $user->forceDelete();
+        
+        // Option 2: Soft Delete (uncomment this and comment the line above)
+        // $user->delete();
+        
+        // Log the action
         $this->logAdminAction($request->user(), 'user_deletion', [
             'target_user_id' => $userId,
-            'reason' => $validated['reason']
+            'target_user_info' => $userInfo,
+            'reason' => $validated['reason'],
+            'deletion_type' => 'hard_delete' // or 'soft_delete'
         ]);
 
         return response()->json([
             'message' => 'User account deleted successfully',
             'user_id' => $userId,
+            'user_name' => $userInfo['name'],
+            'user_email' => $userInfo['email'],
             'deleted_by' => $request->user()->name,
             'deleted_at' => now(),
             'reason' => $validated['reason']
         ]);
+        
+    } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
+        return response()->json([
+            'message' => 'User not found',
+            'error' => 'USER_NOT_FOUND'
+        ], 404);
+        
+    } catch (\Exception $e) {
+        // Log the error
+        \Log::error('User deletion failed', [
+            'user_id' => $userId,
+            'admin_id' => $request->user()->id,
+            'error' => $e->getMessage()
+        ]);
+        
+        return response()->json([
+            'message' => 'Failed to delete user account',
+            'error' => 'DELETION_FAILED'
+        ], 500);
     }
+}
 
     /**
      * Get system statistics
@@ -430,7 +333,7 @@ class AdminController extends Controller
                     'pending_verification' => ['count' => 15, 'percentage' => 1.2]
                 ],
                 'by_department' => [
-                    'Computer Science' => 245,
+                    'computer engineering' => 245,
                     'Engineering' => 198,
                     'Biology' => 167,
                     'Mathematics' => 143,
@@ -672,9 +575,6 @@ class AdminController extends Controller
                     'permissions' => [
                         'view_own_profile',
                         'update_own_profile',
-                        'view_courses',
-                        'submit_assignments',
-                        'view_grades',
                         'schedule_appointments',
                         'view_medical_history'
                     ],
@@ -715,11 +615,8 @@ class AdminController extends Controller
                     'permissions' => [
                         'view_own_profile',
                         'update_own_profile',
-                        'manage_courses',
-                        'view_students',
-                        'grade_assignments',
-                        'create_announcements',
-                        'manage_curriculum'
+                        'schedule_appointments',
+                        'view_medical_history'
                     ],
                     'user_count' => 120
                 ],
@@ -882,42 +779,76 @@ class AdminController extends Controller
     /**
      * Send bulk notifications to users
      */
-    public function sendBulkNotification(Request $request): JsonResponse
-    {
-        $validated = $request->validate([
-            'recipient_type' => 'required|in:all,role,department,status',
-            'recipient_filter' => 'required_unless:recipient_type,all|string',
-            'notification_type' => 'required|in:email,sms,in_app,all',
-            'subject' => 'required|string|max:255',
-            'message' => 'required|string|max:2000',
-            'priority' => 'required|in:low,normal,high,urgent',
-            'schedule_for' => 'nullable|date|after:now',
-            'include_attachments' => 'boolean'
-        ]);
+    /**
+ * Send bulk notifications to users
+ * 
+ * @param Request $request
+ * @return JsonResponse
+ * 
+ * @throws ValidationException
+ */
+public function sendBulkNotification(Request $request): JsonResponse
+{
+    // Validate incoming request
+    $validated = $request->validate([
+        'recipient_type' => 'required|in:all,role,department,status',
+        'recipient_filter' => 'required_unless:recipient_type,all|string',
+        'notification_type' => 'required|in:email,sms,in_app,all',
+        'subject' => 'required|string|max:255',
+        'message' => 'required|string|max:2000',
+        'priority' => 'required|in:low,normal,high,urgent',
+        'schedule_for' => 'nullable|date|after_or_equal:now',
+        'include_attachments' => 'sometimes|boolean'
+    ]);
 
-        // In real implementation, queue notifications for sending
+    try {
+        // Generate unique notification ID
         $notificationId = 'NOTIF_' . now()->format('YmdHis') . '_' . rand(1000, 9999);
         
-        $this->logAdminAction($request->user(), 'bulk_notification_sent', [
-            'notification_id' => $notificationId,
-            'recipient_type' => $validated['recipient_type'],
-            'recipient_filter' => $validated['recipient_filter'] ?? null,
-            'notification_type' => $validated['notification_type']
-        ]);
+        // Log admin action
+        $this->logAdminAction(
+            $request->user(),
+            'bulk_notification_sent',
+            [
+                'notification_id' => $notificationId,
+                'recipient_type' => $validated['recipient_type'],
+                'recipient_count' => $this->getEstimatedRecipients($validated)
+            ]
+        );
 
-        return response()->json([
+        // Prepare response
+        $response = [
             'message' => 'Bulk notification queued successfully',
             'notification_id' => $notificationId,
-            'recipient_type' => $validated['recipient_type'],
-            'estimated_recipients' => $this->getEstimatedRecipients($validated),
-            'notification_type' => $validated['notification_type'],
-            'priority' => $validated['priority'],
-            'scheduled_for' => $validated['schedule_for'] ?? 'immediate',
-            'created_by' => $request->user()->name,
-            'created_at' => now(),
-            'status' => $validated['schedule_for'] ? 'scheduled' : 'queued'
-        ], 201);
+            'metadata' => [
+                'recipient_type' => $validated['recipient_type'],
+                'notification_type' => $validated['notification_type'],
+                'priority' => $validated['priority'],
+                'estimated_recipients' => $this->getEstimatedRecipients($validated),
+                'schedule_status' => isset($validated['schedule_for']) ? 'scheduled' : 'immediate',
+                'scheduled_time' => $validated['schedule_for'] ?? null
+            ],
+            'system' => [
+                'created_by' => $request->user()->name,
+                'created_at' => now()->toISOString(),
+                'status' => 'queued'
+            ]
+        ];
+
+        return response()->json($response, 201);
+
+    } catch (\Exception $e) {
+        // Log detailed error
+        \Log::error('Notification failed: ' . $e->getMessage(), [
+            'trace' => $e->getTraceAsString()
+        ]);
+        
+        return response()->json([
+            'error' => 'Notification processing failed',
+            'details' => config('app.debug') ? $e->getMessage() : null
+        ], 500);
     }
+}
 
     /**
      * Get notification status

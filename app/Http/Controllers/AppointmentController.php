@@ -15,26 +15,67 @@ class AppointmentController extends Controller
     }
 
     // POST /api/appointments
+   // In your AppointmentController or DoctorController
     public function store(Request $request)
-    {
-        $validator = Validator::make($request->all(), [
-            'patient_id' => 'required|exists:users,id',
-            'doctor_id' => 'required|exists:users,id',
-            'date' => 'required|date',
-            'reason' => 'required|string|max:255',
-        ]);
+{
+    $validated = $request->validate([
+        'patient_id' => 'required|exists:users,id',
+        'date' => 'required|date',
+        'time' => 'required|date_format:H:i',
+        'reason' => 'required|string|max:500'
+    ]);
 
-        if ($validator->fails()) {
-            return response()->json($validator->errors(), 422);
-        }
+    // Check if patient already has an appointment on this date
+    $existingPatientAppointment = Appointment::where('patient_id', $validated['patient_id'])
+        ->where('date', $validated['date'])
+        ->whereIn('status', ['scheduled', 'confirmed'])
+        ->first();
 
-        $appointment = Appointment::create($validator->validated());
-
+    if ($existingPatientAppointment) {
         return response()->json([
-            'message' => 'Appointment created successfully',
-            'data' => $appointment
-        ], 201);
+            'message' => 'Patient already has an appointment scheduled for this date',
+            'errors' => ['date' => ['Only one appointment per day is allowed per patient']]
+        ], 422);
     }
+
+    // Check for existing appointment at the same time
+    $existingDoctorAppointment = Appointment::where('doctor_id', $request->user()->id)
+        ->where('date', $validated['date'])
+        ->where('time', $validated['time'])
+        ->whereIn('status', ['scheduled', 'confirmed'])
+        ->first();
+
+    if ($existingDoctorAppointment) {
+        return response()->json([
+            'message' => 'You already have an appointment scheduled at this time',
+            'errors' => ['time' => ['This time slot is already booked']]
+        ], 422);
+    }
+
+    $appointment = Appointment::create([
+        'patient_id' => $validated['patient_id'],
+        'doctor_id' => $request->user()->id,
+        'date' => $validated['date'],
+        'time' => $validated['time'],
+        'reason' => $validated['reason'],
+        'status' => 'scheduled' // Default status
+    ]);
+
+    return response()->json([
+        'message' => 'Appointment created successfully',
+        'appointment' => [
+            'id' => $appointment->id,
+            'patient_id' => $appointment->patient_id,
+            'doctor_id' => $appointment->doctor_id,
+            'date' => $appointment->date->format('Y-m-d'),
+            'time' => $appointment->time->format('H:i'),
+            'reason' => $appointment->reason,
+            'status' => $appointment->status,
+            'created_at' => $appointment->created_at,
+            'updated_at' => $appointment->updated_at
+        ]
+    ], 201);
+}
 
     // GET /api/appointments/{id}
     public function show($id)

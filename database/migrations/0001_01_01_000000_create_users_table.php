@@ -20,7 +20,7 @@ return new class extends Migration
             $table->enum('role', ['student', 'doctor', 'clinical_staff', 'academic_staff', 'admin'])->default('student');
             
             // Student-specific fields
-            $table->string('university_id')->unique()->nullable();
+            $table->string('student_id')->unique()->nullable();
             $table->string('department')->nullable();
             
             // Doctor-specific fields
@@ -28,7 +28,7 @@ return new class extends Migration
             $table->string('specialization')->nullable();
             
             // Staff-specific fields
-            $table->string('employee_id')->unique()->nullable();
+            $table->string('staff_no')->unique()->nullable();
             $table->string('faculty')->nullable();
             
             // Common fields
@@ -41,8 +41,8 @@ return new class extends Migration
             
             // Indexes for better performance
             $table->index(['role', 'status']);
-            $table->index('university_id');
-            $table->index('employee_id');
+            $table->index('student_id');
+            $table->index('staff_no');
             $table->index('medical_license_number');
         });
 

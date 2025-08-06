@@ -17,6 +17,22 @@ return Application::configure(basePath: dirname(__DIR__))
             \App\Http\Middleware\CorsMiddleware::class,
         ]);
         
+        // ✅ REGISTER YOUR CUSTOM MIDDLEWARE ALIASES HERE
+        $middleware->alias([
+            'role' => \App\Http\Middleware\RoleMiddleware::class,
+            'permission' => \App\Http\Middleware\PermissionMiddleware::class,
+        ]);
+
+        // Add Sanctum middleware to API group for authentication
+        $middleware->api([
+            \Laravel\Sanctum\Http\Middleware\EnsureFrontendRequestsAreStateful::class,
+        ]);
+        
+        // Optional: Add Sanctum middleware to API group
+        $middleware->api([
+            \Laravel\Sanctum\Http\Middleware\EnsureFrontendRequestsAreStateful::class,
+        ]);
+        
         // Or add it globally to all requests
         // $middleware->use([
         //     \App\Http\Middleware\CorsMiddleware::class,
