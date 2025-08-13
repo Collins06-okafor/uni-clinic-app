@@ -106,6 +106,9 @@ Route::middleware('role:academic_staff')->prefix('academic-staff')->group(functi
         Route::post('/appointments/schedule', [ClinicalStaffController::class, 'scheduleAppointment']);
         Route::get('/medical-records/{id}', [ClinicalStaffController::class, 'getMedicalRecord']);
         Route::post('/patients/{patientId}/medication', [ClinicalStaffController::class, 'recordMedication']);
+        Route::get('/clinical/medications', [ClinicalStaffController::class, 'getMedications']);
+        //Route::post('/medications', [MedicationController::class, 'store']);
+
         Route::get('/medication-schedule', [ClinicalStaffController::class, 'getMedicationSchedule']);
         Route::put('/patients/{id}/vital-signs', [ClinicalStaffController::class, 'updateVitalSigns']);        Route::get('/care-tasks', [ClinicalStaffController::class, 'getCareTasks']);
         Route::post('/tasks/{taskId}/complete', [ClinicalStaffController::class, 'completeTask']);
@@ -149,6 +152,15 @@ Route::middleware('role:academic_staff')->prefix('academic-staff')->group(functi
     Route::post('/notifications', [AdminController::class, 'sendBulkNotification']);
     Route::get('/notifications/{notificationId}/status', [AdminController::class, 'getNotificationStatus']);
     });
+});
+
+Route::middleware(['auth:sanctum', 'permission'])->group(function () {
+    // Protected routes that require permissions
+    Route::get('/admin-only', function () {
+        // Only accessible by users with permission
+    })->middleware('permission:admin-access');
+    
+    // Other protected routes
 });
 
 // Health check (public)

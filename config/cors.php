@@ -1,12 +1,12 @@
 <?php
-// config/cors.php
+// config/cors.php - For token-only authentication
 
 return [
     'paths' => ['api/*'],
 
     'allowed_methods' => ['*'],
 
-    'allowed_origins' => ['*'], // You can use wildcard now since no credentials
+    'allowed_origins' => ['*'], // Can use wildcard for token-only auth
 
     'allowed_origins_patterns' => [],
 
@@ -16,5 +16,5 @@ return [
 
     'max_age' => 0,
 
-    'supports_credentials' => false, // Set to false for token-based auth
+    'supports_credentials' => false, // False for token-only auth
 ];

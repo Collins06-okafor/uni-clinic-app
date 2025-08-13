@@ -9,6 +9,8 @@ use App\Models\User;
 use App\Models\MedicalRecord;
 use Illuminate\Support\Facades\DB;
 use Carbon\Carbon;
+use App\Models\Medication;
+
 
 class ClinicalStaffController extends Controller
 {
@@ -275,6 +277,41 @@ public function updateAppointment(Request $request, $id): JsonResponse
     }
 
     /**
+ * Get all medications (not just schedule)
+ */
+public function getMedications(Request $request): JsonResponse
+{
+    $query = MedicalRecord::where('type', 'medication')
+        ->with(['patient', 'doctor']);
+        
+    if ($request->has('patient_id')) {
+        $query->where('patient_id', $request->patient_id);
+    }
+    
+    $medications = $query->get()->map(function($record) {
+        return [
+            'id' => $record->id,
+            'patient' => [
+                'id' => $record->patient->id,
+                'name' => $record->patient->name,
+                'student_id' => $record->patient->student_id
+            ],
+            'medication' => $record->content['medication_name'],
+            'dosage' => $record->content['dosage'],
+            'route' => $record->content['route'],
+            'status' => $record->content['status'] ?? 'pending',
+            'prescribing_doctor' => $record->doctor->name,
+            'administered_by' => $record->creator->name,
+            'administered_at' => $record->created_at
+        ];
+    });
+    
+    return response()->json([
+        'medications' => $medications
+    ]);
+}
+
+    /**
      * Record medication administration
      */
     /**
@@ -335,46 +372,48 @@ public function recordMedication(Request $request, $patientId): JsonResponse
      * Get medication schedule for patients
      */
     public function getMedicationSchedule(Request $request): JsonResponse
-    {
-        $date = $request->get('date', now()->format('Y-m-d'));
-        $status = $request->get('status', 'all'); // all, due, administered, overdue
-        
-        $query = MedicalRecord::where('type', 'medication')
-            ->whereDate('created_at', $date)
-            ->with(['patient', 'doctor']);
-            
-        if ($status === 'due') {
-            $query->where('content->status', 'pending');
-        } elseif ($status === 'administered') {
-            $query->where('content->status', 'completed');
-        }
-        
-        $medications = $query->get()->map(function($record) {
-            return [
-                'id' => $record->id,
-                'patient' => [
-                    'name' => $record->patient->name,
-                    'student_id' => $record->patient->student_id
-                ],
-                'medication' => $record->content['medication_name'],
-                'dosage' => $record->content['dosage'],
-                'status' => $record->content['status'] ?? 'pending',
-                'prescribing_doctor' => $record->doctor->name,
-                'administered_by' => $record->creator->name,
-                'administered_at' => $record->created_at
-            ];
-        });
-        
-        return response()->json([
-            'medications' => $medications,
-            'summary' => [
-                'date' => $date,
-                'total_medications' => $medications->count(),
-                'due' => $medications->where('status', 'pending')->count(),
-                'administered' => $medications->where('status', 'completed')->count(),
-            ]
-        ]);
+{
+    $date = $request->get('date', now()->format('Y-m-d'));
+    $status = $request->get('status', 'all'); // all, due, administered
+
+    $query = Medication::whereDate('start_date', '<=', $date)
+        ->whereDate('end_date', '>=', $date)
+        ->where('status', 'active')
+        ->with(['prescription.patient', 'prescription.doctor']);
+
+    if ($status === 'due') {
+        $query->whereNull('administered_at');
+    } elseif ($status === 'administered') {
+        $query->whereNotNull('administered_at');
     }
+
+    $medications = $query->get()->map(function ($med) {
+        return [
+            'id' => $med->id,
+            'patient' => [
+                'name' => $med->prescription->patient->name,
+                'student_id' => $med->prescription->patient->student_id ?? null
+            ],
+            'medication' => $med->name,
+            'dosage' => $med->dosage,
+            'status' => $med->administered_at ? 'completed' : 'pending',
+            'prescribing_doctor' => $med->prescription->doctor->name,
+            'administered_by' => $med->administered_by_user->name ?? null,
+            'administered_at' => $med->administered_at
+        ];
+    });
+
+    return response()->json([
+        'medications' => $medications,
+        'summary' => [
+            'date' => $date,
+            'total_medications' => $medications->count(),
+            'due' => $medications->where('status', 'pending')->count(),
+            'administered' => $medications->where('status', 'completed')->count(),
+        ]
+    ]);
+}
+
 
    public function updateVitalSigns(Request $request, $patientId): JsonResponse
 {

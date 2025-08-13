@@ -113,20 +113,49 @@ class StudentController extends Controller
         ]);
     }
 
-    /**
-     * Schedule a new appointment (same as AcademicStaffController)
-     */
-    public function scheduleAppointment(Request $request): JsonResponse
+   /**
+ * Schedule a new appointment (supports specialization or doctor_id)
+ */
+public function scheduleAppointment(Request $request): JsonResponse
 {
     try {
+        // Validate inputs
         $validated = $request->validate([
-            'doctor_id' => 'required|exists:users,id',
+            'specialization' => 'nullable|string|exists:users,specialization', // optional, but must exist in DB if sent
+            'doctor_id' => 'nullable|exists:users,id',
             'date' => 'required|date|after_or_equal:today',
             'time' => 'required|date_format:H:i',
             'reason' => 'required|string|max:500'
         ]);
 
-        // Check if user already has an appointment on this date
+        // Ensure at least one is provided
+        if (empty($validated['doctor_id']) && empty($validated['specialization'])) {
+            return response()->json([
+                'message' => 'Either doctor_id or specialization must be provided',
+                'errors' => [
+                    'doctor_id' => ['Either doctor_id or specialization is required'],
+                    'specialization' => ['Either doctor_id or specialization is required']
+                ]
+            ], 422);
+        }
+
+        // If specialization provided, pick a doctor
+        if (!empty($validated['specialization']) && empty($validated['doctor_id'])) {
+            $doctor = User::where('specialization', $validated['specialization'])
+                ->where('role', User::ROLE_DOCTOR)
+                ->first();
+
+            if (!$doctor) {
+                return response()->json([
+                    'message' => 'No doctor found with the given specialization',
+                    'errors' => ['specialization' => ['No available doctor matches this specialization']]
+                ], 422);
+            }
+
+            $validated['doctor_id'] = $doctor->id;
+        }
+
+        // Check if user already has an appointment that day
         $existingUserAppointment = Appointment::where('patient_id', $request->user()->id)
             ->where('date', $validated['date'])
             ->whereIn('status', ['scheduled', 'confirmed'])
@@ -139,7 +168,7 @@ class StudentController extends Controller
             ], 422);
         }
 
-        // Check if doctor exists and has doctor role
+        // Verify doctor exists and has doctor role
         $doctor = User::where('id', $validated['doctor_id'])
             ->where('role', User::ROLE_DOCTOR)
             ->first();
@@ -151,7 +180,7 @@ class StudentController extends Controller
             ], 422);
         }
 
-        // Check for existing appointment at the same time
+        // Check for time slot availability
         $existingDoctorAppointment = Appointment::where('doctor_id', $validated['doctor_id'])
             ->where('date', $validated['date'])
             ->where('time', $validated['time'])
@@ -165,6 +194,7 @@ class StudentController extends Controller
             ], 422);
         }
 
+        // Create appointment
         $appointment = Appointment::create([
             'patient_id' => $request->user()->id,
             'doctor_id' => $validated['doctor_id'],
@@ -174,7 +204,6 @@ class StudentController extends Controller
             'status' => 'scheduled'
         ]);
 
-        // Load the relationship for response
         $appointment->load('doctor');
 
         return response()->json([
@@ -203,6 +232,7 @@ class StudentController extends Controller
         ], 500);
     }
 }
+
 
     /**
      * Get available doctors and their time slots (simplified like AcademicStaffController)

@@ -28,7 +28,7 @@ class AuthController extends Controller
                 function ($attribute, $value, $fail) use ($role) {
                     // Only allow university domains for students & academic staff
                     if (in_array($role, ['student', 'academic_staff'])) {
-                        $allowedDomains = ['university.edu', 'uni.edu', 'student.edu'];
+                        $allowedDomains = ['university.edu', 'uni.edu', 'final.edu.tr', 'student.edu'];
                         $domain = substr(strrchr($value, "@"), 1);
                         if (!in_array($domain, $allowedDomains)) {
                             $fail("Email must be from a university domain for {$role} role.");
