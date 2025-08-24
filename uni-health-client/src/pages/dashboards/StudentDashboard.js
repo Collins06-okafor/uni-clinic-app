@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Calendar, Clock, User, FileText, History, Edit, X, CheckCircle, Stethoscope, Heart, Brain, Thermometer, BarChart3, Activity, Users, TrendingUp, Upload, Camera, AlertTriangle, Save, LogOut } from 'lucide-react';
 import PhoneInput from "react-phone-input-2";
 import "react-phone-input-2/lib/style.css";
+import { APPOINTMENT_STATUSES, getStatusText, getStatusBadgeClass } from '../../constants/appointmentStatuses';
 
 const StudentAppointmentSystem = ({ user = { department: 'Computer Science', name: 'Student', email: 'student@example.com' }, onLogout }) => {
   const [activeTab, setActiveTab] = useState('overview');
@@ -253,9 +254,17 @@ const saveProfile = async () => {
 const hasPendingAppointments = () => {
   const today = new Date().toISOString().split('T')[0];
   return appointments.some(apt => 
-    (apt.status === 'scheduled' || apt.status === 'pending') && 
+    ['pending', 'under_review', 'assigned'].includes(apt.status) && // Add under_review and assigned
     apt.date >= today
   );
+};
+
+// Add notification checking:
+const checkNotifications = () => {
+  const unreadNotifications = appointments.filter(apt => 
+    apt.status === 'confirmed' && !apt.notification_read
+  );
+  return unreadNotifications;
 };
 
   const submitAppointment = async () => {
@@ -413,15 +422,8 @@ const hasPendingAppointments = () => {
   };
 
   const getStatusBadge = (status) => {
-    const badges = {
-      scheduled: 'badge text-white',
-      confirmed: 'badge bg-success',
-      completed: 'badge bg-secondary',
-      cancelled: 'badge bg-danger',
-      rescheduled: 'badge bg-warning text-dark'
-    };
-    return badges[status] || 'badge bg-secondary';
-  };
+  return getStatusBadgeClass(status);
+};
 
   useEffect(() => {
     fetchSpecializations();

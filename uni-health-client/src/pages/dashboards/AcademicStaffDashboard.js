@@ -1,6 +1,7 @@
 // src/pages/dashboards/AcademicStaffDashboard.js
 import React, { useState, useEffect } from 'react';
 import { Calendar, Clock, User, FileText, History, Edit, X, CheckCircle, Stethoscope, Heart, Brain, Thermometer, BarChart3, Activity, Users, TrendingUp, Phone, Mail, LogOut, AlertTriangle } from 'lucide-react';
+import { APPOINTMENT_STATUSES, getStatusText, getStatusBadgeClass } from '../../constants/appointmentStatuses';
 
 const AcademicStaffDashboard = ({ user, onLogout }) => {
   const [activeTab, setActiveTab] = useState('overview');
@@ -83,15 +84,8 @@ const AcademicStaffDashboard = ({ user, onLogout }) => {
   };
 
   const getStatusBadge = (status) => {
-    const badges = {
-      scheduled: 'badge text-white',
-      confirmed: 'badge bg-success',
-      completed: 'badge bg-secondary',
-      cancelled: 'badge bg-danger',
-      rescheduled: 'badge bg-warning text-dark'
-    };
-    return badges[status] || 'badge bg-secondary';
-  };
+  return getStatusBadgeClass(status);
+};
 
   // Fetch data on component mount
   useEffect(() => {

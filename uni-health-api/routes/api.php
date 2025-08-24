@@ -74,6 +74,10 @@ Route::middleware('role:student')->prefix('student')->group(function () {
         Route::put('/availability', [DoctorController::class, 'updateAvailability']);
         Route::get('/patients/{id}/medical-card', [ClinicalStaffController::class, 'getMedicalCard']);
         Route::post('/appointments', [AppointmentController::class, 'store']);
+        Route::put('appointments/{id}/confirm', [DoctorController::class, 'confirmAppointment']);
+        Route::put('appointments/{id}/reschedule', [DoctorController::class, 'rescheduleAppointment']);
+        Route::post('availability', [DoctorController::class, 'setAvailability']);
+        Route::get('availability', [DoctorController::class, 'getAvailability']);
 
     });
 
@@ -111,6 +115,10 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::put('appointments/{id}', [ClinicalStaffController::class, 'updateAppointment']);
         Route::delete('appointments/{id}', [ClinicalStaffController::class, 'deleteAppointment']);
         Route::post('appointments/{id}/confirm', [ClinicalStaffController::class, 'confirmAppointment']);
+        Route::put('appointments/{id}/assign', [ClinicalStaffController::class, 'assignAppointment']);
+        Route::put('appointments/{id}/reject', [ClinicalStaffController::class, 'rejectAppointment']);
+        Route::get('appointments/pending', [ClinicalStaffController::class, 'getPendingAppointments']);
+
         
         // Doctors
         Route::get('available-doctors', [ClinicalStaffController::class, 'getAvailableDoctors']);

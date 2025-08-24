@@ -114,6 +114,105 @@ class DoctorController extends Controller
     }
 
     /**
+ * Confirm appointment
+ */
+public function confirmAppointment(Request $request, $id): JsonResponse
+{
+    $appointment = Appointment::where('doctor_id', $request->user()->id)
+        ->findOrFail($id);
+    
+    if ($appointment->status !== 'assigned') {
+        return response()->json(['message' => 'Appointment cannot be confirmed'], 400);
+    }
+
+    $appointment->update([
+        'status' => 'confirmed',
+        'confirmed_at' => now()
+    ]);
+
+    // Send final confirmation to patient
+    $this->notifyPatientConfirmed($appointment);
+
+    return response()->json([
+        'message' => 'Appointment confirmed successfully',
+        'appointment' => $appointment->load(['patient'])
+    ]);
+}
+
+/**
+ * Reschedule appointment by doctor
+ */
+public function rescheduleAppointment(Request $request, $id): JsonResponse
+{
+    $validated = $request->validate([
+        'new_date' => 'required|date|after_or_equal:today',
+        'new_time' => 'required|date_format:H:i',
+        'reason' => 'nullable|string|max:500'
+    ]);
+
+    $appointment = Appointment::where('doctor_id', $request->user()->id)
+        ->findOrFail($id);
+
+    $appointment->update([
+        'status' => 'rescheduled',
+        'date' => $validated['new_date'],
+        'time' => $validated['new_time'],
+        'reschedule_reason' => $validated['reason'],
+        'rescheduled_at' => now()
+    ]);
+
+    // Notify patient about reschedule
+    $this->notifyPatientRescheduled($appointment);
+
+    return response()->json([
+        'message' => 'Appointment rescheduled successfully',
+        'appointment' => $appointment->load(['patient'])
+    ]);
+}
+
+/**
+ * Set doctor availability
+ */
+public function setAvailability(Request $request): JsonResponse
+{
+    $validated = $request->validate([
+        'available_days' => 'required|array',
+        'available_days.*' => 'in:Monday,Tuesday,Wednesday,Thursday,Friday,Saturday,Sunday',
+        'working_hours_start' => 'required|date_format:H:i',
+        'working_hours_end' => 'required|date_format:H:i|after:working_hours_start',
+        'special_dates' => 'nullable|array',
+        'special_dates.*.date' => 'date',
+        'special_dates.*.available' => 'boolean'
+    ]);
+
+    $user = $request->user();
+    $user->update([
+        'available_days' => $validated['available_days'],
+        'working_hours_start' => $validated['working_hours_start'],
+        'working_hours_end' => $validated['working_hours_end']
+    ]);
+
+    return response()->json([
+        'message' => 'Availability updated successfully',
+        'availability' => [
+            'days' => $validated['available_days'],
+            'hours' => $validated['working_hours_start'] . ' - ' . $validated['working_hours_end']
+        ]
+    ]);
+}
+
+// Add notification helper methods
+private function notifyPatientConfirmed($appointment)
+{
+    \Log::info("Patient {$appointment->patient->name} notified of confirmed appointment {$appointment->id}");
+}
+
+private function notifyPatientRescheduled($appointment)
+{
+    \Log::info("Patient {$appointment->patient->name} notified of rescheduled appointment {$appointment->id}");
+}
+
+    /**
      * Assign a patient to current doctor
      */
     public function assignPatient(Request $request, $patientId): JsonResponse

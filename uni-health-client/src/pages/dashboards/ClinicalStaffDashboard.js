@@ -5,6 +5,7 @@ import {
   Activity, BarChart3, History, User, CheckCircle, Thermometer, 
   TrendingUp, Clipboard, ClipboardCheck, ClipboardList
 } from 'lucide-react';
+import { APPOINTMENT_STATUSES, getStatusText, getStatusBadgeClass } from '../../constants/appointmentStatuses';
 
 const ClinicalStaffDashboard = ({ user, onLogout }) => {
   const [activeTab, setActiveTab] = useState('dashboard');
@@ -241,6 +242,41 @@ const loadAppointments = async () => {
   } finally {
     setLoading(false);
     setTimeout(() => setMessage({ type: '', text: '' }), 5000);
+  }
+};
+
+// Add these appointment management functions:
+
+const reviewAppointment = async (appointmentId, action, data) => {
+  try {
+    setLoading(true);
+    let updateData = {};
+    
+    switch (action) {
+      case 'assign':
+        updateData = {
+          status: APPOINTMENT_STATUSES.ASSIGNED,
+          doctor_id: data.doctorId,
+          assigned_at: new Date().toISOString(),
+          notes: data.notes
+        };
+        break;
+      case 'reject':
+        updateData = {
+          status: APPOINTMENT_STATUSES.REJECTED,
+          rejection_reason: data.rejectionReason,
+          rejected_at: new Date().toISOString()
+        };
+        break;
+    }
+    
+    await api.put(`appointments/${appointmentId}`, updateData);
+    setMessage({ type: 'success', text: `Appointment ${action}ed successfully` });
+    loadAppointments();
+  } catch (error) {
+    setMessage({ type: 'error', text: `Failed to ${action} appointment` });
+  } finally {
+    setLoading(false);
   }
 };
 
@@ -722,18 +758,17 @@ const loadAvailableDoctors = async (date, time) => {
     fetchMedications();
   }, []);
 
+
+ // Add appointment filtering by status
+const getAppointmentsByStatus = (status) => {
+  return appointments.filter(apt => apt.status === status);
+}; 
+
   // Get status badge class
   const getStatusBadge = (status) => {
-    const badges = {
-      scheduled: 'badge bg-primary',
-      confirmed: 'badge bg-success',
-      in_progress: 'badge bg-warning text-dark',
-      completed: 'badge bg-secondary',
-      cancelled: 'badge bg-danger',
-      active: 'badge bg-success'
-    };
-    return badges[status] || 'badge bg-secondary';
-  };
+  return getStatusBadgeClass(status);
+};
+
 
   // Get priority badge class
   const getPriorityBadge = (priority) => {

@@ -201,7 +201,7 @@ public function scheduleAppointment(Request $request): JsonResponse
             'date' => $validated['date'],
             'time' => $validated['time'],
             'reason' => $validated['reason'],
-            'status' => 'scheduled'
+            'status' => 'pending'
         ]);
 
         $appointment->load('doctor');

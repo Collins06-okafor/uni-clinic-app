@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Calendar, Clock, Users, FileText, Pill, User, Plus, Search, Eye, Edit, CheckCircle, XCircle, Stethoscope, Heart, Brain, Thermometer, BarChart3, Activity, TrendingUp } from 'lucide-react';
+import { APPOINTMENT_STATUSES, getStatusText, getStatusBadgeClass } from '../../constants/appointmentStatuses';
+import api from '../../services/api';
 
 const EnhancedDoctorDashboard = ({ user, onLogout }) => {
   const [activeTab, setActiveTab] = useState('dashboard');
@@ -179,6 +181,51 @@ const fetchPrescriptions = async () => {
   }
 };
 
+// Add doctor availability management:
+
+const setAvailability = async (availabilityData) => {
+  try {
+    await api.put('doctor/availability', {
+      available_days: availabilityData.days,
+      working_hours_start: availabilityData.startTime,
+      working_hours_end: availabilityData.endTime,
+      special_dates: availabilityData.specialDates || []
+    });
+    setMessage({ type: 'success', text: 'Availability updated successfully' });
+  } catch (error) {
+    setMessage({ type: 'error', text: 'Failed to update availability' });
+  }
+};
+
+// Add appointment confirmation/rescheduling:
+const handleAppointmentAction = async (appointmentId, action, data = {}) => {
+  try {
+    let updateData = {};
+    
+    switch (action) {
+      case 'confirm':
+        updateData = { 
+          status: APPOINTMENT_STATUSES.CONFIRMED, 
+          confirmed_at: new Date().toISOString() 
+        };
+        break;
+      case 'reschedule':
+        updateData = { 
+          status: APPOINTMENT_STATUSES.RESCHEDULED,
+          new_date: data.newDate,
+          new_time: data.newTime,
+          reschedule_reason: data.reason
+        };
+        break;
+    }
+    
+    await api.put(`appointments/${appointmentId}`, updateData);
+    fetchAppointments();
+  } catch (error) {
+    setMessage({ type: 'error', text: `Failed to ${action} appointment` });
+  }
+};
+
   // Fix createAppointment function
 const createAppointment = async () => {
   try {
@@ -288,6 +335,8 @@ const createPrescription = async () => {
     }));
   };
 
+  
+
   useEffect(() => {
     if (activeTab === 'appointments') fetchAppointments();
     if (activeTab === 'patients') fetchPatients();
@@ -300,15 +349,8 @@ const createPrescription = async () => {
   );
 
   const getStatusBadge = (status) => {
-    const badges = {
-      scheduled: 'badge bg-primary',
-      confirmed: 'badge bg-success',
-      completed: 'badge bg-secondary',
-      cancelled: 'badge bg-danger',
-      rescheduled: 'badge bg-warning text-dark'
-    };
-    return badges[status] || 'badge bg-secondary';
-  };
+  return getStatusBadgeClass(status);
+};
 
   const getMinDate = () => {
     const today = new Date();

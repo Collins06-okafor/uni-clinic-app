@@ -74,6 +74,97 @@ class ClinicalStaffController extends Controller
 }
 
 /**
+ * Assign appointment to doctor
+ */
+public function assignAppointment(Request $request, $id): JsonResponse
+{
+    $validated = $request->validate([
+        'doctor_id' => 'required|exists:users,id',
+        'notes' => 'nullable|string|max:500'
+    ]);
+
+    $appointment = Appointment::findOrFail($id);
+    
+    // Check if appointment can be assigned
+    if (!in_array($appointment->status, ['pending', 'under_review'])) {
+        return response()->json(['message' => 'Appointment cannot be assigned'], 400);
+    }
+
+    $appointment->update([
+        'status' => 'assigned',
+        'doctor_id' => $validated['doctor_id'],
+        'assigned_at' => now(),
+        'notes' => $validated['notes']
+    ]);
+
+    // Notify doctor (implement notification system)
+    $this->notifyDoctor($appointment);
+
+    return response()->json([
+        'message' => 'Appointment assigned successfully',
+        'appointment' => $appointment->load(['patient', 'doctor'])
+    ]);
+}
+
+/**
+ * Reject appointment
+ */
+public function rejectAppointment(Request $request, $id): JsonResponse
+{
+    $validated = $request->validate([
+        'rejection_reason' => 'required|string|max:500',
+        'notes' => 'nullable|string|max:500'
+    ]);
+
+    $appointment = Appointment::findOrFail($id);
+    
+    $appointment->update([
+        'status' => 'rejected',
+        'rejection_reason' => $validated['rejection_reason'],
+        'rejected_at' => now(),
+        'notes' => $validated['notes']
+    ]);
+
+    // Notify patient
+    $this->notifyPatient($appointment, 'rejected');
+
+    return response()->json([
+        'message' => 'Appointment rejected successfully',
+        'appointment' => $appointment->load(['patient'])
+    ]);
+}
+
+/**
+ * Get pending appointments for review
+ */
+public function getPendingAppointments(Request $request): JsonResponse
+{
+    $appointments = Appointment::with(['patient', 'doctor'])
+        ->whereIn('status', ['pending', 'under_review'])
+        ->orderBy('created_at', 'desc')
+        ->get();
+
+    return response()->json([
+        'pending_appointments' => $appointments,
+        'total' => $appointments->count()
+    ]);
+}
+
+// Add notification helper methods
+private function notifyDoctor($appointment)
+{
+    // Implement notification system (email/SMS)
+    // For now, just log
+    \Log::info("Doctor {$appointment->doctor->name} assigned to appointment {$appointment->id}");
+}
+
+private function notifyPatient($appointment, $type)
+{
+    // Implement notification system
+    \Log::info("Patient {$appointment->patient->name} notified about appointment {$type}");
+}
+
+/**
  * Send appointment confirmation
  */
 public function confirmAppointment(Request $request, $id): JsonResponse
