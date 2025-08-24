@@ -7,6 +7,7 @@ use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Laravel\Sanctum\HasApiTokens;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class User extends Authenticatable
 {
@@ -31,6 +32,9 @@ class User extends Authenticatable
         'permissions',
         'email_verified_at',
         'doctor_id',
+        'bio',
+        'avatar_url',
+        'last_login',
         'medical_card_id'
     ];
 
@@ -56,6 +60,7 @@ class User extends Authenticatable
     protected $casts = [
         'email_verified_at' => 'datetime',
         'password' => 'hashed',
+        'last_login' => 'datetime',
         'permissions' => 'array',
     ];
 
@@ -213,6 +218,21 @@ class User extends Authenticatable
         
         return $this->forceDelete();
     }
+
+    
+// Add this relationship
+public function profile(): HasOne
+{
+    return $this->hasOne(Profile::class);
+}
+
+// Create profile when user is created
+protected static function booted()
+{
+    static::created(function ($user) {
+        $user->profile()->create();
+    });
+}
 
     /* ================== ATTRIBUTES ================== */
 

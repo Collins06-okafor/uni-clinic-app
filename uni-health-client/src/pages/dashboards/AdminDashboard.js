@@ -1,947 +1,1077 @@
-import React, { useState, useEffect } from 'react';
-import { 
-  Users, Settings, Shield, Database, FileText, BarChart3, 
-  Activity, AlertTriangle, CheckCircle, Clock, Server,
-  UserPlus, UserMinus, Key, Download, Upload, Mail,
-  HardDrive, Cpu, Memory, Wifi, Bell, Search, Filter,
-  Calendar, TrendingUp, Eye, Edit, Trash2, Plus, User
+import React, { useEffect, useRef, useState } from 'react';
+import {
+  Users, Settings, Activity, CheckCircle, Clock, Calendar,
+  AlertTriangle, Trash2, User, X, Upload, LogOut, UserCog, LayoutGrid, Image as ImageIcon
 } from 'lucide-react';
 
-const AdminDashboard = ({ user = { name: 'Admin User' }, onLogout }) => {
-  const [activeTab, setActiveTab] = useState('overview');
-  const [systemData, setSystemData] = useState(null);
-  const [users, setUsers] = useState([]);
-  const [loading, setLoading] = useState(false);
+/**
+ * AUTH MODE
+ * - Sanctum cookies? set USE_SANCTUM = true
+ * - Bearer token (localStorage 'token')? keep false (default)
+ */
+const USE_SANCTUM = false;
 
-  // Mock API call - replace with actual API calls
-  useEffect(() => {
-    fetchDashboardData();
-  }, []);
+/**
+ * API BASE
+ * e.g., 'http://localhost:8000/api/admin' or '/api/admin'
+ */
+const DEFAULT_API_BASE = 'http://127.0.0.1:8000/api/admin';
+const PROFILE_API_BASE = 'http://127.0.0.1:8000/api'; // Profile routes are outside admin group
+const PROFILE_ENDPOINT = '/profile'; // appended to apiBaseUrl
 
-  const fetchDashboardData = async () => {
-    setLoading(true);
-    // Simulate API call
-    setTimeout(() => {
-      setSystemData({
-        totalUsers: 1250,
-        activeUsers: 1180,
-        newRegistrations: 87,
-        systemHealth: 98.5,
-        uptime: '99.98%',
-        responseTime: '125ms',
-        serverLoad: 23
-      });
-      setUsers([
-        { id: 1, name: 'John Doe', email: 'john@university.edu', role: 'student', status: 'active', lastLogin: '2024-02-09' },
-        { id: 2, name: 'Dr. Smith', email: 'smith@university.edu', role: 'doctor', status: 'active', lastLogin: '2024-02-09' },
-        { id: 3, name: 'Jane Admin', email: 'jane@university.edu', role: 'admin', status: 'active', lastLogin: '2024-02-08' },
-        { id: 4, name: 'Bob Wilson', email: 'bob@university.edu', role: 'student', status: 'inactive', lastLogin: '2024-02-05' },
-        { id: 5, name: 'Dr. Brown', email: 'brown@university.edu', role: 'doctor', status: 'active', lastLogin: '2024-02-09' }
-      ]);
-      setLoading(false);
-    }, 1000);
+const AdminDashboard = ({
+  user: initialUser = { name: 'Admin User', avatar: null, email: 'admin@university.edu' },
+  onLogout,
+  apiBaseUrl = DEFAULT_API_BASE
+}) => {
+  // ---- Tabs ----
+  const [activeTab, setActiveTab] = useState('dashboard'); // 'dashboard' | 'profile' | 'users' | 'config'
+
+  // ---- Settings (UI draft state) ----
+const [systemSettings, setSystemSettings] = useState(null);
+const [settingsDraft, setSettingsDraft] = useState(null);
+const [settingsSaving, setSettingsSaving] = useState(false);
+
+// safely read nested keys
+const g = (obj, path, def = '') =>
+  path.split('.').reduce((a, k) => (a && a[k] !== undefined ? a[k] : def), obj);
+
+// set nested value immutably: path like "general.site_name"
+const setPath = (obj, path, value) => {
+  const keys = path.split('.');
+  const clone = structuredClone(obj ?? {});
+  let cur = clone;
+  for (let i = 0; i < keys.length - 1; i++) {
+    const k = keys[i];
+    if (typeof cur[k] !== 'object' || cur[k] === null) cur[k] = {};
+    cur = cur[k];
+  }
+  cur[keys[keys.length - 1]] = value;
+  return clone;
+};
+
+const onField = (path) => (e) => {
+  const { type, value, checked } = e.target;
+  let v = value;
+  if (type === 'checkbox') v = checked;
+  if (type === 'number') v = value === '' ? '' : Number(value);
+  setSettingsDraft((prev) => setPath(prev, path, v));
+};
+
+// hydrate editable draft when settings load
+useEffect(() => {
+  if (systemSettings) setSettingsDraft(structuredClone(systemSettings));
+}, [systemSettings]);
+
+  // ---- Notifications ----
+  const [notifications, setNotifications] = useState([]);
+  const addNotification = (message, type = 'success') => {
+    const id = Date.now() + Math.random();
+    setNotifications(prev => [...prev, { id, message, type }]);
+    setTimeout(() => setNotifications(prev => prev.filter(n => n.id !== id)), 5000);
   };
+  const removeNotification = (id) => setNotifications(prev => prev.filter(n => n.id !== id));
 
-  const StatCard = ({ title, value, icon: Icon, color, subtitle, trend }) => (
-    <div className={`bg-white rounded-xl shadow-sm p-6 border-0 h-100`} style={{ borderRadius: '1rem' }}>
-      <div className="d-flex align-items-center justify-content-between">
-        <div className="flex-grow-1">
-          <h6 className="text-muted fw-medium mb-2">{title}</h6>
-          <h3 className="fw-bold mb-1" style={{ color: getColorClass(color) }}>{value}</h3>
-          {subtitle && <p className="text-muted small mb-2">{subtitle}</p>}
-          {trend && (
-            <div className="d-flex align-items-center">
-              <TrendingUp size={16} className="text-success me-1" />
-              <span className="text-success small fw-medium">{trend}</span>
-            </div>
-          )}
-        </div>
-        <div className={`d-inline-flex align-items-center justify-content-center`} 
-             style={{ 
-               width: '60px', 
-               height: '60px', 
-               backgroundColor: getBackgroundColor(color), 
-               borderRadius: '50%' 
-             }}>
-          <Icon size={28} style={{ color: getColorClass(color) }} />
-        </div>
-      </div>
-    </div>
-  );
-
-  const getColorClass = (color) => {
-    const colors = {
-      blue: '#0d6efd',
-      green: '#198754',
-      yellow: '#ffc107',
-      red: '#dc3545',
-      purple: '#6f42c1',
-      orange: '#fd7e14'
-    };
-    return colors[color] || '#6c757d';
-  };
-
-  const getBackgroundColor = (color) => {
-    const backgrounds = {
-      blue: '#e3f2fd',
-      green: '#e8f5e8',
-      yellow: '#fff3cd',
-      red: '#f8d7da',
-      purple: '#f3e5f5',
-      orange: '#ffe5cc'
-    };
-    return backgrounds[color] || '#f8f9fa';
-  };
-
-  const TabButton = ({ id, label, icon: Icon, isActive, onClick }) => (
-    <button
-      onClick={() => onClick(id)}
-      className={`nav-link fw-semibold d-flex align-items-center px-4 py-3 ${
-        isActive 
-          ? 'active text-white' 
-          : 'text-muted'
-      }`}
-      style={{ 
-        borderRadius: '0.75rem',
-        background: isActive ? 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' : 'transparent',
-        border: 'none',
-        transition: 'all 0.3s ease'
-      }}
-    >
-      <Icon size={18} className="me-2" />
-      {label}
-    </button>
-  );
-
-  const renderOverview = () => (
-    <div style={{ backgroundColor: '#f8f9fa', minHeight: '100vh', padding: '2rem 0' }}>
-      <div className="container-fluid">
-        <div className="row g-4">
-          {/* Welcome Card */}
-          <div className="col-12">
-            <div className="card border-0 shadow-sm" style={{ 
-              borderRadius: '1.5rem', 
-              background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' 
-            }}>
-              <div className="card-body p-5 text-white">
-                <div className="row align-items-center">
-                  <div className="col-md-8">
-                    <h2 className="mb-3 fw-bold">Welcome back, {user.name}!</h2>
-                    <p className="mb-2 opacity-90 fs-5">System Administration Dashboard</p>
-                    <p className="mb-0 opacity-75">Monitor and manage your university management system</p>
-                  </div>
-                  <div className="col-md-4 text-end">
-                    <Shield size={100} className="opacity-75" />
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Statistics Cards */}
-          <div className="col-lg-3 col-md-6">
-            <StatCard 
-              title="Total Users" 
-              value={systemData?.totalUsers?.toLocaleString() || '0'} 
-              icon={Users} 
-              color="blue"
-              subtitle="All registered users"
-              trend="+12.5% this month"
-            />
-          </div>
-          <div className="col-lg-3 col-md-6">
-            <StatCard 
-              title="Active Users" 
-              value={systemData?.activeUsers?.toLocaleString() || '0'} 
-              icon={Activity} 
-              color="green"
-              subtitle="Currently active"
-            />
-          </div>
-          <div className="col-lg-3 col-md-6">
-            <StatCard 
-              title="System Health" 
-              value={`${systemData?.systemHealth || 0}%`} 
-              icon={CheckCircle} 
-              color="green"
-              subtitle="All systems operational"
-            />
-          </div>
-          <div className="col-lg-3 col-md-6">
-            <StatCard 
-              title="Server Load" 
-              value={`${systemData?.serverLoad || 0}%`} 
-              icon={Server} 
-              color="yellow"
-              subtitle="CPU utilization"
-            />
-          </div>
-
-          {/* System Performance & Alerts */}
-          <div className="col-lg-6">
-            <div className="card border-0 shadow-sm h-100" style={{ borderRadius: '1rem' }}>
-              <div className="card-header bg-white border-0 pb-0">
-                <h5 className="fw-bold mb-0 d-flex align-items-center">
-                  <BarChart3 size={20} className="me-2" style={{ color: '#667eea' }} />
-                  System Performance
-                </h5>
-              </div>
-              <div className="card-body p-4">
-                <div className="row g-4">
-                  <div className="col-12">
-                    <div className="d-flex justify-content-between align-items-center p-3 bg-light rounded-3">
-                      <span className="fw-medium">Uptime</span>
-                      <span className="fw-bold text-success">{systemData?.uptime || '0%'}</span>
-                    </div>
-                  </div>
-                  <div className="col-12">
-                    <div className="d-flex justify-content-between align-items-center p-3 bg-light rounded-3">
-                      <span className="fw-medium">Response Time</span>
-                      <span className="fw-bold">{systemData?.responseTime || '0ms'}</span>
-                    </div>
-                  </div>
-                  <div className="col-12">
-                    <div className="d-flex justify-content-between align-items-center p-3 bg-light rounded-3">
-                      <span className="fw-medium">Memory Usage</span>
-                      <span className="fw-bold">68%</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div className="col-lg-6">
-            <div className="card border-0 shadow-sm h-100" style={{ borderRadius: '1rem' }}>
-              <div className="card-header bg-white border-0 pb-0">
-                <h5 className="fw-bold mb-0 d-flex align-items-center">
-                  <Bell size={20} className="me-2" style={{ color: '#667eea' }} />
-                  Recent Alerts
-                </h5>
-              </div>
-              <div className="card-body p-4">
-                <div className="d-flex align-items-center p-3 bg-warning bg-opacity-10 rounded-3 mb-3">
-                  <AlertTriangle size={20} className="text-warning me-3" />
-                  <div className="flex-grow-1">
-                    <p className="fw-medium mb-1">Database response time increased</p>
-                    <p className="text-muted small mb-0">30 minutes ago</p>
-                  </div>
-                </div>
-                <div className="d-flex align-items-center p-3 bg-success bg-opacity-10 rounded-3">
-                  <CheckCircle size={20} className="text-success me-3" />
-                  <div className="flex-grow-1">
-                    <p className="fw-medium mb-1">Backup completed successfully</p>
-                    <p className="text-muted small mb-0">2 hours ago</p>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Quick Actions */}
-          <div className="col-12">
-            <div className="card border-0 shadow-sm" style={{ borderRadius: '1rem' }}>
-              <div className="card-header bg-white border-0 pb-0">
-                <h5 className="fw-bold mb-0">Quick Actions</h5>
-              </div>
-              <div className="card-body p-4">
-                <div className="row g-3">
-                  <div className="col-md-3">
-                    <button 
-                      className="btn w-100 py-4 border-0 text-white fw-semibold" 
-                      style={{ 
-                        borderRadius: '1rem', 
-                        background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' 
-                      }}
-                      onClick={() => setActiveTab('users')}
-                    >
-                      <UserPlus size={28} className="mb-2 d-block mx-auto" />
-                      <div>Manage Users</div>
-                      <small className="opacity-75">Add or edit user accounts</small>
-                    </button>
-                  </div>
-                  
-                  <div className="col-md-3">
-                    <button 
-                      className="btn btn-outline-primary w-100 py-4 fw-semibold" 
-                      style={{ borderRadius: '1rem' }}
-                      onClick={() => setActiveTab('config')}
-                    >
-                      <Settings size={28} className="mb-2 d-block mx-auto" />
-                      <div>System Config</div>
-                      <small className="text-muted">Configure system settings</small>
-                    </button>
-                  </div>
-                  
-                  <div className="col-md-3">
-                    <button 
-                      className="btn btn-outline-success w-100 py-4 fw-semibold" 
-                      style={{ borderRadius: '1rem' }}
-                      onClick={() => setActiveTab('backup')}
-                    >
-                      <Database size={28} className="mb-2 d-block mx-auto" />
-                      <div>Backup Data</div>
-                      <small className="text-muted">Manage system backups</small>
-                    </button>
-                  </div>
-                  
-                  <div className="col-md-3">
-                    <button 
-                      className="btn btn-outline-warning w-100 py-4 fw-semibold" 
-                      style={{ borderRadius: '1rem' }}
-                      onClick={() => setActiveTab('security')}
-                    >
-                      <Shield size={28} className="mb-2 d-block mx-auto" />
-                      <div>Security Audit</div>
-                      <small className="text-muted">Review security status</small>
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-
-  const renderUserManagement = () => (
-    <div style={{ backgroundColor: '#f8f9fa', minHeight: '100vh', padding: '2rem 0' }}>
-      <div className="container-fluid">
-        <div className="row">
-          <div className="col-12">
-            <div className="card border-0 shadow-sm" style={{ borderRadius: '1rem' }}>
-              <div className="card-header border-0" style={{ background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' }}>
-                <div className="d-flex justify-content-between align-items-center">
-                  <h3 className="text-white mb-0 d-flex align-items-center">
-                    <Users size={24} className="me-2" />
-                    User Management
-                  </h3>
-                  <div className="d-flex gap-2">
-                    <button className="btn btn-light fw-semibold">
-                      <UserPlus size={16} className="me-1" />
-                      Add User
-                    </button>
-                    <button className="btn btn-outline-light">
-                      <Download size={16} className="me-1" />
-                      Export
-                    </button>
-                  </div>
-                </div>
-              </div>
-              
-              <div className="card-body p-0">
-                {/* Search and Filters */}
-                <div className="p-4 border-bottom bg-light">
-                  <div className="row g-3 align-items-center">
-                    <div className="col-md-4">
-                      <div className="position-relative">
-                        <Search size={16} className="position-absolute top-50 start-0 translate-middle-y ms-3 text-muted" />
-                        <input 
-                          type="text" 
-                          placeholder="Search users..." 
-                          className="form-control ps-5"
-                          style={{ borderRadius: '0.75rem' }}
-                        />
-                      </div>
-                    </div>
-                    <div className="col-md-3">
-                      <select className="form-select" style={{ borderRadius: '0.75rem' }}>
-                        <option>All Roles</option>
-                        <option>Students</option>
-                        <option>Doctors</option>
-                        <option>Admin</option>
-                      </select>
-                    </div>
-                    <div className="col-md-3">
-                      <select className="form-select" style={{ borderRadius: '0.75rem' }}>
-                        <option>All Status</option>
-                        <option>Active</option>
-                        <option>Inactive</option>
-                      </select>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Users Table */}
-                <div className="table-responsive">
-                  <table className="table table-hover mb-0">
-                    <thead className="table-light">
-                      <tr>
-                        <th className="fw-semibold text-muted py-3 ps-4">Name</th>
-                        <th className="fw-semibold text-muted py-3">Email</th>
-                        <th className="fw-semibold text-muted py-3">Role</th>
-                        <th className="fw-semibold text-muted py-3">Status</th>
-                        <th className="fw-semibold text-muted py-3">Last Login</th>
-                        <th className="fw-semibold text-muted py-3">Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {users.map(user => (
-                        <tr key={user.id}>
-                          <td className="py-3 ps-4">
-                            <div className="d-flex align-items-center">
-                              <div className="bg-primary bg-opacity-10 rounded-circle p-2 me-3">
-                                <User size={16} className="text-primary" />
-                              </div>
-                              <span className="fw-medium">{user.name}</span>
-                            </div>
-                          </td>
-                          <td className="py-3 text-muted">{user.email}</td>
-                          <td className="py-3">
-                            <span className={`badge px-3 py-2 ${
-                              user.role === 'admin' ? 'bg-purple bg-opacity-10 text-purple' :
-                              user.role === 'doctor' ? 'bg-success bg-opacity-10 text-success' :
-                              'bg-primary bg-opacity-10 text-primary'
-                            }`} style={{ borderRadius: '0.5rem' }}>
-                              {user.role}
-                            </span>
-                          </td>
-                          <td className="py-3">
-                            <span className={`badge px-3 py-2 ${
-                              user.status === 'active' ? 'bg-success bg-opacity-10 text-success' : 'bg-danger bg-opacity-10 text-danger'
-                            }`} style={{ borderRadius: '0.5rem' }}>
-                              {user.status}
-                            </span>
-                          </td>
-                          <td className="py-3 text-muted">{user.lastLogin}</td>
-                          <td className="py-3">
-                            <div className="d-flex gap-2">
-                              <button className="btn btn-sm btn-outline-primary" style={{ borderRadius: '0.5rem' }}>
-                                <Eye size={14} />
-                              </button>
-                              <button className="btn btn-sm btn-outline-secondary" style={{ borderRadius: '0.5rem' }}>
-                                <Edit size={14} />
-                              </button>
-                              <button className="btn btn-sm btn-outline-danger" style={{ borderRadius: '0.5rem' }}>
-                                <Trash2 size={14} />
-                              </button>
-                            </div>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-
-  const renderSystemConfiguration = () => (
-    <div style={{ backgroundColor: '#f8f9fa', minHeight: '100vh', padding: '2rem 0' }}>
-      <div className="container-fluid">
-        <div className="row g-4">
-          <div className="col-12">
-            <div className="card border-0 shadow-sm" style={{ borderRadius: '1rem' }}>
-              <div className="card-header border-0" style={{ background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' }}>
-                <h3 className="text-white mb-0 d-flex align-items-center">
-                  <Settings size={24} className="me-2" />
-                  System Configuration
-                </h3>
-              </div>
-            </div>
-          </div>
-          
-          <div className="col-lg-6">
-            <div className="card border-0 shadow-sm h-100" style={{ borderRadius: '1rem' }}>
-              <div className="card-header bg-white border-0">
-                <h5 className="fw-bold mb-0 d-flex align-items-center">
-                  <Settings size={20} className="me-2 text-primary" />
-                  General Settings
-                </h5>
-              </div>
-              <div className="card-body p-4">
-                <div className="mb-4">
-                  <label className="form-label fw-semibold">Site Name</label>
-                  <input 
-                    type="text" 
-                    value="University Management System" 
-                    className="form-control form-control-lg" 
-                    style={{ borderRadius: '0.75rem' }}
-                  />
-                </div>
-                <div className="mb-4">
-                  <label className="form-label fw-semibold">Timezone</label>
-                  <select className="form-select form-select-lg" style={{ borderRadius: '0.75rem' }}>
-                    <option>UTC</option>
-                    <option>EST</option>
-                    <option>PST</option>
-                  </select>
-                </div>
-                <div className="form-check">
-                  <input className="form-check-input" type="checkbox" id="maintenance" />
-                  <label className="form-check-label fw-medium" htmlFor="maintenance">
-                    Maintenance Mode
-                  </label>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div className="col-lg-6">
-            <div className="card border-0 shadow-sm h-100" style={{ borderRadius: '1rem' }}>
-              <div className="card-header bg-white border-0">
-                <h5 className="fw-bold mb-0 d-flex align-items-center">
-                  <Shield size={20} className="me-2 text-success" />
-                  Security Settings
-                </h5>
-              </div>
-              <div className="card-body p-4">
-                <div className="mb-4">
-                  <label className="form-label fw-semibold">Password Min Length</label>
-                  <input 
-                    type="number" 
-                    value="8" 
-                    className="form-control form-control-lg" 
-                    style={{ borderRadius: '0.75rem' }}
-                  />
-                </div>
-                <div className="mb-4">
-                  <label className="form-label fw-semibold">Session Timeout (minutes)</label>
-                  <input 
-                    type="number" 
-                    value="1440" 
-                    className="form-control form-control-lg" 
-                    style={{ borderRadius: '0.75rem' }}
-                  />
-                </div>
-                <div className="form-check">
-                  <input className="form-check-input" type="checkbox" id="2fa" defaultChecked />
-                  <label className="form-check-label fw-medium" htmlFor="2fa">
-                    Enable Two-Factor Authentication
-                  </label>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div className="col-12 text-end">
-            <button className="btn btn-lg px-5 text-white fw-semibold" 
-                    style={{ 
-                      background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-                      borderRadius: '0.75rem',
-                      border: 'none'
-                    }}>
-              Save Changes
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-
-  const renderBackupRecovery = () => (
-    <div style={{ backgroundColor: '#f8f9fa', minHeight: '100vh', padding: '2rem 0' }}>
-      <div className="container-fluid">
-        <div className="row g-4">
-          <div className="col-12">
-            <div className="card border-0 shadow-sm" style={{ borderRadius: '1rem' }}>
-              <div className="card-header border-0" style={{ background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' }}>
-                <div className="d-flex justify-content-between align-items-center">
-                  <h3 className="text-white mb-0 d-flex align-items-center">
-                    <Database size={24} className="me-2" />
-                    Backup & Recovery
-                  </h3>
-                  <button className="btn btn-light fw-semibold">
-                    <Plus size={16} className="me-1" />
-                    Create Backup
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Backup Cards */}
-          <div className="col-lg-4">
-            <div className="card border-0 shadow-sm h-100" style={{ borderRadius: '1rem' }}>
-              <div className="card-header bg-white border-0">
-                <h5 className="fw-bold mb-0 d-flex align-items-center">
-                  <Database size={20} className="me-2 text-primary" />
-                  Database Backup
-                </h5>
-              </div>
-              <div className="card-body p-4">
-                <div className="mb-3">
-                  <div className="d-flex justify-content-between mb-2">
-                    <span className="text-muted">Last Backup:</span>
-                    <span className="fw-medium">2 hours ago</span>
-                  </div>
-                  <div className="d-flex justify-content-between mb-2">
-                    <span className="text-muted">Size:</span>
-                    <span className="fw-medium">2.8 GB</span>
-                  </div>
-                  <div className="d-flex justify-content-between">
-                    <span className="text-muted">Status:</span>
-                    <span className="fw-medium text-success">Healthy</span>
-                  </div>
-                </div>
-                <button className="btn btn-outline-primary w-100" style={{ borderRadius: '0.75rem' }}>
-                  Backup Now
-                </button>
-              </div>
-            </div>
-          </div>
-
-          <div className="col-lg-4">
-            <div className="card border-0 shadow-sm h-100" style={{ borderRadius: '1rem' }}>
-              <div className="card-header bg-white border-0">
-                <h5 className="fw-bold mb-0 d-flex align-items-center">
-                  <HardDrive size={20} className="me-2 text-info" />
-                  File System
-                </h5>
-              </div>
-              <div className="card-body p-4">
-                <div className="mb-3">
-                  <div className="d-flex justify-content-between mb-2">
-                    <span className="text-muted">Last Backup:</span>
-                    <span className="fw-medium">Daily at 2:00 AM</span>
-                  </div>
-                  <div className="d-flex justify-content-between mb-2">
-                    <span className="text-muted">Size:</span>
-                    <span className="fw-medium">1.6 GB</span>
-                  </div>
-                  <div className="d-flex justify-content-between">
-                    <span className="text-muted">Status:</span>
-                    <span className="fw-medium text-success">Scheduled</span>
-                  </div>
-                </div>
-                <button className="btn btn-outline-info w-100" style={{ borderRadius: '0.75rem' }}>
-                  Configure
-                </button>
-              </div>
-            </div>
-          </div>
-
-          <div className="col-lg-4">
-            <div className="card border-0 shadow-sm h-100" style={{ borderRadius: '1rem' }}>
-              <div className="card-header bg-white border-0">
-                <h5 className="fw-bold mb-0 d-flex align-items-center">
-                  <Upload size={20} className="me-2 text-warning" />
-                  Recovery
-                </h5>
-              </div>
-              <div className="card-body p-4">
-                <div className="mb-3">
-                  <p className="text-muted mb-3">Restore system from backup</p>
-                  <div className="d-flex justify-content-between">
-                    <span className="text-muted">Available Backups:</span>
-                    <span className="fw-medium">15</span>
-                  </div>
-                </div>
-                <button className="btn btn-warning w-100 fw-semibold" style={{ borderRadius: '0.75rem' }}>
-                  Restore System
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-
-  const renderSecurityAudit = () => (
-    <div style={{ backgroundColor: '#f8f9fa', minHeight: '100vh', padding: '2rem 0' }}>
-      <div className="container-fluid">
-        <div className="row g-4">
-          <div className="col-12">
-            <div className="card border-0 shadow-sm" style={{ borderRadius: '1rem' }}>
-              <div className="card-header border-0" style={{ background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' }}>
-                <h3 className="text-white mb-0 d-flex align-items-center">
-                  <Shield size={24} className="me-2" />
-                  Security Audit
-                </h3>
-              </div>
-            </div>
-          </div>
-          
-          {/* Security Stats */}
-          <div className="col-lg-3 col-md-6">
-            <StatCard 
-              title="Failed Logins" 
-              value="234" 
-              icon={AlertTriangle} 
-              color="red"
-              subtitle="Last 24 hours"
-            />
-          </div>
-          <div className="col-lg-3 col-md-6">
-            <StatCard 
-              title="Blocked IPs" 
-              value="12" 
-              icon={Shield} 
-              color="orange"
-              subtitle="Currently blocked"
-            />
-          </div>
-          <div className="col-lg-3 col-md-6">
-            <StatCard 
-              title="Security Score" 
-              value="94/100" 
-              icon={CheckCircle} 
-              color="green"
-              subtitle="Excellent"
-            />
-          </div>
-          <div className="col-lg-3 col-md-6">
-            <StatCard 
-              title="Last Scan" 
-              value="12h ago" 
-              icon={Clock} 
-              color="blue"
-              subtitle="All systems scanned"
-            />
-          </div>
-
-          {/* Security Events */}
-          <div className="col-12">
-            <div className="card border-0 shadow-sm" style={{ borderRadius: '1rem' }}>
-              <div className="card-header bg-white border-0">
-                <h5 className="fw-bold mb-0">Security Events</h5>
-              </div>
-              <div className="card-body p-4">
-                {[
-                  { type: 'Failed Login', user: 'unknown@attacker.com', ip: '192.168.1.100', time: '5 min ago', severity: 'high' },
-                  { type: 'Password Reset', user: 'john@university.edu', ip: '10.0.0.25', time: '1 hour ago', severity: 'medium' },
-                  { type: 'Admin Login', user: 'admin@university.edu', ip: '192.168.1.50', time: '2 hours ago', severity: 'low' }
-                ].map((event, index) => (
-                  <div key={index} className="d-flex align-items-center justify-content-between p-3 border rounded-3 mb-3 bg-light">
-                    <div className="d-flex align-items-center">
-                      <AlertTriangle size={20} className={`me-3 ${
-                        event.severity === 'high' ? 'text-danger' :
-                        event.severity === 'medium' ? 'text-warning' : 'text-success'
-                      }`} />
-                      <div>
-                        <p className="fw-medium mb-1">{event.type}</p>
-                        <p className="text-muted small mb-0">{event.user} from {event.ip}</p>
-                      </div>
-                    </div>
-                    <div className="text-end">
-                      <p className="text-muted small mb-1">{event.time}</p>
-                      <span className={`badge px-2 py-1 ${
-                        event.severity === 'high' ? 'bg-danger bg-opacity-10 text-danger' :
-                        event.severity === 'medium' ? 'bg-warning bg-opacity-10 text-warning' : 
-                        'bg-success bg-opacity-10 text-success'
-                      }`} style={{ borderRadius: '0.5rem' }}>
-                        {event.severity}
-                      </span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-
-  const renderReports = () => (
-    <div style={{ backgroundColor: '#f8f9fa', minHeight: '100vh', padding: '2rem 0' }}>
-      <div className="container-fluid">
-        <div className="row g-4">
-          <div className="col-12">
-            <div className="card border-0 shadow-sm" style={{ borderRadius: '1rem' }}>
-              <div className="card-header border-0" style={{ background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' }}>
-                <div className="d-flex justify-content-between align-items-center">
-                  <h3 className="text-white mb-0 d-flex align-items-center">
-                    <FileText size={24} className="me-2" />
-                    Reports & Analytics
-                  </h3>
-                  <button className="btn btn-light fw-semibold">
-                    <Plus size={16} className="me-1" />
-                    Generate Report
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Analytics Cards */}
-          <div className="col-lg-6">
-            <div className="card border-0 shadow-sm h-100" style={{ borderRadius: '1rem' }}>
-              <div className="card-header bg-white border-0">
-                <h5 className="fw-bold mb-0">User Analytics</h5>
-              </div>
-              <div className="card-body p-4">
-                <div className="mb-3">
-                  <div className="d-flex justify-content-between align-items-center mb-2">
-                    <span className="text-muted">Total Users</span>
-                    <span className="fw-bold">1,250</span>
-                  </div>
-                  <div className="progress mb-3" style={{ height: '8px', borderRadius: '4px' }}>
-                    <div className="progress-bar bg-primary" role="progressbar" style={{ width: '78%' }}></div>
-                  </div>
-                  <div className="d-flex justify-content-between text-muted small">
-                    <span>Students: 78%</span>
-                    <span>Staff: 22%</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div className="col-lg-6">
-            <div className="card border-0 shadow-sm h-100" style={{ borderRadius: '1rem' }}>
-              <div className="card-header bg-white border-0">
-                <h5 className="fw-bold mb-0">System Usage</h5>
-              </div>
-              <div className="card-body p-4">
-                <div className="mb-3">
-                  <div className="d-flex justify-content-between align-items-center mb-3">
-                    <span className="text-muted">Daily Active Users</span>
-                    <span className="fw-bold">890</span>
-                  </div>
-                  <div className="d-flex justify-content-between align-items-center mb-3">
-                    <span className="text-muted">Peak Hours</span>
-                    <span className="fw-bold">9-10 AM</span>
-                  </div>
-                  <div className="d-flex justify-content-between align-items-center">
-                    <span className="text-muted">Avg Session</span>
-                    <span className="fw-bold">24 mins</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Available Reports */}
-          <div className="col-12">
-            <div className="card border-0 shadow-sm" style={{ borderRadius: '1rem' }}>
-              <div className="card-header bg-white border-0">
-                <h5 className="fw-bold mb-0">Available Reports</h5>
-              </div>
-              <div className="card-body p-4">
-                <div className="row g-4">
-                  {[
-                    { name: 'User Activity Report', description: 'Detailed user engagement metrics', icon: Users, color: 'primary' },
-                    { name: 'Security Audit Report', description: 'Comprehensive security analysis', icon: Shield, color: 'success' },
-                    { name: 'System Performance', description: 'Server and application metrics', icon: Activity, color: 'info' },
-                    { name: 'Usage Statistics', description: 'Feature usage and adoption rates', icon: BarChart3, color: 'warning' },
-                    { name: 'Financial Report', description: 'Cost analysis and budget tracking', icon: FileText, color: 'secondary' },
-                    { name: 'Compliance Report', description: 'Regulatory compliance status', icon: CheckCircle, color: 'success' }
-                  ].map((report, index) => (
-                    <div key={index} className="col-md-6 col-lg-4">
-                      <div className="card border h-100" style={{ borderRadius: '0.75rem' }}>
-                        <div className="card-body p-4 text-center">
-                          <div className={`d-inline-flex align-items-center justify-content-center mb-3`} 
-                               style={{ 
-                                 width: '60px', 
-                                 height: '60px', 
-                                 backgroundColor: getBackgroundColor(report.color), 
-                                 borderRadius: '50%' 
-                               }}>
-                            <report.icon size={24} style={{ color: getColorClass(report.color) }} />
-                          </div>
-                          <h6 className="fw-bold mb-2">{report.name}</h6>
-                          <p className="text-muted small mb-3">{report.description}</p>
-                          <button className={`btn btn-outline-${report.color} w-100`} style={{ borderRadius: '0.5rem' }}>
-                            Generate
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-
-  const tabs = [
-    { id: 'overview', label: 'Overview', icon: BarChart3 },
-    { id: 'users', label: 'User Management', icon: Users },
-    { id: 'config', label: 'System Config', icon: Settings },
-    { id: 'backup', label: 'Backup & Recovery', icon: Database },
-    { id: 'security', label: 'Security Audit', icon: Shield },
-    { id: 'reports', label: 'Reports', icon: FileText }
-  ];
-
-  if (loading) {
+  const NotificationToast = ({ notification }) => {
+    const styleByType = (t) => t === 'error'
+      ? { backgroundColor: '#f8d7da', borderColor: '#f5c6cb', color: '#721c24' }
+      : t === 'info'
+      ? { backgroundColor: '#d1ecf1', borderColor: '#bee5eb', color: '#0c5460' }
+      : { backgroundColor: '#d4edda', borderColor: '#c3e6cb', color: '#155724' };
+    const s = styleByType(notification.type);
     return (
-      <div className="d-flex align-items-center justify-content-center" style={{ minHeight: '100vh', backgroundColor: '#f8f9fa' }}>
-        <div className="text-center">
-          <div className="spinner-border text-primary mb-3" style={{ width: '3rem', height: '3rem' }} role="status">
-            <span className="visually-hidden">Loading...</span>
-          </div>
-          <p className="text-muted fs-5">Loading dashboard...</p>
-        </div>
+      <div className="alert d-flex align-items-center justify-content-between rounded-3 mb-2"
+           style={{ ...s, border: `1px solid ${s.borderColor}` }}>
+        <span>{notification.message}</span>
+        <button className="btn btn-sm" onClick={() => removeNotification(notification.id)}>
+          <X size={14} />
+        </button>
       </div>
     );
-  }
+  };
 
-  return (
-    <div style={{ backgroundColor: '#f8f9fa', minHeight: '100vh' }}>
-      {/* Header */}
-      <div className="bg-white shadow-sm border-bottom">
-        <div className="container-fluid px-4">
-          <div className="d-flex justify-content-between align-items-center py-4">
-            <div>
-              <div className="d-flex align-items-center mb-2">
-                <div className="bg-primary bg-opacity-10 rounded-circle p-2 me-3">
-                  <Shield size={24} className="text-primary" />
-                </div>
-                <div>
-                  <h2 className="fw-bold mb-0">Admin Dashboard</h2>
-                  <p className="text-muted mb-0">Welcome back, {user.name}</p>
-                </div>
+  // ---- Auth-aware fetch helper ----
+  const fetchJson = async (url, opts = {}) => {
+    const token = localStorage.getItem('token');
+    const baseHeaders = USE_SANCTUM
+      ? { Accept: 'application/json', ...(opts.headers || {}) }
+      : { Accept: 'application/json', ...(opts.headers || {}), ...(token ? { Authorization: `Bearer ${token}` } : {}) };
+
+    const res = await fetch(url, {
+      ...opts,
+      headers: baseHeaders,
+      credentials: USE_SANCTUM ? 'include' : 'omit',
+    });
+
+    const text = await res.text().catch(() => '');
+    let data = null;
+    try { data = text ? JSON.parse(text) : null; } catch {}
+
+    if (!res.ok) {
+      const detail = data?.message || data?.error || text || res.statusText;
+      const err = new Error(`${res.status} ${res.statusText} – ${detail}`);
+      err.status = res.status;
+      err.body = data || text;
+      throw err;
+    }
+    return data;
+  };
+
+  // ---- Dashboard data ----
+  const [dashboardData, setDashboardData] = useState(null);
+  const fetchDashboard = async () => {
+    try {
+      const data = await fetchJson(`${apiBaseUrl}/dashboard`);
+      setDashboardData(data);
+    } catch (error) {
+      console.error('Dashboard fetch error:', error);
+      addNotification(error.message || 'Failed to load dashboard data', 'error');
+      setDashboardData(null);
+    }
+  };
+
+  // ---- Users list ----
+  const [users, setUsers] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [selectedRole, setSelectedRole] = useState('all');
+  const [selectedStatus, setSelectedStatus] = useState('all');
+  const [searchTerm, setSearchTerm] = useState('');
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [totalUsers, setTotalUsers] = useState(0);
+
+  const fetchUsers = async (page = 1) => {
+    setLoading(true);
+    try {
+      const params = new URLSearchParams({
+        page: String(page),
+        per_page: '20',
+        ...(selectedRole !== 'all' && { role: selectedRole }),
+        ...(selectedStatus !== 'all' && { status: selectedStatus }),
+        ...(searchTerm ? { q: searchTerm } : {}),
+      });
+      const data = await fetchJson(`${apiBaseUrl}/users?${params.toString()}`);
+      setUsers(data.users || []);
+      setTotalPages(data.pagination?.last_page || 1);
+      setTotalUsers(data.pagination?.total || 0);
+      setCurrentPage(page);
+    } catch (error) {
+      console.error('Users fetch error:', error);
+      addNotification(error.message || 'Failed to load users', 'error');
+      setUsers([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const deleteUser = async (userId, reason) => {
+    try {
+      await fetchJson(`${apiBaseUrl}/users/${userId}`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reason, confirm_deletion: true }),
+      });
+      addNotification('User deleted successfully', 'success');
+      await fetchUsers(currentPage);
+    } catch (error) {
+      console.error('Delete user error:', error);
+      addNotification(error.message || 'Failed to delete user', 'error');
+    }
+  };
+
+  const updateUserStatus = async (userId, status, reason = '') => {
+    try {
+      await fetchJson(`${apiBaseUrl}/users/${userId}/status`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status, reason, notify_user: true }),
+      });
+      addNotification('User status updated successfully', 'success');
+      await fetchUsers(currentPage);
+    } catch (error) {
+      console.error('Update status error:', error);
+      addNotification(error.message || 'Failed to update user status', 'error');
+    }
+  };
+
+  // ---- Settings ----
+  
+  const fetchSettings = async () => {
+    try {
+      const data = await fetchJson(`${apiBaseUrl}/settings`);
+      setSystemSettings(data);
+    } catch (error) {
+      console.error('Settings fetch error:', error);
+      addNotification(error.message || 'Failed to load system settings', 'error');
+    }
+  };
+  const updateSettings = async (settings) => {
+    try {
+      await fetchJson(`${apiBaseUrl}/settings`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(settings),
+      });
+      addNotification('Settings updated successfully!', 'success');
+      await fetchSettings();
+    } catch (error) {
+      console.error('Settings update error:', error);
+      addNotification(error.message || 'Failed to update settings', 'error');
+    }
+  };
+
+  // ---- Profile ----
+  const fileInputRef = useRef(null);
+  const [profile, setProfile] = useState({
+    name: initialUser.name || '',
+    email: initialUser.email || '',
+    phone: '',
+    department: '',
+    bio: '',
+  });
+  const [profileAvatar, setProfileAvatar] = useState(initialUser.avatar || null);
+  const [profileLoading, setProfileLoading] = useState(false);
+  const [profileSaving, setProfileSaving] = useState(false);
+
+  const getProfile = async () => {
+    setProfileLoading(true);
+    try {
+      const data = await fetchJson(`http://127.0.0.1:8000/api/profile`);
+      setProfile({
+        name: data?.name ?? '',
+        email: data?.email ?? '',
+        phone: data?.phone ?? '',
+        department: data?.department ?? '',
+        bio: data?.bio ?? '',
+      });
+      if (data?.avatar_url) setProfileAvatar(data.avatar_url);
+    } catch (error) {
+      console.error('Profile fetch error:', error);
+      addNotification(error.message || 'Failed to load profile', 'error');
+    } finally {
+      setProfileLoading(false);
+    }
+  };
+
+  const saveProfile = async (e) => {
+    e?.preventDefault?.();
+    setProfileSaving(true);
+    try {
+      await fetchJson(`${apiBaseUrl}${PROFILE_ENDPOINT}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(profile),
+      });
+      addNotification('Profile updated successfully!', 'success');
+    } catch (error) {
+      console.error('Profile save error:', error);
+      addNotification(error.message || 'Failed to update profile', 'error');
+    } finally {
+      setProfileSaving(false);
+    }
+  };
+
+  const handlePhotoUpload = async (file) => {
+    if (!file) return;
+    const formData = new FormData();
+    formData.append('avatar', file);
+    try {
+      const data = await fetchJson(`${apiBaseUrl}${PROFILE_ENDPOINT}/avatar`, {
+        method: 'POST',
+        body: formData, // browser sets boundary
+      });
+      setProfileAvatar(data.avatar_url);
+      addNotification('Profile photo updated successfully!', 'success');
+    } catch (error) {
+      console.error('Photo upload error:', error);
+      addNotification(error.message || 'Failed to upload photo', 'error');
+    } finally {
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
+
+  const handlePhotoRemove = async () => {
+    try {
+      await fetchJson(`${apiBaseUrl}${PROFILE_ENDPOINT}/avatar`, { method: 'DELETE' });
+      setProfileAvatar(null);
+      addNotification('Profile photo removed successfully!', 'success');
+    } catch (error) {
+      console.error('Photo removal error:', error);
+      addNotification(error.message || 'Failed to remove photo', 'error');
+    }
+  };
+
+  // ---- Effects ----
+  useEffect(() => {
+    if (activeTab === 'dashboard') fetchDashboard();
+    if (activeTab === 'users') fetchUsers(1);
+    if (activeTab === 'config') fetchSettings();
+    if (activeTab === 'profile') getProfile();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab]);
+
+  useEffect(() => {
+    if (activeTab === 'users') fetchUsers(1);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedRole, selectedStatus, searchTerm]);
+
+  // ---- Small UI helpers ----
+  const ProfileAvatar = ({ size = 88, className = "" }) => {
+    if (profileAvatar) {
+      return (
+        <img
+          src={profileAvatar}
+          alt="avatar"
+          className={`rounded-circle ${className}`}
+          style={{ width: size, height: size, objectFit: 'cover' }}
+        />
+      );
+    }
+    return (
+        <div
+          className={`rounded-circle d-flex align-items-center justify-content-center ${className}`}
+          style={{ width: size, height: size, backgroundColor: '#fef2f2', color: '#e53e3e' }}
+        >
+          <User size={size * 0.5} />
+        </div>
+    );
+  };
+
+  const StatCard = ({ title, value, icon: Icon, color, subtitle, bgColor }) => (
+    <div className="bg-white rounded-4 shadow-sm p-4 h-100 border-0">
+      <div className="text-center">
+        <div className="d-inline-flex align-items-center justify-content-center mb-3"
+             style={{ width: 64, height: 64, backgroundColor: bgColor || `${color}20`, borderRadius: '50%' }}>
+          <Icon size={28} style={{ color }} />
+        </div>
+        <h2 className="fw-bold mb-2" style={{ color, fontSize: '2.5rem' }}>{value ?? '—'}</h2>
+        <p className="text-muted fw-medium mb-0">{title}</p>
+        {subtitle && <p className="text-muted small mt-1">{subtitle}</p>}
+      </div>
+    </div>
+  );
+
+  // ---- Renders ----
+  const renderTopBar = () => (
+    <div className="border-bottom bg-white">
+      <div className="container d-flex align-items-center justify-content-between py-3">
+        {/* Brand / Logo */}
+        <div className="d-flex align-items-center gap-3">
+          <img
+            src="/logo6.png"
+            alt="Final International University"
+            style={{ width: 40, height: 40, objectFit: 'contain', borderRadius: 6 }}
+          />
+          <div className="d-none d-md-block">
+            <div className="fw-bold" style={{ lineHeight: 1, color: '#b91c1c' }}>
+              Final International University
+            </div>
+            <small className="text-muted">Medical Appointments</small>
+          </div>
+        </div>
+
+        {/* Tabs */}
+        <div className="d-flex gap-2">
+          <button
+            className={`btn ${activeTab === 'dashboard' ? 'btn-danger' : 'btn-outline-danger'}`}
+            onClick={() => setActiveTab('dashboard')}
+          >
+            <LayoutGrid size={16} className="me-1" /> Dashboard
+          </button>
+          <button
+            className={`btn ${activeTab === 'profile' ? 'btn-danger' : 'btn-outline-danger'}`}
+            onClick={() => setActiveTab('profile')}
+          >
+            <UserCog size={16} className="me-1" /> Profile
+          </button>
+          <button
+            className={`btn ${activeTab === 'users' ? 'btn-danger' : 'btn-outline-danger'}`}
+            onClick={() => setActiveTab('users')}
+          >
+            <Users size={16} className="me-1" /> User Management
+          </button>
+          <button
+            className={`btn ${activeTab === 'config' ? 'btn-danger' : 'btn-outline-danger'}`}
+            onClick={() => setActiveTab('config')}
+          >
+            <Settings size={16} className="me-1" /> System Config
+          </button>
+        </div>
+
+        {/* Logout */}
+        <div>
+          <button
+            className="btn btn-outline-danger"
+            onClick={() => {
+              try { localStorage.removeItem('token'); } catch {}
+              onLogout ? onLogout() : window.location.assign('/');
+            }}
+          >
+            <LogOut size={16} className="me-1" /> Logout
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+
+  const renderDashboard = () => (
+  <div className="container-fluid px-4 py-4" style={{ backgroundColor: '#f8fafc' }}>
+    <div className="row g-4">
+      {/* Welcome */}
+      <div className="col-12">
+        <div
+          className="rounded-4 shadow-sm p-5 text-white position-relative overflow-hidden"
+          style={{ background: 'linear-gradient(135deg, #e53e3e 0%, #c53030 100%)' }}
+        >
+          <div className="row align-items-center">
+            <div className="col-md-8">
+              <h1 className="fw-bold mb-3">Welcome back!</h1>
+              <p className="mb-2 opacity-90 fs-5">Medical Appointments Admin Dashboard</p>
+              <p className="mb-0 opacity-75">Monitor and manage your university health system</p>
+              {dashboardData?.admin?.last_login && (
+                <p className="mb-0 opacity-75 mt-2">
+                  Last login: {new Date(dashboardData.admin.last_login).toLocaleString()}
+                </p>
+              )}
+            </div>
+            <div className="col-md-4">
+              <div className="d-flex flex-column align-items-end">
+                <ProfileAvatar size={120} className="opacity-90" />
+                {!!profileAvatar && (
+                  <button
+                    className="btn btn-outline-light mt-3"
+                    onClick={handlePhotoRemove}
+                  >
+                    <Trash2 size={16} /> Remove
+                  </button>
+                )}
               </div>
             </div>
-            <div className="d-flex align-items-center gap-3">
-              <div className="d-flex align-items-center text-success small">
-                <div className="bg-success rounded-circle me-2" style={{ width: '8px', height: '8px', animation: 'pulse 2s infinite' }}></div>
-                <span className="fw-medium">System Online</span>
-              </div>
-              {onLogout && (
-                <button
-                  onClick={onLogout}
-                  className="btn btn-outline-danger fw-semibold px-4"
-                  style={{ borderRadius: '0.75rem' }}
-                >
-                  <User size={16} className="me-1" />
-                  Logout
-                </button>
+          </div>
+        </div>
+      </div>
+
+        {/* KPIs */}
+        <div className="col-12"><h4 className="fw-bold mb-3">System Overview</h4></div>
+        <div className="col-lg-3 col-md-6">
+          <StatCard title="Total Users" value={dashboardData?.system_overview?.total_users} icon={Users} color="#e53e3e" subtitle="All registered users" />
+        </div>
+        <div className="col-lg-3 col-md-6">
+          <StatCard title="Active Users" value={dashboardData?.system_overview?.active_users} icon={Activity} color="#38a169" subtitle="Currently active" />
+        </div>
+        <div className="col-lg-3 col-md-6">
+          <StatCard title="New Registrations Today" value={dashboardData?.system_overview?.new_registrations_today} icon={CheckCircle} color="#3182ce" subtitle="Today's signups" />
+        </div>
+        <div className="col-lg-3 col-md-6">
+          <StatCard title="Pending Verifications" value={dashboardData?.system_overview?.pending_verifications} icon={Clock} color="#d69e2e" subtitle="Awaiting verification" />
+        </div>
+
+        {/* …add your breakdown/analytics if needed… */}
+      </div>
+    </div>
+  );
+
+  const renderProfile = () => (
+    <div className="container py-4">
+      <div className="row g-4">
+        {/* Personal Information */}
+        <div className="col-lg-8">
+          <div className="rounded-4 shadow-sm bg-white">
+            <div className="px-4 py-3 rounded-top-4" style={{ background: '#ef4444', color: 'white' }}>
+              <strong><UserCog size={18} className="me-2" /> Personal Information</strong>
+            </div>
+            <div className="p-4">
+              {profileLoading ? (
+                <div className="text-muted">Loading profile…</div>
+              ) : (
+                <form onSubmit={saveProfile}>
+                  <div className="row g-3">
+                    <div className="col-md-6">
+                      <label className="form-label">Full Name</label>
+                      <input
+                        type="text"
+                        className="form-control"
+                        value={profile.name}
+                        onChange={(e) => setProfile({ ...profile, name: e.target.value })}
+                        required
+                        placeholder="Enter your name"
+                      />
+                    </div>
+                    <div className="col-md-6">
+                      <label className="form-label">Email Address</label>
+                      <input
+                        type="email"
+                        className="form-control"
+                        value={profile.email}
+                        disabled
+                      />
+                    </div>
+                    <div className="col-md-6">
+                      <label className="form-label">Phone Number</label>
+                      <input
+                        type="tel"
+                        className="form-control"
+                        value={profile.phone}
+                        onChange={(e) => setProfile({ ...profile, phone: e.target.value })}
+                        placeholder="Enter your phone number"
+                      />
+                    </div>
+                    <div className="col-md-6">
+                      <label className="form-label">Department</label>
+                      <select
+                        className="form-select"
+                        value={profile.department}
+                        onChange={(e) => setProfile({ ...profile, department: e.target.value })}
+                      >
+                        <option value="">Select Department</option>
+                        <option value="Administration">Administration</option>
+                        <option value="Medicine">Medicine</option>
+                        <option value="Nursing">Nursing</option>
+                        <option value="Pharmacy">Pharmacy</option>
+                        <option value="Dentistry">Dentistry</option>
+                        <option value="Engineering">Engineering</option>
+                        <option value="Sciences">Sciences</option>
+                      </select>
+                    </div>
+                    <div className="col-12">
+                      <label className="form-label">Bio</label>
+                      <textarea
+                        className="form-control"
+                        rows={4}
+                        value={profile.bio}
+                        onChange={(e) => setProfile({ ...profile, bio: e.target.value })}
+                        placeholder="Tell us about yourself.."
+                      />
+                    </div>
+                  </div>
+
+                  <div className="mt-3 text-end">
+                    <button type="submit" className="btn btn-danger" disabled={profileSaving}>
+                      {profileSaving ? 'Saving…' : 'Save Changes'}
+                    </button>
+                  </div>
+                </form>
               )}
             </div>
           </div>
         </div>
-      </div>
 
-      {/* Navigation Tabs */}
-      <div className="container-fluid px-4 py-4">
-        <div className="card border-0 shadow-sm mb-4" style={{ borderRadius: '1rem' }}>
-          <div className="card-body p-3">
-            <nav className="nav nav-pills nav-fill gap-2">
-              {tabs.map(tab => (
-                <TabButton
-                  key={tab.id}
-                  id={tab.id}
-                  label={tab.label}
-                  icon={tab.icon}
-                  isActive={activeTab === tab.id}
-                  onClick={setActiveTab}
-                />
-              ))}
-            </nav>
+        {/* Profile Picture */}
+        <div className="col-lg-4">
+          <div className="rounded-4 shadow-sm bg-white">
+            <div className="px-4 py-3 rounded-top-4 d-flex align-items-center" style={{ background: '#fee2e2' }}>
+              <ImageIcon size={18} className="me-2 text-danger" />
+              <strong className="text-danger">Profile Picture</strong>
+            </div>
+            <div className="p-4 text-center">
+              <ProfileAvatar size={96} className="mx-auto mb-3" />
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                style={{ display: 'none' }}
+                onChange={(e) => handlePhotoUpload(e.target.files?.[0])}
+              />
+              <button className="btn btn-outline-danger w-100 mb-2" onClick={() => fileInputRef.current?.click()}>
+                <Upload size={16} className="me-1" /> Upload New Photo
+              </button>
+              <button className="btn btn-outline-secondary w-100" disabled={!profileAvatar} onClick={handlePhotoRemove}>
+                <Trash2 size={16} className="me-1" /> Remove Photo
+              </button>
+            </div>
           </div>
         </div>
       </div>
+    </div>
+  );
 
-      {/* Tab Content */}
-      <div>
-        {activeTab === 'overview' && renderOverview()}
-        {activeTab === 'users' && renderUserManagement()}
-        {activeTab === 'config' && renderSystemConfiguration()}
-        {activeTab === 'backup' && renderBackupRecovery()}
-        {activeTab === 'security' && renderSecurityAudit()}
-        {activeTab === 'reports' && renderReports()}
+  const renderUsers = () => (
+    <div className="container-fluid px-4 py-4">
+      {/* Filters */}
+      <div className="d-flex gap-2 align-items-center mb-3">
+        <input
+          className="form-control"
+          placeholder="Search users…"
+          value={searchTerm}
+          onChange={(e) => setSearchTerm(e.target.value)}
+          style={{ maxWidth: 280 }}
+        />
+        <select className="form-select" style={{ maxWidth: 180 }} value={selectedRole} onChange={(e) => setSelectedRole(e.target.value)}>
+          <option value="all">All roles</option>
+          <option value="student">Student</option>
+          <option value="doctor">Doctor</option>
+          <option value="nurse">Nurse</option>
+          <option value="admin">Admin</option>
+        </select>
+        <select className="form-select" style={{ maxWidth: 180 }} value={selectedStatus} onChange={(e) => setSelectedStatus(e.target.value)}>
+          <option value="all">All status</option>
+          <option value="active">Active</option>
+          <option value="suspended">Suspended</option>
+          <option value="pending">Pending</option>
+        </select>
       </div>
+
+      {/* Table */}
+      <div className="table-responsive bg-white rounded-4 shadow-sm">
+        <table className="table table-hover mb-0">
+          <thead>
+            <tr>
+              <th>User</th><th>Email</th><th>Role</th><th>Status</th><th>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {loading ? (
+              <tr><td colSpan="5" className="text-center py-4">Loading…</td></tr>
+            ) : users.length === 0 ? (
+              <tr><td colSpan="5" className="text-center py-4">No users found</td></tr>
+            ) : users.map(u => (
+              <tr key={u.id}>
+                <td className="d-flex align-items-center gap-2">
+                  <img src={u.avatar_url || ''} alt="" onError={(e)=>{e.currentTarget.style.display='none';}} className="rounded-circle" style={{ width: 32, height: 32, objectFit: 'cover' }} />
+                  {u.name}
+                </td>
+                <td>{u.email}</td>
+                <td>{u.role}</td>
+                <td>{u.status}</td>
+                <td className="d-flex gap-2">
+                  <button className="btn btn-sm btn-outline-secondary" onClick={() => updateUserStatus(u.id, u.status === 'active' ? 'suspended' : 'active')}>
+                    {u.status === 'active' ? 'Suspend' : 'Activate'}
+                  </button>
+                  <button className="btn btn-sm btn-outline-danger" onClick={() => deleteUser(u.id, 'admin_action')}>
+                    Delete
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Pagination */}
+      <div className="d-flex justify-content-between align-items-center mt-3">
+        <div>Total: {totalUsers}</div>
+        <div className="btn-group">
+          <button className="btn btn-outline-secondary" disabled={currentPage <= 1} onClick={() => fetchUsers(currentPage - 1)}>Prev</button>
+          <span className="btn btn-outline-secondary disabled">{currentPage} / {totalPages}</span>
+          <button className="btn btn-outline-secondary" disabled={currentPage >= totalPages} onClick={() => fetchUsers(currentPage + 1)}>Next</button>
+        </div>
+      </div>
+    </div>
+  );
+
+  const renderConfig = () => {
+  // Define timezone options
+  const timezoneOptions = [
+    { value: 'UTC-12', label: 'UTC-12 (Baker Island)' },
+    { value: 'UTC-11', label: 'UTC-11 (American Samoa)' },
+    { value: 'UTC-10', label: 'UTC-10 (Hawaii)' },
+    { value: 'UTC-9', label: 'UTC-9 (Alaska)' },
+    { value: 'UTC-8', label: 'UTC-8 (Pacific Time)' },
+    { value: 'UTC-7', label: 'UTC-7 (Mountain Time)' },
+    { value: 'UTC-6', label: 'UTC-6 (Central Time)' },
+    { value: 'UTC-5', label: 'UTC-5 (Eastern Time)' },
+    { value: 'UTC-4', label: 'UTC-4 (Atlantic Time)' },
+    { value: 'UTC-3', label: 'UTC-3 (Argentina, Brazil)' },
+    { value: 'UTC-2', label: 'UTC-2 (South Georgia)' },
+    { value: 'UTC-1', label: 'UTC-1 (Azores)' },
+    { value: 'UTC+0', label: 'UTC+0 (Greenwich Mean Time)' },
+    { value: 'UTC+1', label: 'UTC+1 (Central European Time)' },
+    { value: 'UTC+2', label: 'UTC+2 (Eastern European Time)' },
+    { value: 'UTC+3', label: 'UTC+3 (Turkey, Russia)' },
+    { value: 'UTC+4', label: 'UTC+4 (Gulf Standard Time)' },
+    { value: 'UTC+5', label: 'UTC+5 (Pakistan Standard Time)' },
+    { value: 'UTC+6', label: 'UTC+6 (Bangladesh Standard Time)' },
+    { value: 'UTC+7', label: 'UTC+7 (Indochina Time)' },
+    { value: 'UTC+8', label: 'UTC+8 (China Standard Time)' },
+    { value: 'UTC+9', label: 'UTC+9 (Japan Standard Time)' },
+    { value: 'UTC+10', label: 'UTC+10 (Australian Eastern Time)' },
+    { value: 'UTC+11', label: 'UTC+11 (Solomon Islands)' },
+    { value: 'UTC+12', label: 'UTC+12 (New Zealand)' }
+  ];
+
+  // Define language options
+  const languageOptions = [
+    { value: 'en', label: 'English' },
+    { value: 'tr', label: 'Türkçe (Turkish)' },
+    { value: 'de', label: 'Deutsch (German)' },
+    { value: 'fr', label: 'Français (French)' },
+    { value: 'es', label: 'Español (Spanish)' },
+    { value: 'it', label: 'Italiano (Italian)' },
+    { value: 'pt', label: 'Português (Portuguese)' },
+    { value: 'ru', label: 'Русский (Russian)' },
+    { value: 'ar', label: 'العربية (Arabic)' },
+    { value: 'zh', label: '中文 (Chinese)' },
+    { value: 'ja', label: '日本語 (Japanese)' },
+    { value: 'ko', label: '한국어 (Korean)' }
+  ];
+
+  // Check if settings have changes compared to original
+  const hasChanges = () => {
+    if (!systemSettings || !settingsDraft) return false;
+    return JSON.stringify(systemSettings) !== JSON.stringify(settingsDraft);
+  };
+
+  return (
+    <div className="container py-4">
+      <div className="d-flex align-items-center justify-content-between mb-3">
+        <h5 className="mb-0">System Settings</h5>
+        <div>
+          <button
+            className="btn btn-outline-secondary me-2"
+            onClick={() => {
+              if (systemSettings) {
+                setSettingsDraft(structuredClone(systemSettings));
+                addNotification('Settings reset to saved values', 'info');
+              }
+            }}
+            disabled={!systemSettings || settingsSaving || !hasChanges()}
+          >
+            Reset
+          </button>
+          <button
+            className="btn btn-primary"
+            disabled={!settingsDraft || settingsSaving || !hasChanges()}
+            onClick={async () => {
+              try {
+                setSettingsSaving(true);
+                await updateSettings(settingsDraft);
+                
+                // Update the canonical settings to match what was saved
+                setSystemSettings(structuredClone(settingsDraft));
+                
+                // Optionally refresh from server to ensure consistency
+                // await fetchSettings();
+                
+                addNotification('Settings saved successfully', 'success');
+              } catch (err) {
+                console.error('Failed to save settings:', err);
+                addNotification(err.message || 'Failed to save settings', 'error');
+              } finally {
+                setSettingsSaving(false);
+              }
+            }}
+          >
+            {settingsSaving ? (
+              <>
+                <span className="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                Saving…
+              </>
+            ) : (
+              'Save Changes'
+            )}
+          </button>
+        </div>
+      </div>
+
+      {!settingsDraft ? (
+        <div className="text-center py-5">
+          <div className="spinner-border text-primary" role="status">
+            <span className="visually-hidden">Loading...</span>
+          </div>
+          <div className="text-muted mt-2">Loading settings…</div>
+        </div>
+      ) : (
+        <div className="row g-4">
+          {/* GENERAL */}
+          <div className="col-12">
+            <div className="card border-0 shadow-sm rounded-4">
+              <div className="card-header bg-white rounded-top-4">
+                <strong>General</strong>
+              </div>
+              <div className="card-body">
+                <div className="row g-3">
+                  <div className="col-md-6">
+                    <label className="form-label">Site Name</label>
+                    <input
+                      className="form-control"
+                      value={g(settingsDraft, 'general.site_name', '')}
+                      onChange={onField('general.site_name')}
+                      placeholder="Enter site name"
+                    />
+                  </div>
+                  <div className="col-md-6">
+                    <label className="form-label">Default Language</label>
+                    <select
+                      className="form-select"
+                      value={g(settingsDraft, 'general.default_language', 'en')}
+                      onChange={onField('general.default_language')}
+                    >
+                      {languageOptions.map(option => (
+                        <option key={option.value} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="col-12">
+                    <label className="form-label">Site Description</label>
+                    <textarea
+                      className="form-control"
+                      rows="2"
+                      value={g(settingsDraft, 'general.site_description', '')}
+                      onChange={onField('general.site_description')}
+                      placeholder="Enter site description"
+                    />
+                  </div>
+                  <div className="col-md-4">
+                    <label className="form-label">Timezone</label>
+                    <select
+                      className="form-select"
+                      value={g(settingsDraft, 'general.timezone', 'UTC+3')}
+                      onChange={onField('general.timezone')}
+                    >
+                      {timezoneOptions.map(option => (
+                        <option key={option.value} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="col-md-8 d-flex align-items-center gap-4">
+                    <div className="form-check">
+                      <input
+                        id="maintenance"
+                        type="checkbox"
+                        className="form-check-input"
+                        checked={!!g(settingsDraft, 'general.maintenance_mode', false)}
+                        onChange={onField('general.maintenance_mode')}
+                      />
+                      <label htmlFor="maintenance" className="form-check-label">
+                        Maintenance mode
+                      </label>
+                    </div>
+                    <div className="form-check">
+                      <input
+                        id="registration_enabled"
+                        type="checkbox"
+                        className="form-check-input"
+                        checked={!!g(settingsDraft, 'general.registration_enabled', true)}
+                        onChange={onField('general.registration_enabled')}
+                      />
+                      <label htmlFor="registration_enabled" className="form-check-label">
+                        Registration enabled
+                      </label>
+                    </div>
+                    <div className="form-check">
+                      <input
+                        id="email_verification_required"
+                        type="checkbox"
+                        className="form-check-input"
+                        checked={!!g(settingsDraft, 'general.email_verification_required', true)}
+                        onChange={onField('general.email_verification_required')}
+                      />
+                      <label htmlFor="email_verification_required" className="form-check-label">
+                        Email verification required
+                      </label>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* AUTHENTICATION */}
+          <div className="col-12">
+            <div className="card border-0 shadow-sm rounded-4">
+              <div className="card-header bg-white rounded-top-4">
+                <strong>Authentication</strong>
+              </div>
+              <div className="card-body">
+                <div className="row g-3">
+                  <div className="col-md-3">
+                    <label className="form-label">Password min length</label>
+                    <input
+                      type="number"
+                      min={6}
+                      max={128}
+                      className="form-control"
+                      value={g(settingsDraft, 'authentication.password_min_length', 8)}
+                      onChange={onField('authentication.password_min_length')}
+                    />
+                  </div>
+                  <div className="col-md-9 d-flex align-items-center flex-wrap gap-4">
+                    {[
+                      ['authentication.password_require_uppercase', 'Require uppercase'],
+                      ['authentication.password_require_lowercase', 'Require lowercase'],
+                      ['authentication.password_require_numbers', 'Require numbers'],
+                      ['authentication.password_require_symbols', 'Require symbols'],
+                      ['authentication.two_factor_enabled', 'Two‑factor enabled'],
+                    ].map(([path, label]) => (
+                      <div className="form-check" key={path}>
+                        <input
+                          type="checkbox"
+                          className="form-check-input"
+                          id={path}
+                          checked={!!g(settingsDraft, path, false)}
+                          onChange={onField(path)}
+                        />
+                        <label className="form-check-label" htmlFor={path}>
+                          {label}
+                        </label>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="col-md-4">
+                    <label className="form-label">Session timeout (minutes)</label>
+                    <input
+                      type="number"
+                      min={1}
+                      max={43200}
+                      className="form-control"
+                      value={g(settingsDraft, 'authentication.session_timeout', 1440)}
+                      onChange={onField('authentication.session_timeout')}
+                    />
+                  </div>
+                  <div className="col-md-4">
+                    <label className="form-label">Max login attempts</label>
+                    <input
+                      type="number"
+                      min={1}
+                      max={50}
+                      className="form-control"
+                      value={g(settingsDraft, 'authentication.max_login_attempts', 5)}
+                      onChange={onField('authentication.max_login_attempts')}
+                    />
+                  </div>
+                  <div className="col-md-4">
+                    <label className="form-label">Lockout duration (minutes)</label>
+                    <input
+                      type="number"
+                      min={1}
+                      max={1440}
+                      className="form-control"
+                      value={g(settingsDraft, 'authentication.lockout_duration', 15)}
+                      onChange={onField('authentication.lockout_duration')}
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* EMAIL */}
+          <div className="col-12">
+            <div className="card border-0 shadow-sm rounded-4">
+              <div className="card-header bg-white rounded-top-4">
+                <strong>Email (SMTP)</strong>
+              </div>
+              <div className="card-body">
+                <div className="row g-3">
+                  <div className="col-md-6">
+                    <label className="form-label">SMTP Host</label>
+                    <input
+                      className="form-control"
+                      value={g(settingsDraft, 'email.smtp_host', '')}
+                      onChange={onField('email.smtp_host')}
+                      placeholder="smtp.example.com"
+                    />
+                  </div>
+                  <div className="col-md-3">
+                    <label className="form-label">SMTP Port</label>
+                    <input
+                      type="number"
+                      min={1}
+                      max={65535}
+                      className="form-control"
+                      value={g(settingsDraft, 'email.smtp_port', 587)}
+                      onChange={onField('email.smtp_port')}
+                    />
+                  </div>
+                  <div className="col-md-3">
+                    <label className="form-label">Encryption</label>
+                    <select
+                      className="form-select"
+                      value={g(settingsDraft, 'email.smtp_encryption', 'tls')}
+                      onChange={onField('email.smtp_encryption')}
+                    >
+                      <option value="">None</option>
+                      <option value="tls">TLS</option>
+                      <option value="ssl">SSL</option>
+                    </select>
+                  </div>
+                  <div className="col-md-6">
+                    <label className="form-label">From Address</label>
+                    <input
+                      type="email"
+                      className="form-control"
+                      value={g(settingsDraft, 'email.from_address', '')}
+                      onChange={onField('email.from_address')}
+                      placeholder="noreply@example.com"
+                    />
+                  </div>
+                  <div className="col-md-6">
+                    <label className="form-label">From Name</label>
+                    <input
+                      className="form-control"
+                      value={g(settingsDraft, 'email.from_name', '')}
+                      onChange={onField('email.from_name')}
+                      placeholder="Your Organization Name"
+                    />
+                  </div>
+                  <div className="col-md-6">
+                    <label className="form-label">SMTP Username</label>
+                    <input
+                      className="form-control"
+                      value={g(settingsDraft, 'email.smtp_username', '')}
+                      onChange={onField('email.smtp_username')}
+                      placeholder="smtp_username"
+                    />
+                  </div>
+                  <div className="col-md-6">
+                    <label className="form-label">SMTP Password</label>
+                    <input
+                      type="password"
+                      className="form-control"
+                      value={g(settingsDraft, 'email.smtp_password', '')}
+                      onChange={onField('email.smtp_password')}
+                      placeholder="••••••••"
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Changes indicator */}
+          {hasChanges() && (
+            <div className="col-12">
+              <div className="alert alert-info d-flex align-items-center" role="alert">
+                <i className="bi bi-info-circle me-2"></i>
+                You have unsaved changes. Don't forget to save your settings.
+              </div>
+            </div>
+          )}
+
+          {/* Raw JSON (collapsible aid) */}
+          <div className="col-12">
+            <details>
+              <summary className="text-muted">View raw JSON</summary>
+              <pre className="bg-light p-3 rounded-3 mt-2 small">{JSON.stringify(settingsDraft, null, 2)}</pre>
+            </details>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+  // ---- Page scaffold ----
+  return (
+    <div>
+      {/* Toasts */}
+      <div className="position-fixed top-0 end-0 p-3" style={{ zIndex: 9999, width: 360 }}>
+        {notifications.map(n => <NotificationToast key={n.id} notification={n} />)}
+      </div>
+
+      {/* Top bar with logo + tabs + logout */}
+      {renderTopBar()}
+
+      {/* Content */}
+      {activeTab === 'dashboard' && renderDashboard()}
+      {activeTab === 'profile' && renderProfile()}
+      {activeTab === 'users' && renderUsers()}
+      {activeTab === 'config' && renderConfig()}
     </div>
   );
 };

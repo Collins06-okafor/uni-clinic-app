@@ -85,96 +85,125 @@ class AcademicStaffController extends Controller
         ]);
     }
 
-    /**
-     * Schedule a new appointment
-     */
-    public function scheduleAppointment(Request $request): JsonResponse
-    {
-        try {
-            $validated = $request->validate([
-                'doctor_id' => 'required|exists:users,id',
-                'date' => 'required|date|after_or_equal:today',
-                'time' => 'required|date_format:H:i',
-                'reason' => 'required|string|max:500'
-            ]);
+   /**
+ * Schedule a new appointment (supports specialization or doctor_id)
+ */
+public function scheduleAppointment(Request $request): JsonResponse
+{
+    try {
+        // Validate inputs
+        $validated = $request->validate([
+            'specialization' => 'nullable|string|exists:users,specialization', // optional, but must exist in DB if sent
+            'doctor_id' => 'nullable|exists:users,id',
+            'date' => 'required|date|after_or_equal:today',
+            'time' => 'required|date_format:H:i',
+            'reason' => 'required|string|max:500'
+        ]);
 
-            // Check if user already has an appointment on this date
-            $existingUserAppointment = Appointment::where('patient_id', $request->user()->id)
-                ->where('date', $validated['date'])
-                ->whereIn('status', ['scheduled', 'confirmed'])
-                ->first();
+        // Ensure at least one is provided
+        if (empty($validated['doctor_id']) && empty($validated['specialization'])) {
+            return response()->json([
+                'message' => 'Either doctor_id or specialization must be provided',
+                'errors' => [
+                    'doctor_id' => ['Either doctor_id or specialization is required'],
+                    'specialization' => ['Either doctor_id or specialization is required']
+                ]
+            ], 422);
+        }
 
-            if ($existingUserAppointment) {
-                return response()->json([
-                    'message' => 'You already have an appointment scheduled for this date',
-                    'errors' => ['date' => ['Only one appointment per day is allowed']]
-                ], 422);
-            }
-
-            // Check if doctor exists and has doctor role
-            $doctor = User::where('id', $validated['doctor_id'])
+        // If specialization provided, pick a doctor
+        if (!empty($validated['specialization']) && empty($validated['doctor_id'])) {
+            $doctor = User::where('specialization', $validated['specialization'])
                 ->where('role', User::ROLE_DOCTOR)
                 ->first();
 
             if (!$doctor) {
                 return response()->json([
-                    'message' => 'Selected doctor not found or invalid',
-                    'errors' => ['doctor_id' => ['Selected doctor is invalid']]
+                    'message' => 'No doctor found with the given specialization',
+                    'errors' => ['specialization' => ['No available doctor matches this specialization']]
                 ], 422);
             }
 
-            // Check for existing appointment at the same time
-            $existingAppointment = Appointment::where('doctor_id', $validated['doctor_id'])
-                ->where('date', $validated['date'])
-                ->where('time', $validated['time'])
-                ->whereIn('status', ['scheduled', 'confirmed'])
-                ->first();
-
-            if ($existingAppointment) {
-                return response()->json([
-                    'message' => 'Doctor is not available at this time',
-                    'errors' => ['time' => ['This time slot is already booked']]
-                ], 422);
-            }
-
-            $appointment = Appointment::create([
-                'patient_id' => $request->user()->id,
-                'doctor_id' => $validated['doctor_id'],
-                'date' => $validated['date'],
-                'time' => $validated['time'],
-                'reason' => $validated['reason'],
-                'status' => 'scheduled'
-            ]);
-
-            // Load the relationship for response
-            $appointment->load('doctor');
-
-            return response()->json([
-                'message' => 'Appointment scheduled successfully',
-                'appointment' => [
-                    'id' => $appointment->id,
-                    'date' => $appointment->date,
-                    'time' => $appointment->time,
-                    'doctor' => $appointment->doctor->name,
-                    'reason' => $appointment->reason,
-                    'status' => $appointment->status
-                ]
-            ], 201);
-
-        } catch (\Illuminate\Validation\ValidationException $e) {
-            return response()->json([
-                'message' => 'Validation failed',
-                'errors' => $e->errors()
-            ], 422);
-        } catch (\Exception $e) {
-            \Log::error('Appointment scheduling error: ' . $e->getMessage());
-            
-            return response()->json([
-                'message' => 'Failed to schedule appointment',
-                'error' => 'An unexpected error occurred'
-            ], 500);
+            $validated['doctor_id'] = $doctor->id;
         }
+
+        // Check if user already has an appointment that day
+        $existingUserAppointment = Appointment::where('patient_id', $request->user()->id)
+            ->where('date', $validated['date'])
+            ->whereIn('status', ['scheduled', 'confirmed'])
+            ->first();
+
+        if ($existingUserAppointment) {
+            return response()->json([
+                'message' => 'You already have an appointment scheduled for this date',
+                'errors' => ['date' => ['Only one appointment per day is allowed']]
+            ], 422);
+        }
+
+        // Verify doctor exists and has doctor role
+        $doctor = User::where('id', $validated['doctor_id'])
+            ->where('role', User::ROLE_DOCTOR)
+            ->first();
+
+        if (!$doctor) {
+            return response()->json([
+                'message' => 'Selected doctor not found or invalid',
+                'errors' => ['doctor_id' => ['Selected doctor is invalid']]
+            ], 422);
+        }
+
+        // Check for time slot availability
+        $existingDoctorAppointment = Appointment::where('doctor_id', $validated['doctor_id'])
+            ->where('date', $validated['date'])
+            ->where('time', $validated['time'])
+            ->whereIn('status', ['scheduled', 'confirmed'])
+            ->first();
+
+        if ($existingDoctorAppointment) {
+            return response()->json([
+                'message' => 'Doctor is not available at this time',
+                'errors' => ['time' => ['This time slot is already booked']]
+            ], 422);
+        }
+
+        // Create appointment
+        $appointment = Appointment::create([
+            'patient_id' => $request->user()->id,
+            'doctor_id' => $validated['doctor_id'],
+            'date' => $validated['date'],
+            'time' => $validated['time'],
+            'reason' => $validated['reason'],
+            'status' => 'scheduled'
+        ]);
+
+        $appointment->load('doctor');
+
+        return response()->json([
+            'message' => 'Appointment scheduled successfully',
+            'appointment' => [
+                'id' => $appointment->id,
+                'date' => $appointment->date,
+                'time' => $appointment->time,
+                'doctor' => $appointment->doctor->name,
+                'reason' => $appointment->reason,
+                'status' => $appointment->status
+            ]
+        ], 201);
+
+    } catch (\Illuminate\Validation\ValidationException $e) {
+        return response()->json([
+            'message' => 'Validation failed',
+            'errors' => $e->errors()
+        ], 422);
+    } catch (\Exception $e) {
+        \Log::error('Appointment scheduling error: ' . $e->getMessage());
+        
+        return response()->json([
+            'message' => 'Failed to schedule appointment',
+            'error' => 'An unexpected error occurred'
+        ], 500);
     }
+}
 
     /**
      * Reschedule an appointment
@@ -359,7 +388,7 @@ class AcademicStaffController extends Controller
     {
         try {
             $validated = $request->validate([
-                'doctor_id' => 'required|exists:users,id',
+                'doctor_id' => 'nullable|exists:users,id', // Make it nullable
                 'date' => 'required|date|after_or_equal:today'
             ]);
 

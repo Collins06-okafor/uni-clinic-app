@@ -37,6 +37,10 @@ class DatabaseSeeder extends Seeder
             'role' => 'Doctor',
         ]);
 
+        
+        $this->call(RoleSeeder::class);
+        $this->call(SuperAdminSeeder::class);
+
         // You can also use factory to generate random users if needed
         // User::factory(10)->create();
     }

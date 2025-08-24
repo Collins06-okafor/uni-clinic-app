@@ -1,9 +1,9 @@
 // src/pages/dashboards/AcademicStaffDashboard.js
 import React, { useState, useEffect } from 'react';
-import { Calendar, Clock, User, FileText, History, Edit, X, CheckCircle, Stethoscope, Heart, Brain, Thermometer, BarChart3, Activity, Users, TrendingUp, Phone, Mail } from 'lucide-react';
+import { Calendar, Clock, User, FileText, History, Edit, X, CheckCircle, Stethoscope, Heart, Brain, Thermometer, BarChart3, Activity, Users, TrendingUp, Phone, Mail, LogOut, AlertTriangle } from 'lucide-react';
 
 const AcademicStaffDashboard = ({ user, onLogout }) => {
-  const [activeTab, setActiveTab] = useState('dashboard');
+  const [activeTab, setActiveTab] = useState('overview');
   const [appointments, setAppointments] = useState([]);
   const [medicalHistory, setMedicalHistory] = useState([]);
   const [doctors, setDoctors] = useState([]);
@@ -26,6 +26,19 @@ const AcademicStaffDashboard = ({ user, onLogout }) => {
   });
 
   const [showRescheduleModal, setShowRescheduleModal] = useState(false);
+
+  // University theme colors matching student dashboard
+  const universityTheme = {
+    primary: '#E53E3E',
+    secondary: '#C53030',
+    light: '#FED7D7'
+  };
+
+  // Available time slots
+  const timeSlots = [
+    '09:00', '09:30', '10:00', '10:30', '11:00', '11:30',
+    '14:00', '14:30', '15:00', '15:30', '16:00', '16:30'
+  ];
 
   // Get dashboard statistics
   const getDashboardStats = () => {
@@ -57,7 +70,7 @@ const AcademicStaffDashboard = ({ user, onLogout }) => {
     switch (specialization) {
       case 'General Practice':
       case 'General Medicine': 
-        return <Stethoscope className="text-primary" size={16} />;
+        return <Stethoscope className="text-danger" size={16} />;
       case 'Cardiology': 
         return <Heart className="text-danger" size={16} />;
       case 'Dermatology': 
@@ -65,13 +78,13 @@ const AcademicStaffDashboard = ({ user, onLogout }) => {
       case 'Psychiatry': 
         return <Brain className="text-info" size={16} />;
       default: 
-        return <Stethoscope className="text-primary" size={16} />;
+        return <Stethoscope className="text-danger" size={16} />;
     }
   };
 
   const getStatusBadge = (status) => {
     const badges = {
-      scheduled: 'badge bg-primary',
+      scheduled: 'badge text-white',
       confirmed: 'badge bg-success',
       completed: 'badge bg-secondary',
       cancelled: 'badge bg-danger',
@@ -88,7 +101,7 @@ const AcademicStaffDashboard = ({ user, onLogout }) => {
 
   const fetchDashboardData = async () => {
     try {
-      const response = await fetch('/api/academic-staff/dashboard', {
+      const response = await fetch('http://127.0.0.1:8000/api/academic-staff/dashboard', {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('token')}`,
           'Content-Type': 'application/json'
@@ -107,7 +120,7 @@ const AcademicStaffDashboard = ({ user, onLogout }) => {
   const fetchAppointments = async () => {
     setLoading(true);
     try {
-      const response = await fetch('/api/academic-staff/appointments', {
+      const response = await fetch('http://127.0.0.1:8000/api/academic-staff/appointments', {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('token')}`,
           'Content-Type': 'application/json'
@@ -129,7 +142,7 @@ const AcademicStaffDashboard = ({ user, onLogout }) => {
   const fetchMedicalHistory = async () => {
     setLoading(true);
     try {
-      const response = await fetch('/api/academic-staff/medical-history', {
+      const response = await fetch('http://127.0.0.1:8000/api/academic-staff/medical-history', {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('token')}`,
           'Content-Type': 'application/json'
@@ -150,7 +163,7 @@ const AcademicStaffDashboard = ({ user, onLogout }) => {
 
   const fetchDoctors = async () => {
     try {
-      const response = await fetch('/api/academic-staff/doctor-availability', {
+      const response = await fetch('http://127.0.0.1:8000/api/academic-staff/doctor-availability', {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('token')}`,
           'Content-Type': 'application/json'
@@ -167,10 +180,14 @@ const AcademicStaffDashboard = ({ user, onLogout }) => {
   };
 
   const fetchAvailableSlots = async (doctorId, date) => {
-    if (!doctorId || !date) return;
+    if (!date) return;
     
     try {
-      const response = await fetch(`/api/academic-staff/available-slots?doctor_id=${doctorId}&date=${date}`, {
+      const url = doctorId 
+        ? `http://127.0.0.1:8000/api/academic-staff/available-slots?doctor_id=${doctorId}&date=${date}`
+        : `http://127.0.0.1:8000/api/academic-staff/available-slots?date=${date}`;
+        
+      const response = await fetch(url, {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('token')}`,
           'Content-Type': 'application/json'
@@ -179,20 +196,26 @@ const AcademicStaffDashboard = ({ user, onLogout }) => {
       
       if (response.ok) {
         const data = await response.json();
-        setAvailableSlots(data.available_slots || []);
+        setAvailableSlots(data.available_slots || timeSlots);
       }
     } catch (error) {
       console.error('Error fetching available slots:', error);
-      setAvailableSlots([]);
+      setAvailableSlots(timeSlots);
     }
   };
 
   const handleScheduleAppointment = async (e) => {
     e.preventDefault();
+    
+    if (!appointmentForm.date || !appointmentForm.time || !appointmentForm.reason) {
+      showMessage('error', 'Please fill in all required fields (date, time, and reason).');
+      return;
+    }
+
     setLoading(true);
 
     try {
-      const response = await fetch('/api/academic-staff/schedule-appointment', {
+      const response = await fetch('http://127.0.0.1:8000/api/academic-staff/schedule-appointment', {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('token')}`,
@@ -226,7 +249,7 @@ const AcademicStaffDashboard = ({ user, onLogout }) => {
     setLoading(true);
 
     try {
-      const response = await fetch(`/api/academic-staff/reschedule-appointment/${rescheduleForm.appointmentId}`, {
+      const response = await fetch(`http://127.0.0.1:8000/api/academic-staff/reschedule-appointment/${rescheduleForm.appointmentId}`, {
         method: 'PUT',
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('token')}`,
@@ -261,7 +284,7 @@ const AcademicStaffDashboard = ({ user, onLogout }) => {
 
     setLoading(true);
     try {
-      const response = await fetch(`/api/academic-staff/cancel-appointment/${appointmentId}`, {
+      const response = await fetch(`http://127.0.0.1:8000/api/academic-staff/cancel-appointment/${appointmentId}`, {
         method: 'PUT',
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('token')}`,
@@ -325,19 +348,112 @@ const AcademicStaffDashboard = ({ user, onLogout }) => {
   };
 
   return (
-    <div className="container-fluid py-4" style={{ backgroundColor: '#f8f9fa', minHeight: '100vh' }}>
+    <div className="container-fluid" style={{ minHeight: '100vh' }}>
+      {/* Navigation Header */}
+      <nav className="navbar navbar-expand-lg navbar-light bg-white shadow-sm mb-4">
+        <div className="container-fluid">
+          {/* Logo */}
+<div className="navbar-brand d-flex align-items-center">
+  <img
+    src="/logo6.png"
+    alt="FIU Logo"
+    style={{
+      width: '50px',
+      height: '50px',
+      borderRadius: '10px',
+      objectFit: 'cover'
+    }}
+    className="me-3"
+  />
+  <div>
+    <h5 className="mb-0 fw-bold" style={{ color: universityTheme.primary }}>
+      Final International University
+    </h5>
+    <small className="text-muted">Academic Staff Medical Portal</small>
+  </div>
+</div>
+
+
+          {/* Navigation Menu */}
+          <ul className="nav nav-pills mx-auto">
+            <li className="nav-item">
+              <button 
+                className={`nav-link ${activeTab === 'overview' ? 'active' : ''} fw-semibold`}
+                onClick={() => handleTabChange('overview')}
+                style={{ 
+                  borderRadius: '0.5rem',
+                  backgroundColor: activeTab === 'overview' ? universityTheme.primary : 'transparent',
+                  color: activeTab === 'overview' ? 'white' : universityTheme.primary,
+                  border: 'none'
+                }}
+              >
+                <BarChart3 size={18} className="me-2" />
+                Overview
+              </button>
+            </li>
+            <li className="nav-item">
+              <button 
+                className={`nav-link ${activeTab === 'schedule' ? 'active' : ''} fw-semibold`}
+                onClick={() => handleTabChange('schedule')}
+                style={{ 
+                  borderRadius: '0.5rem',
+                  backgroundColor: activeTab === 'schedule' ? universityTheme.primary : 'transparent',
+                  color: activeTab === 'schedule' ? 'white' : universityTheme.primary,
+                  border: 'none'
+                }}
+              >
+                <Calendar size={18} className="me-2" />
+                Schedule Appointment
+              </button>
+            </li>
+            <li className="nav-item">
+              <button 
+                className={`nav-link ${activeTab === 'appointments' ? 'active' : ''} fw-semibold`}
+                onClick={() => handleTabChange('appointments')}
+                style={{ 
+                  borderRadius: '0.5rem',
+                  backgroundColor: activeTab === 'appointments' ? universityTheme.primary : 'transparent',
+                  color: activeTab === 'appointments' ? 'white' : universityTheme.primary,
+                  border: 'none'
+                }}
+              >
+                <FileText size={18} className="me-2" />
+                My Appointments
+              </button>
+            </li>
+            <li className="nav-item">
+              <button 
+                className={`nav-link ${activeTab === 'medical-history' ? 'active' : ''} fw-semibold`}
+                onClick={() => handleTabChange('medical-history')}
+                style={{ 
+                  borderRadius: '0.5rem',
+                  backgroundColor: activeTab === 'medical-history' ? universityTheme.primary : 'transparent',
+                  color: activeTab === 'medical-history' ? 'white' : universityTheme.primary,
+                  border: 'none'
+                }}
+              >
+                <History size={18} className="me-2" />
+                Medical History
+              </button>
+            </li>
+          </ul>
+
+          {/* Logout Button */}
+          {onLogout && (
+            <button 
+              className="btn btn-outline-danger"
+              onClick={onLogout}
+              style={{ borderRadius: '0.5rem' }}
+            >
+              <LogOut size={18} className="me-2" />
+              Logout
+            </button>
+          )}
+        </div>
+      </nav>
+
       <div className="row justify-content-center">
         <div className="col-12 col-xl-10">
-          {/* Header */}
-          <div className="text-center mb-5">
-            <div className="d-inline-flex align-items-center justify-content-center mb-3" 
-                 style={{ width: '80px', height: '80px', backgroundColor: '#0d6efd', borderRadius: '50%' }}>
-              <Stethoscope size={40} className="text-white" />
-            </div>
-            <h1 className="display-5 fw-bold text-dark mb-2">Academic Staff Medical Portal</h1>
-            <p className="lead text-muted">Manage your healthcare appointments and medical records</p>
-          </div>
-
           {/* Message Display */}
           {message.text && (
             <div className={`alert ${message.type === 'success' ? 'alert-success' : 'alert-danger'} alert-dismissible fade show mb-4`} 
@@ -346,68 +462,15 @@ const AcademicStaffDashboard = ({ user, onLogout }) => {
                 {message.type === 'success' ? <CheckCircle size={20} className="me-2" /> : <X size={20} className="me-2" />}
                 {message.text}
               </div>
-              <button type="button" className="btn-close" onClick={() => setMessage({ type: '', text: '' })}></button>
             </div>
           )}
 
-          {/* Tab Navigation */}
-          <div className="card shadow-sm mb-4">
-            <div className="card-header bg-white border-0 p-0">
-              <ul className="nav nav-pills nav-fill p-3" id="pills-tab" role="tablist">
-                <li className="nav-item" role="presentation">
-                  <button 
-                    className={`nav-link ${activeTab === 'dashboard' ? 'active' : ''} fw-semibold`}
-                    onClick={() => handleTabChange('dashboard')}
-                    type="button"
-                    style={{ borderRadius: '0.5rem' }}
-                  >
-                    <BarChart3 size={18} className="me-2" />
-                    Dashboard
-                  </button>
-                </li>
-                <li className="nav-item" role="presentation">
-                  <button 
-                    className={`nav-link ${activeTab === 'schedule' ? 'active' : ''} fw-semibold`}
-                    onClick={() => handleTabChange('schedule')}
-                    type="button"
-                    style={{ borderRadius: '0.5rem' }}
-                  >
-                    <Calendar size={18} className="me-2" />
-                    Schedule Appointment
-                  </button>
-                </li>
-                <li className="nav-item" role="presentation">
-                  <button 
-                    className={`nav-link ${activeTab === 'appointments' ? 'active' : ''} fw-semibold`}
-                    onClick={() => handleTabChange('appointments')}
-                    type="button"
-                    style={{ borderRadius: '0.5rem' }}
-                  >
-                    <FileText size={18} className="me-2" />
-                    My Appointments
-                  </button>
-                </li>
-                <li className="nav-item" role="presentation">
-                  <button 
-                    className={`nav-link ${activeTab === 'medical-history' ? 'active' : ''} fw-semibold`}
-                    onClick={() => handleTabChange('medical-history')}
-                    type="button"
-                    style={{ borderRadius: '0.5rem' }}
-                  >
-                    <History size={18} className="me-2" />
-                    Medical History
-                  </button>
-                </li>
-              </ul>
-            </div>
-          </div>
-
-          {/* Dashboard Tab */}
-          {activeTab === 'dashboard' && (
+          {/* Overview Tab */}
+          {activeTab === 'overview' && (
             <div className="row g-4">
               {/* Welcome Card */}
               <div className="col-12">
-                <div className="card shadow-sm border-0" style={{ borderRadius: '1rem', background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' }}>
+                <div className="card shadow-sm border-0" style={{ borderRadius: '1rem', backgroundColor: universityTheme.primary }}>
                   <div className="card-body p-4 text-white">
                     <div className="row align-items-center">
                       <div className="col-md-8">
@@ -440,10 +503,10 @@ const AcademicStaffDashboard = ({ user, onLogout }) => {
                 <div className="card border-0 shadow-sm h-100" style={{ borderRadius: '1rem' }}>
                   <div className="card-body p-4 text-center">
                     <div className="d-inline-flex align-items-center justify-content-center mb-3" 
-                         style={{ width: '60px', height: '60px', backgroundColor: '#e3f2fd', borderRadius: '50%' }}>
-                      <Calendar size={30} className="text-primary" />
+                         style={{ width: '60px', height: '60px', backgroundColor: universityTheme.light, borderRadius: '50%' }}>
+                      <Calendar size={30} style={{ color: universityTheme.primary }} />
                     </div>
-                    <h4 className="fw-bold text-primary mb-1">{stats.total}</h4>
+                    <h4 className="fw-bold mb-1" style={{ color: universityTheme.primary }}>{stats.total}</h4>
                     <p className="text-muted mb-0">Total Appointments</p>
                   </div>
                 </div>
@@ -499,7 +562,7 @@ const AcademicStaffDashboard = ({ user, onLogout }) => {
                       <div className="col-md-4">
                         <button 
                           className="btn btn-primary w-100 py-3 border-0" 
-                          style={{ borderRadius: '0.75rem', background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' }}
+                          style={{ borderRadius: '0.75rem', backgroundColor: universityTheme.primary }}
                           onClick={() => setActiveTab('schedule')}
                         >
                           <Calendar size={24} className="mb-2" />
@@ -510,8 +573,13 @@ const AcademicStaffDashboard = ({ user, onLogout }) => {
                       
                       <div className="col-md-4">
                         <button 
-                          className="btn btn-outline-primary w-100 py-3" 
-                          style={{ borderRadius: '0.75rem' }}
+                          className="btn w-100 py-3" 
+                          style={{ 
+                            borderRadius: '0.75rem',
+                            border: `2px solid ${universityTheme.primary}`,
+                            color: universityTheme.primary,
+                            backgroundColor: 'transparent'
+                          }}
                           onClick={() => setActiveTab('appointments')}
                         >
                           <FileText size={24} className="mb-2" />
@@ -522,8 +590,13 @@ const AcademicStaffDashboard = ({ user, onLogout }) => {
                       
                       <div className="col-md-4">
                         <button 
-                          className="btn btn-outline-success w-100 py-3" 
-                          style={{ borderRadius: '0.75rem' }}
+                          className="btn w-100 py-3" 
+                          style={{ 
+                            borderRadius: '0.75rem',
+                            border: '2px solid #28a745',
+                            color: '#28a745',
+                            backgroundColor: 'transparent'
+                          }}
                           onClick={() => setActiveTab('medical-history')}
                         >
                           <History size={24} className="mb-2" />
@@ -544,9 +617,13 @@ const AcademicStaffDashboard = ({ user, onLogout }) => {
                       <div className="d-flex justify-content-between align-items-center">
                         <h5 className="fw-bold mb-0">Recent Appointments</h5>
                         <button 
-                          className="btn btn-sm btn-outline-primary"
+                          className="btn btn-sm"
                           onClick={() => setActiveTab('appointments')}
-                          style={{ borderRadius: '0.5rem' }}
+                          style={{ 
+                            borderRadius: '0.5rem',
+                            border: `1px solid ${universityTheme.primary}`,
+                            color: universityTheme.primary
+                          }}
                         >
                           View All
                         </button>
@@ -556,7 +633,7 @@ const AcademicStaffDashboard = ({ user, onLogout }) => {
                       {appointments.slice(0, 3).map((appointment) => (
                         <div key={appointment.id} className="d-flex align-items-center p-3 bg-light rounded-3 mb-3">
                           <div className="me-3">
-                            <Stethoscope className="text-primary" size={16} />
+                            <Stethoscope style={{ color: universityTheme.primary }} size={16} />
                           </div>
                           <div className="flex-grow-1">
                             <h6 className="mb-1 fw-semibold">Dr. {appointment.doctor}</h6>
@@ -567,27 +644,14 @@ const AcademicStaffDashboard = ({ user, onLogout }) => {
                               {appointment.time}
                             </div>
                           </div>
-                          <span className={`${getStatusBadge(appointment.status)} small`}>
+                          <span className={`${getStatusBadge(appointment.status)} small`}
+                                style={appointment.status === 'scheduled' ? { backgroundColor: universityTheme.primary } : {}}>
                             {appointment.status.charAt(0).toUpperCase() + appointment.status.slice(1)}
                           </span>
                         </div>
                       ))}
                     </div>
                   </div>
-                </div>
-              )}
-
-              {/* Logout Button */}
-              {onLogout && (
-                <div className="col-12 text-center">
-                  <button 
-                    className="btn btn-outline-danger btn-lg px-4" 
-                    onClick={onLogout}
-                    style={{ borderRadius: '0.75rem' }}
-                  >
-                    <User size={20} className="me-2" />
-                    Logout
-                  </button>
                 </div>
               )}
             </div>
@@ -597,8 +661,8 @@ const AcademicStaffDashboard = ({ user, onLogout }) => {
           {activeTab === 'schedule' && (
             <div className="row">
               <div className="col-md-8">
-                <div className="card shadow-sm border-0" style={{ borderRadius: '1rem' }}>
-                  <div className="card-header bg-gradient" style={{ background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', borderRadius: '1rem 1rem 0 0' }}>
+                <div className="card shadow-sm">
+                  <div className="card-header" style={{ backgroundColor: universityTheme.primary }}>
                     <h3 className="card-title text-white mb-0 d-flex align-items-center">
                       <Calendar size={24} className="me-2" />
                       Schedule New Appointment
@@ -608,20 +672,20 @@ const AcademicStaffDashboard = ({ user, onLogout }) => {
                     <form onSubmit={handleScheduleAppointment}>
                       <div className="row g-4">
                         <div className="col-12">
-                          <label className="form-label fw-semibold">Select Doctor <span className="text-danger">*</span></label>
+                          <label className="form-label fw-semibold">Select Doctor (Optional)</label>
                           <select 
                             className="form-select form-select-lg"
                             value={appointmentForm.doctor_id}
                             onChange={(e) => handleAppointmentFormChange('doctor_id', e.target.value)}
-                            required
                           >
-                            <option value="">Choose a doctor...</option>
+                            <option value="">Any available doctor</option>
                             {doctors.map(doctor => (
                               <option key={doctor.id} value={doctor.id}>
                                 Dr. {doctor.name} - {doctor.specialization}
                               </option>
                             ))}
                           </select>
+                          <div className="form-text">Leave blank to be assigned to any available doctor</div>
                         </div>
 
                         <div className="col-md-6">
@@ -643,18 +707,15 @@ const AcademicStaffDashboard = ({ user, onLogout }) => {
                             value={appointmentForm.time}
                             onChange={(e) => handleAppointmentFormChange('time', e.target.value)}
                             required
-                            disabled={availableSlots.length === 0}
+                            disabled={!appointmentForm.date}
                           >
                             <option value="">
-                              {availableSlots.length === 0 ? 'Select doctor and date first' : 'Choose a time slot...'}
+                              {!appointmentForm.date ? 'Select date first' : 'Choose a time slot...'}
                             </option>
                             {availableSlots.map(slot => (
                               <option key={slot} value={slot}>{slot}</option>
                             ))}
                           </select>
-                          {appointmentForm.doctor_id && appointmentForm.date && availableSlots.length === 0 && (
-                            <div className="form-text text-warning">No available slots for selected date</div>
-                          )}
                         </div>
 
                         <div className="col-12">
@@ -678,7 +739,7 @@ const AcademicStaffDashboard = ({ user, onLogout }) => {
                             className="btn btn-primary btn-lg w-100 py-3"
                             disabled={loading}
                             style={{ 
-                              background: loading ? '#6c757d' : 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                              backgroundColor: loading ? '#6c757d' : universityTheme.primary,
                               border: 'none',
                               borderRadius: '0.5rem'
                             }}
@@ -804,17 +865,17 @@ const AcademicStaffDashboard = ({ user, onLogout }) => {
 
           {/* Appointments Tab */}
           {activeTab === 'appointments' && (
-            <div className="card shadow-sm border-0" style={{ borderRadius: '1rem' }}>
-              <div className="card-header bg-white border-0">
+            <div className="card shadow-sm">
+              <div className="card-header" style={{ backgroundColor: universityTheme.primary }}>
                 <div className="d-flex justify-content-between align-items-center">
-                  <h3 className="mb-0 fw-bold">
+                  <h3 className="mb-0 fw-bold text-white">
                     <FileText size={24} className="me-2" />
                     My Appointments
                   </h3>
                   <button 
-                    className="btn btn-sm btn-primary"
+                    className="btn btn-sm text-white"
                     onClick={() => setActiveTab('schedule')}
-                    style={{ borderRadius: '0.5rem', background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' }}
+                    style={{ borderRadius: '0.5rem', border: '1px solid white' }}
                   >
                     <Calendar size={16} className="me-1" />
                     New Appointment
@@ -824,7 +885,7 @@ const AcademicStaffDashboard = ({ user, onLogout }) => {
               <div className="card-body p-4">
                 {loading ? (
                   <div className="text-center py-5">
-                    <div className="spinner-border text-primary" role="status">
+                    <div className="spinner-border" style={{ color: universityTheme.primary }} role="status">
                       <span className="visually-hidden">Loading...</span>
                     </div>
                     <p className="mt-3">Loading appointments...</p>
@@ -837,7 +898,7 @@ const AcademicStaffDashboard = ({ user, onLogout }) => {
                     <button 
                       className="btn btn-primary mt-3"
                       onClick={() => setActiveTab('schedule')}
-                      style={{ borderRadius: '0.5rem', background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' }}
+                      style={{ borderRadius: '0.5rem', backgroundColor: universityTheme.primary }}
                     >
                       <Calendar size={18} className="me-2" />
                       Schedule Appointment
@@ -878,7 +939,8 @@ const AcademicStaffDashboard = ({ user, onLogout }) => {
                               </div>
                             </td>
                             <td>
-                              <span className={getStatusBadge(appointment.status)}>
+                              <span className={getStatusBadge(appointment.status)}
+                                    style={appointment.status === 'scheduled' ? { backgroundColor: universityTheme.primary } : {}}>
                                 {appointment.status.charAt(0).toUpperCase() + appointment.status.slice(1)}
                               </span>
                             </td>
@@ -887,9 +949,13 @@ const AcademicStaffDashboard = ({ user, onLogout }) => {
                                 {appointment.status === 'scheduled' && (
                                   <>
                                     <button 
-                                      className="btn btn-sm btn-outline-primary me-2"
+                                      className="btn btn-sm me-2"
                                       onClick={() => openRescheduleModal(appointment)}
-                                      style={{ borderRadius: '0.5rem' }}
+                                      style={{ 
+                                        borderRadius: '0.5rem',
+                                        border: `1px solid ${universityTheme.primary}`,
+                                        color: universityTheme.primary
+                                      }}
                                     >
                                       <Edit size={16} />
                                     </button>
@@ -916,9 +982,9 @@ const AcademicStaffDashboard = ({ user, onLogout }) => {
 
           {/* Medical History Tab */}
           {activeTab === 'medical-history' && (
-            <div className="card shadow-sm border-0" style={{ borderRadius: '1rem' }}>
-              <div className="card-header bg-white border-0">
-                <h3 className="mb-0 fw-bold">
+            <div className="card shadow-sm">
+              <div className="card-header" style={{ backgroundColor: universityTheme.primary }}>
+                <h3 className="mb-0 fw-bold text-white">
                   <History size={24} className="me-2" />
                   Medical History
                 </h3>
@@ -926,7 +992,7 @@ const AcademicStaffDashboard = ({ user, onLogout }) => {
               <div className="card-body p-4">
                 {loading ? (
                   <div className="text-center py-5">
-                    <div className="spinner-border text-primary" role="status">
+                    <div className="spinner-border" style={{ color: universityTheme.primary }} role="status">
                       <span className="visually-hidden">Loading...</span>
                     </div>
                     <p className="mt-3">Loading medical history...</p>
@@ -1016,14 +1082,14 @@ const AcademicStaffDashboard = ({ user, onLogout }) => {
             <div className="modal fade show" style={{ display: 'block', backgroundColor: 'rgba(0,0,0,0.5)' }}>
               <div className="modal-dialog modal-dialog-centered">
                 <div className="modal-content" style={{ borderRadius: '1rem' }}>
-                  <div className="modal-header">
-                    <h5 className="modal-title fw-bold">
+                  <div className="modal-header" style={{ backgroundColor: universityTheme.primary }}>
+                    <h5 className="modal-title fw-bold text-white">
                       <Edit size={20} className="me-2" />
                       Reschedule Appointment
                     </h5>
                     <button 
                       type="button" 
-                      className="btn-close" 
+                      className="btn-close btn-close-white" 
                       onClick={() => setShowRescheduleModal(false)}
                     ></button>
                   </div>
@@ -1042,13 +1108,17 @@ const AcademicStaffDashboard = ({ user, onLogout }) => {
                       </div>
                       <div className="mb-3">
                         <label className="form-label">New Time</label>
-                        <input 
-                          type="time" 
-                          className="form-control" 
+                        <select 
+                          className="form-select" 
                           value={rescheduleForm.time}
                           onChange={(e) => setRescheduleForm({...rescheduleForm, time: e.target.value})}
                           required
-                        />
+                        >
+                          <option value="">Select a time slot</option>
+                          {timeSlots.map((time) => (
+                            <option key={time} value={time}>{time}</option>
+                          ))}
+                        </select>
                       </div>
                       <div className="d-flex justify-content-end gap-2">
                         <button 
@@ -1064,7 +1134,7 @@ const AcademicStaffDashboard = ({ user, onLogout }) => {
                           className="btn btn-primary"
                           disabled={loading}
                           style={{ 
-                            background: loading ? '#6c757d' : 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                            backgroundColor: loading ? '#6c757d' : universityTheme.primary,
                             border: 'none',
                             borderRadius: '0.5rem'
                           }}

@@ -21,6 +21,8 @@ const ClinicalStaffDashboard = ({ user, onLogout }) => {
     today_overview: {},
     patient_queue: []
   });
+  const [doctors, setDoctors] = useState([]);
+const [availableDoctors, setAvailableDoctors] = useState([]);
   const [medicalRecords, setMedicalRecords] = useState([]);
   const [medicationSchedule, setMedicationSchedule] = useState([]);
   const [medications, setMedications] = useState([]);
@@ -29,7 +31,7 @@ const ClinicalStaffDashboard = ({ user, onLogout }) => {
   const [selectedMedication, setSelectedMedication] = useState(null);
   
   // Your backend token - in production, this should come from props or secure storage
-  const AUTH_TOKEN = '5|zLMNJbn7QkMm2oygCkXiiTz48EwkWqw5Q7oEOLDn4d1189b2';
+  const AUTH_TOKEN = '16|iTGQGrMabQfgjprXw6xM01KTAmJc7AQ78qglIs4xd5fa9378';
   
   // Configure your backend URL
   const API_BASE_URL = 'http://localhost:8000'; // Adjust this to your backend URL
@@ -190,8 +192,9 @@ const ClinicalStaffDashboard = ({ user, onLogout }) => {
 
   // Load dashboard data
   useEffect(() => {
-    loadDashboardData();
-  }, []);
+  loadDashboardData();
+  // Don't load all doctors on mount - we'll load available ones when needed
+}, []);
 
   const loadDashboardData = async () => {
     try {
@@ -216,24 +219,30 @@ const ClinicalStaffDashboard = ({ user, onLogout }) => {
     }
   };
 
-  // Load appointments
-  const loadAppointments = async () => {
-    try {
-      setLoading(true);
-      console.log('Loading appointments with filters:', filters);
-      const params = new URLSearchParams(filters).toString();
-      const data = await api.get(`appointments?${params}`);
-      console.log('Appointments data received:', data);
-      setAppointments(data.appointments || []);
-    } catch (error) {
-      console.error('Error loading appointments:', error);
-      setMessage({ type: 'error', text: `Failed to load appointments: ${error.message}` });
-      setAppointments([]); // Set empty array as fallback
-    } finally {
-      setLoading(false);
-      setTimeout(() => setMessage({ type: '', text: '' }), 5000);
-    }
-  };
+  // Load appointments - fix the endpoint
+const loadAppointments = async () => {
+  try {
+    setLoading(true);
+    console.log('Loading appointments with filters:', filters);
+    const params = new URLSearchParams({
+      date: filters.date,
+      status: filters.status,
+      priority: filters.priority
+    }).toString();
+    
+    // Changed from 'available-doctors' to 'appointments'
+    const data = await api.get(`appointments?${params}`);
+    console.log('Appointments data received:', data);
+    setAppointments(data.appointments || []); // Match backend response structure
+  } catch (error) {
+    console.error('Error loading appointments:', error);
+    setMessage({ type: 'error', text: `Failed to load appointments: ${error.message}` });
+    setAppointments([]);
+  } finally {
+    setLoading(false);
+    setTimeout(() => setMessage({ type: '', text: '' }), 5000);
+  }
+};
 
   // Load patients
   const loadPatients = async () => {
@@ -255,62 +264,109 @@ const ClinicalStaffDashboard = ({ user, onLogout }) => {
 
   // Load medication schedule
   const loadMedicationSchedule = async () => {
-    try {
-      console.log('Loading medication schedule...');
-      const data = await api.get(`medication-schedule?date=${filters.date}`);
-      console.log('Medication schedule data received:', data);
-      setMedicationSchedule(data.medications || []);
-    } catch (error) {
-      console.error('Error loading medication schedule:', error);
-      setMessage({ type: 'error', text: `Failed to load medication schedule: ${error.message}` });
-      setMedicationSchedule([]); // Set empty array as fallback
-    } finally {
-      setTimeout(() => setMessage({ type: '', text: '' }), 5000);
+  try {
+    console.log('Loading medication schedule...');
+    const data = await api.get(`medication-schedule?date=${filters.date}`);
+    console.log('Medication schedule data received:', data);
+    setMedicationSchedule(data.medications || []); // Match backend response structure
+  } catch (error) {
+    console.error('Error loading medication schedule:', error);
+    setMessage({ type: 'error', text: `Failed to load medication schedule: ${error.message}` });
+    setMedicationSchedule([]);
+  } finally {
+    setTimeout(() => setMessage({ type: '', text: '' }), 5000);
+  }
+};
+
+  // Load doctors - fix the endpoint and data structure
+const loadDoctors = async () => {
+  try {
+    setLoading(true);
+    console.log('Loading all doctors...');
+    
+    // Get all doctors by calling the available doctors endpoint without date/time filters
+    const data = await api.get('available-doctors');
+    console.log('Doctors data received:', data);
+    
+    // Handle the response structure from getAvailableDoctors
+    if (data.available_doctors) {
+      setDoctors(data.available_doctors);
+    } else if (data.data) {
+      setDoctors(data.data);
+    } else {
+      setDoctors([]);
     }
-  };
+  } catch (error) {
+    console.error('Error loading doctors:', error);
+    setMessage({ type: 'error', text: `Failed to load doctors: ${error.message}` });
+    setDoctors([]);
+  } finally {
+    setLoading(false);
+    setTimeout(() => setMessage({ type: '', text: '' }), 5000);
+  }
+};
+
+
+// Load available doctors based on date and time
+const loadAvailableDoctors = async (date, time) => {
+  try {
+    console.log('Loading available doctors for:', date, time);
+    const params = new URLSearchParams();
+    if (date) params.append('date', date);
+    if (time) params.append('time', time);
+    
+    // Fixed endpoint call
+    const data = await api.get(`available-doctors?${params.toString()}`);
+    console.log('Available doctors data received:', data);
+    return data.available_doctors || [];
+  } catch (error) {
+    console.error('Error loading available doctors:', error);
+    setMessage({ type: 'error', text: `Failed to load available doctors: ${error.message}` });
+    return [];
+  }
+};
 
   // Create appointment with proper data structure
   const createAppointment = async (appointmentData) => {
-    try {
-      // Find doctor ID - get first available doctor or use current user as fallback
-      let doctorId = null;
-      try {
-        const doctorsData = await api.get('doctors'); // You may need to add this endpoint
-        if (doctorsData.doctors && doctorsData.doctors.length > 0) {
-          doctorId = doctorsData.doctors[0].id;
-        }
-      } catch (e) {
-        console.log('Could not fetch doctors, using user ID as fallback');
-        doctorId = user?.id || 1; // Use current user or fallback ID
-      }
-
-      // Transform the data to match backend expectations
-      const transformedData = {
-        patient_id: parseInt(appointmentData.patient_id),
-        doctor_id: doctorId,
-        date: appointmentData.appointment_date || new Date().toISOString().split('T')[0],
-        time: appointmentData.appointment_time || '09:00',
-        type: appointmentData.appointment_type || 'consultation',
-        duration: 30, // Default duration
-        priority: appointmentData.priority || 'normal',
-        reason: appointmentData.notes || 'Medical consultation',
-        status: 'scheduled'
-      };
-      
-      console.log('Creating appointment with transformed data:', transformedData);
-      const result = await api.post('appointments/schedule', transformedData);
-      console.log('Appointment created:', result);
-      
-      setMessage({ type: 'success', text: 'Appointment created successfully!' });
-      loadAppointments();
-      setShowModal('');
-      setFormData({});
-    } catch (error) {
-      console.error('Error creating appointment:', error);
-      setMessage({ type: 'error', text: `Error creating appointment: ${error.message}` });
+  try {
+    // Use selected doctor or find first available doctor
+    let doctorId = appointmentData.doctor_id;
+    if (!doctorId && doctors.length > 0) {
+      doctorId = doctors[0].id;
     }
-    setTimeout(() => setMessage({ type: '', text: '' }), 5000);
-  };
+    
+    // Fallback to user ID if no doctors available
+    if (!doctorId) {
+      doctorId = user?.id || 1;
+    }
+
+    // Transform the data to match backend expectations
+    const transformedData = {
+      patient_id: parseInt(appointmentData.patient_id),
+      doctor_id: doctorId,
+      date: appointmentData.appointment_date || new Date().toISOString().split('T')[0],
+      time: appointmentData.appointment_time || '09:00',
+      type: appointmentData.appointment_type || 'consultation',
+      duration: 30, // Default duration
+      priority: appointmentData.priority || 'normal',
+      reason: appointmentData.notes || 'Medical consultation',
+      status: 'scheduled'
+    };
+    
+    console.log('Creating appointment with transformed data:', transformedData);
+    const result = await api.post('appointments/schedule', transformedData);
+    console.log('Appointment created:', result);
+    
+    setMessage({ type: 'success', text: 'Appointment created successfully!' });
+    loadAppointments();
+    setShowModal('');
+    setFormData({});
+  } catch (error) {
+    console.error('Error creating appointment:', error);
+    setMessage({ type: 'error', text: `Error creating appointment: ${error.message}` });
+  }
+  setTimeout(() => setMessage({ type: '', text: '' }), 5000);
+};
 
   // Update appointment
   const updateAppointment = async (id, updateData) => {
@@ -419,7 +475,7 @@ const ClinicalStaffDashboard = ({ user, onLogout }) => {
   const fetchMedications = async (patientId = null) => {
     try {
       setLoading(true);
-      let endpoint = 'medication-schedule';
+      let endpoint = `medication-schedule?date=${new Date().toISOString().split('T')[0]}`;
       if (patientId) {
         endpoint = `patients/${patientId}/medications`;
       }
@@ -456,6 +512,27 @@ const ClinicalStaffDashboard = ({ user, onLogout }) => {
       setTimeout(() => setMessage({ type: '', text: '' }), 5000);
     }
   };
+
+  const checkDoctorAvailability = async (date, time) => {
+  if (!date || !time) return;
+  
+  try {
+    const available = await loadAvailableDoctors(date, time);
+    setAvailableDoctors(available);
+    
+    // If currently selected doctor is not available, clear selection
+    if (formData.doctor_id && !available.find(doc => doc.id === parseInt(formData.doctor_id))) {
+      setFormData(prev => ({...prev, doctor_id: ''}));
+      setMessage({ 
+        type: 'warning', 
+        text: 'Selected doctor is not available at this time. Please choose another doctor.' 
+      });
+      setTimeout(() => setMessage({ type: '', text: '' }), 3000);
+    }
+  } catch (error) {
+    console.error('Error checking doctor availability:', error);
+  }
+};
 
   // Update medical card
   const updateMedicalCard = async (patientId, cardData) => {
@@ -509,6 +586,7 @@ const ClinicalStaffDashboard = ({ user, onLogout }) => {
       e.preventDefault();
       onSubmit(formData);
     };
+
 
     return (
       <form onSubmit={handleSubmit}>
@@ -621,6 +699,9 @@ const ClinicalStaffDashboard = ({ user, onLogout }) => {
     if (activeTab === 'medications') {
       loadMedicationSchedule();
     }
+    if (activeTab === 'doctors') {
+    loadDoctors();
+  }
   }, [activeTab]);
 
   // Reload appointments when filters change
@@ -976,98 +1057,103 @@ const ClinicalStaffDashboard = ({ user, onLogout }) => {
 
         {/* Appointments List */}
         <div className="table-responsive">
-          <table className="table table-hover align-middle">
-            <thead>
+        <table className="table table-hover align-middle">
+          <thead>
+            <tr>
+              <th scope="col">Time</th>
+              <th scope="col">Patient</th>
+              <th scope="col">Doctor</th>
+              <th scope="col">Type</th>
+              <th scope="col">Status</th>
+              <th scope="col">Priority</th>
+              <th scope="col">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {loading ? (
               <tr>
-                <th scope="col">Time</th>
-                <th scope="col">Patient</th>
-                <th scope="col">Doctor</th>
-                <th scope="col">Type</th>
-                <th scope="col">Status</th>
-                <th scope="col">Priority</th>
-                <th scope="col">Actions</th>
+                <td colSpan="7" className="text-center py-5">
+                  <div className="spinner-border text-primary" role="status">
+                    <span className="visually-hidden">Loading...</span>
+                  </div>
+                  <p className="text-muted mt-2">Loading appointments...</p>
+                </td>
               </tr>
-            </thead>
-            <tbody>
-              {loading ? (
-                <tr>
-                  <td colSpan="7" className="text-center py-5">
-                    <div className="spinner-border text-primary" role="status">
-                      <span className="visually-hidden">Loading...</span>
+            ) : filteredAppointments.length === 0 ? (
+              <tr>
+                <td colSpan="7" className="text-center py-5">
+                  <Calendar size={48} className="text-muted mb-3" />
+                  <p className="text-muted">No appointments found</p>
+                  <small className="text-muted">Try adjusting your filters or create a new appointment</small>
+                </td>
+              </tr>
+            ) : (
+              filteredAppointments.map((appointment) => (
+                <tr key={appointment.id}>
+                  <td>{appointment.time}</td>
+                  <td>
+                    <div>
+                      {/* Handle different data structures */}
+                      <p className="fw-semibold mb-0">
+                        {appointment.patient?.name || appointment.patient_name}
+                      </p>
+                      <small className="text-muted">
+                        {appointment.patient?.student_id || appointment.student_id}
+                      </small>
                     </div>
-                    <p className="text-muted mt-2">Loading appointments...</p>
+                  </td>
+                  <td>{appointment.doctor?.name || appointment.doctor}</td>
+                  <td>{appointment.type}</td>
+                  <td>
+                    <span className={`${getStatusBadge(appointment.status)}`}>
+                      {appointment.status.replace('_', ' ')}
+                    </span>
+                  </td>
+                  <td>
+                    <span className={`${getPriorityBadge(appointment.priority)}`}>
+                      {appointment.priority}
+                    </span>
+                  </td>
+                  <td>
+                    <div className="d-flex gap-2">
+                      <button 
+                        onClick={() => {
+                          setFormData(appointment);
+                          setShowModal('editAppointment');
+                        }}
+                        className="btn btn-sm btn-outline-primary"
+                        style={{ borderRadius: '0.5rem' }}
+                      >
+                        <Edit size={16} />
+                      </button>
+                      <button 
+                        onClick={() => deleteAppointment(appointment.id)}
+                        className="btn btn-sm btn-outline-danger"
+                        style={{ borderRadius: '0.5rem' }}
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                      <button 
+                        onClick={() => {
+                          setFormData({appointmentId: appointment.id});
+                          setShowModal('confirm');
+                        }}
+                        className="btn btn-sm btn-outline-success"
+                        style={{ borderRadius: '0.5rem' }}
+                      >
+                        <Check size={16} />
+                      </button>
+                    </div>
                   </td>
                 </tr>
-              ) : filteredAppointments.length === 0 ? (
-                <tr>
-                  <td colSpan="7" className="text-center py-5">
-                    <Calendar size={48} className="text-muted mb-3" />
-                    <p className="text-muted">No appointments found</p>
-                    <small className="text-muted">Try adjusting your filters or create a new appointment</small>
-                  </td>
-                </tr>
-              ) : (
-                filteredAppointments.map((appointment) => (
-                  <tr key={appointment.id}>
-                    <td>{appointment.time}</td>
-                    <td>
-                      <div>
-                        <p className="fw-semibold mb-0">{appointment.patient?.name}</p>
-                        <small className="text-muted">{appointment.patient?.student_id}</small>
-                      </div>
-                    </td>
-                    <td>{appointment.doctor}</td>
-                    <td>{appointment.type}</td>
-                    <td>
-                      <span className={`${getStatusBadge(appointment.status)}`}>
-                        {appointment.status.replace('_', ' ')}
-                      </span>
-                    </td>
-                    <td>
-                      <span className={`${getPriorityBadge(appointment.priority)}`}>
-                        {appointment.priority}
-                      </span>
-                    </td>
-                    <td>
-                      <div className="d-flex gap-2">
-                        <button 
-                          onClick={() => {
-                            setFormData(appointment);
-                            setShowModal('editAppointment');
-                          }}
-                          className="btn btn-sm btn-outline-primary"
-                          style={{ borderRadius: '0.5rem' }}
-                        >
-                          <Edit size={16} />
-                        </button>
-                        <button 
-                          onClick={() => deleteAppointment(appointment.id)}
-                          className="btn btn-sm btn-outline-danger"
-                          style={{ borderRadius: '0.5rem' }}
-                        >
-                          <Trash2 size={16} />
-                        </button>
-                        <button 
-                          onClick={() => {
-                            setFormData({appointmentId: appointment.id});
-                            setShowModal('confirm');
-                          }}
-                          className="btn btn-sm btn-outline-success"
-                          style={{ borderRadius: '0.5rem' }}
-                        >
-                          <Check size={16} />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
+              ))
+            )}
+          </tbody>
+        </table>
       </div>
     </div>
-  );
+  </div>
+);
 
   // Patients Management Component
   const PatientsManagement = () => (
@@ -1224,12 +1310,12 @@ const ClinicalStaffDashboard = ({ user, onLogout }) => {
               ) : (
                 medicationSchedule.map((medication) => (
                   <tr key={medication.id}>
-                    <td>
-                      <strong>{medication.name || medication.medication}</strong>
-                      {medication.generic_name && (
-                        <div className="text-muted small">{medication.generic_name}</div>
-                      )}
-                    </td>
+    <td>
+      <strong>{medication.medication_name}</strong> {/* Changed from medication.name */}
+      {medication.generic && ( /* Changed from generic_name */
+        <div className="text-muted small">{medication.generic}</div>
+      )}
+    </td>
                     <td>{medication.dosage}</td>
                     <td>{medication.frequency}</td>
                     <td>{medication.start_date ? new Date(medication.start_date).toLocaleDateString() : 'N/A'}</td>
@@ -1286,6 +1372,106 @@ const ClinicalStaffDashboard = ({ user, onLogout }) => {
       </div>
     </div>
   );
+
+  const DoctorsManagement = () => (
+  <div className="card shadow-sm border-0" style={{ borderRadius: '1rem' }}>
+    <div className="card-header bg-gradient" style={{ background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' }}>
+      <h3 className="card-title text-white mb-0 d-flex align-items-center">
+        <User size={24} className="me-2" />
+        Available Doctors
+      </h3>
+    </div>
+    <div className="card-body p-4">
+      <div className="row g-4">
+        {loading ? (
+          <div className="col-12 text-center py-5">
+            <div className="spinner-border text-primary" role="status">
+              <span className="visually-hidden">Loading...</span>
+            </div>
+            <p className="text-muted mt-2">Loading doctors...</p>
+          </div>
+        ) : doctors.length === 0 ? (
+          <div className="col-12 text-center py-5">
+            <User size={48} className="text-muted mb-3" />
+            <p className="text-muted">No doctors found</p>
+          </div>
+        ) : (
+          doctors.map((doctor) => (
+            <div key={doctor.id} className="col-md-6 col-lg-4">
+              <div className="card h-100 shadow-sm border-0">
+                <div className="card-body">
+                  {/* Handle both 'name' and 'full_name' properties */}
+                  <h5 className="card-title fw-semibold">
+                    {doctor.name || doctor.full_name}
+                  </h5>
+                  <div className="text-muted small mb-3">
+                    <p className="mb-1"><strong>Specialization:</strong> {doctor.specialty}</p>
+                    <p className="mb-1"><strong>Department:</strong> {doctor.department}</p>
+                    <p className="mb-1"><strong>Phone:</strong> {doctor.phone}</p>
+                    <p className="mb-0"><strong>Email:</strong> {doctor.email}</p>
+                  </div>
+                  <div className="d-flex justify-content-between align-items-center">
+                    <span className={`badge ${(doctor.status || 'active') === 'active' ? 'bg-success' : 'bg-secondary'}`}>
+                      {doctor.status || 'active'}
+                    </span>
+                    <button 
+                      onClick={() => {
+                        setFormData({
+                          patient_id: '',
+                          doctor_id: doctor.id,
+                          appointment_date: new Date().toISOString().split('T')[0],
+                          appointment_time: '09:00'
+                        });
+                        setShowModal('createAppointment');
+                      }}
+                      className="btn btn-sm btn-primary"
+                      style={{ borderRadius: '0.5rem' }}
+                    >
+                      Book Appointment
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          ))
+        )}
+      </div>
+    </div>
+  </div>
+);
+
+ const QuickTimeSlots = ({ selectedDate, onTimeSelect }) => {
+  const timeSlots = [
+    '08:00', '08:30', '09:00', '09:30', '10:00', '10:30',
+    '11:00', '11:30', '14:00', '14:30', '15:00', '15:30',
+    '16:00', '16:30', '17:00', '17:30'
+  ];
+
+  return (
+    <div className="mb-3">
+      <label className="form-label">Quick Time Selection</label>
+      <div className="d-flex flex-wrap gap-2">
+        {timeSlots.map(time => (
+          <button
+            key={time}
+            type="button"
+            className={`btn btn-sm ${formData.appointment_time === time ? 'btn-primary' : 'btn-outline-secondary'}`}
+            onClick={async () => {
+              setFormData(prev => ({...prev, appointment_time: time}));
+              onTimeSelect(time);
+              if (selectedDate) {
+                await checkDoctorAvailability(selectedDate, time);
+              }
+            }}
+            style={{ borderRadius: '0.5rem' }}
+          >
+            {time}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+};
 
   return (
     <div className="container-fluid py-4" style={{ backgroundColor: '#f8f9fa', minHeight: '100vh' }}>
@@ -1360,6 +1546,17 @@ const ClinicalStaffDashboard = ({ user, onLogout }) => {
                     Medications
                   </button>
                 </li>
+                <li className="nav-item" role="presentation">
+  <button 
+    className={`nav-link ${activeTab === 'doctors' ? 'active' : ''} fw-semibold`}
+    onClick={() => setActiveTab('doctors')}
+    type="button"
+    style={{ borderRadius: '0.5rem' }}
+  >
+    <User size={18} className="me-2" />
+    Doctors
+  </button>
+</li>
               </ul>
             </div>
           </div>
@@ -1369,101 +1566,166 @@ const ClinicalStaffDashboard = ({ user, onLogout }) => {
           {activeTab === 'appointments' && <AppointmentsManagement />}
           {activeTab === 'patients' && <PatientsManagement />}
           {activeTab === 'medications' && <MedicationSchedule />}
+          {activeTab === 'doctors' && <DoctorsManagement />}
 
           {/* Modals */}
           {showModal === 'createAppointment' && (
-            <Modal title="Schedule New Appointment" onClose={() => setShowModal('')}>
-              <form onSubmit={(e) => {
-                e.preventDefault();
-                createAppointment(formData);
-              }}>
-                <div className="mb-3">
-                  <label className="form-label">Patient <span className="text-danger">*</span></label>
-                  <select
-                    className="form-select"
-                    value={formData.patient_id || ''}
-                    onChange={(e) => setFormData({...formData, patient_id: e.target.value})}
-                    required
-                  >
-                    <option value="">Select Patient</option>
-                    {patients.map(patient => (
-                      <option key={patient.id} value={patient.id}>{patient.name} ({patient.student_id})</option>
-                    ))}
-                  </select>
-                </div>
-                <div className="row g-3 mb-3">
-                  <div className="col-md-6">
-                    <label className="form-label">Date <span className="text-danger">*</span></label>
-                    <input
-                      type="date"
-                      className="form-control"
-                      value={formData.appointment_date || ''}
-                      onChange={(e) => setFormData({...formData, appointment_date: e.target.value})}
-                      min={new Date().toISOString().split('T')[0]}
-                      required
-                    />
-                  </div>
-                  <div className="col-md-6">
-                    <label className="form-label">Time <span className="text-danger">*</span></label>
-                    <input
-                      type="time"
-                      className="form-control"
-                      value={formData.appointment_time || ''}
-                      onChange={(e) => setFormData({...formData, appointment_time: e.target.value})}
-                      required
-                    />
-                  </div>
-                </div>
-                <div className="mb-3">
-                  <label className="form-label">Appointment Type <span className="text-danger">*</span></label>
-                  <select
-                    className="form-select"
-                    value={formData.appointment_type || ''}
-                    onChange={(e) => setFormData({...formData, appointment_type: e.target.value})}
-                    required
-                  >
-                    <option value="">Select Type</option>
-                    <option value="consultation">Consultation</option>
-                    <option value="follow_up">Follow-up</option>
-                    <option value="emergency">Emergency</option>
-                    <option value="vaccination">Vaccination</option>
-                    <option value="blood_test">Blood Test</option>
-                    <option value="physical_therapy">Physical Therapy</option>
-                  </select>
-                </div>
-                <div className="mb-3">
-                  <label className="form-label">Priority</label>
-                  <select
-                    className="form-select"
-                    value={formData.priority || 'normal'}
-                    onChange={(e) => setFormData({...formData, priority: e.target.value})}
-                  >
-                    <option value="normal">Normal</option>
-                    <option value="high">High</option>
-                    <option value="urgent">Urgent</option>
-                  </select>
-                </div>
-                <div className="mb-3">
-                  <label className="form-label">Notes</label>
-                  <textarea
-                    className="form-control"
-                    rows="3"
-                    placeholder="Any additional notes or symptoms..."
-                    value={formData.notes || ''}
-                    onChange={(e) => setFormData({...formData, notes: e.target.value})}
-                  ></textarea>
-                </div>
-                <div className="d-flex justify-content-end gap-2">
-                  <button type="button" className="btn btn-outline-secondary" onClick={() => setShowModal('')}>
-                    Cancel
-                  </button>
-                  <button type="submit" className="btn btn-primary">
-                    Schedule Appointment
-                  </button>
-                                  </div>
-              </form>
-            </Modal>
-          )}
+  <Modal title="Schedule New Appointment" onClose={() => setShowModal('')}>
+    <form onSubmit={(e) => {
+      e.preventDefault();
+      createAppointment(formData);
+    }}>
+      <div className="mb-3">
+        <label className="form-label">Patient <span className="text-danger">*</span></label>
+        <select
+          className="form-select"
+          value={formData.patient_id || ''}
+          onChange={(e) => setFormData({...formData, patient_id: e.target.value})}
+          required
+        >
+          <option value="">Select Patient</option>
+          {patients.map(patient => (
+            <option key={patient.id} value={patient.id}>
+              {patient.name} ({patient.student_id})
+            </option>
+          ))}
+        </select>
+      </div>
+      
+      {/* Date and Time selection with quick slots */}
+      <div className="row g-3 mb-3">
+        <div className="col-md-6">
+          <label className="form-label">Date <span className="text-danger">*</span></label>
+          <input
+            type="date"
+            className="form-control"
+            value={formData.appointment_date || ''}
+            onChange={async (e) => {
+              const newFormData = {...formData, appointment_date: e.target.value};
+              setFormData(newFormData);
+              
+              // Load available doctors when date changes
+              if (e.target.value && newFormData.appointment_time) {
+                await checkDoctorAvailability(e.target.value, newFormData.appointment_time);
+              }
+            }}
+            min={new Date().toISOString().split('T')[0]}
+            required
+          />
+        </div>
+        <div className="col-md-6">
+          <label className="form-label">Time <span className="text-danger">*</span></label>
+          <input
+            type="time"
+            className="form-control"
+            value={formData.appointment_time || ''}
+            onChange={async (e) => {
+              const newFormData = {...formData, appointment_time: e.target.value};
+              setFormData(newFormData);
+              
+              // Load available doctors when time changes
+              if (e.target.value && newFormData.appointment_date) {
+                await checkDoctorAvailability(newFormData.appointment_date, e.target.value);
+              }
+            }}
+            required
+          />
+        </div>
+      </div>
+      
+      {/* Quick Time Slots */}
+      <QuickTimeSlots 
+        selectedDate={formData.appointment_date}
+        onTimeSelect={async (time) => {
+          if (formData.appointment_date) {
+            await checkDoctorAvailability(formData.appointment_date, time);
+          }
+        }}
+      />
+      
+      {/* Doctor selection - shows available doctors based on date/time */}
+      <div className="mb-3">
+        <label className="form-label">Available Doctors <span className="text-danger">*</span></label>
+        <select
+          className="form-select"
+          value={formData.doctor_id || ''}
+          onChange={(e) => setFormData({...formData, doctor_id: e.target.value})}
+          required
+          disabled={!formData.appointment_date || !formData.appointment_time}
+        >
+          <option value="">
+            {!formData.appointment_date || !formData.appointment_time 
+              ? 'Select date and time first' 
+              : availableDoctors.length === 0 
+              ? 'No doctors available for selected time' 
+              : 'Select Doctor'}
+          </option>
+          {availableDoctors.map(doctor => (
+            <option key={doctor.id} value={doctor.id}>
+              {doctor.name} - {doctor.specialization} ({doctor.department})
+              {doctor.availability_status && ` - ${doctor.availability_status}`}
+            </option>
+          ))}
+        </select>
+        {formData.appointment_date && formData.appointment_time && availableDoctors.length === 0 && (
+          <small className="text-warning">
+            No doctors are available at the selected date and time. Please choose a different slot.
+          </small>
+        )}
+      </div>
+      
+      {/* Rest of your form fields */}
+      <div className="mb-3">
+        <label className="form-label">Appointment Type <span className="text-danger">*</span></label>
+        <select
+          className="form-select"
+          value={formData.appointment_type || ''}
+          onChange={(e) => setFormData({...formData, appointment_type: e.target.value})}
+          required
+        >
+          <option value="">Select Type</option>
+          <option value="consultation">Consultation</option>
+          <option value="follow_up">Follow-up</option>
+          <option value="emergency">Emergency</option>
+          <option value="vaccination">Vaccination</option>
+          <option value="blood_test">Blood Test</option>
+          <option value="physical_therapy">Physical Therapy</option>
+        </select>
+      </div>
+      
+      <div className="mb-3">
+        <label className="form-label">Priority</label>
+        <select
+          className="form-select"
+          value={formData.priority || 'normal'}
+          onChange={(e) => setFormData({...formData, priority: e.target.value})}
+        >
+          <option value="normal">Normal</option>
+          <option value="high">High</option>
+          <option value="urgent">Urgent</option>
+        </select>
+      </div>
+      <div className="mb-3">
+        <label className="form-label">Notes</label>
+        <textarea
+          className="form-control"
+          rows="3"
+          placeholder="Any additional notes or symptoms..."
+          value={formData.notes || ''}
+          onChange={(e) => setFormData({...formData, notes: e.target.value})}
+        ></textarea>
+      </div>
+      <div className="d-flex justify-content-end gap-2">
+        <button type="button" className="btn btn-outline-secondary" onClick={() => setShowModal('')}>
+          Cancel
+        </button>
+        <button type="submit" className="btn btn-primary">
+          Schedule Appointment
+        </button>
+      </div>
+    </form>
+  </Modal>
+)}
 
           {showModal === 'editAppointment' && (
             <Modal title="Edit Appointment" onClose={() => setShowModal('')}>

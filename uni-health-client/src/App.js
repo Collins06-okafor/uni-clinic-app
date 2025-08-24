@@ -6,6 +6,7 @@ import RegisterPage from './pages/RegisterPage';
 import Dashboard from './pages/Dashboard';
 import ProtectedRoute from './components/ProtectedRoute';
 import { fetchUser, isAuthenticated } from './services/auth';
+import SuperAdminDashboard from './pages/dashboards/SuperAdminDashboard';
 
 function App() {
   const [user, setUser] = useState(null);
@@ -88,6 +89,14 @@ function App() {
             authChecked && user ? 
             <Navigate to="/dashboard" replace /> : 
             <LoginPage onLoginSuccess={refreshUser} />
+          } 
+        />
+        <Route 
+          path="/superadmin" 
+          element={
+            <ProtectedRoute user={user} requiredRole="superadmin">
+              <SuperAdminDashboard />
+            </ProtectedRoute>
           } 
         />
         <Route 

@@ -302,6 +302,116 @@ class AdminController extends Controller
     }
 }
 
+public function getProfile()
+    {
+        $user = auth()->user();
+        
+        return response()->json([
+            'id' => $user->id,
+            'name' => $user->name,
+            'email' => $user->email,
+            'phone' => $user->phone ?? '',
+            'department' => $user->department ?? '',
+            'bio' => $user->bio ?? '',
+            'avatar_url' => $user->avatar_url,
+            'last_login' => $user->last_login,
+            'created_at' => $user->created_at,
+        ]);
+    }
+
+    // Update current user's profile
+    public function updateProfile(Request $request)
+    {
+        $user = auth()->user();
+
+        $validator = Validator::make($request->all(), [
+            'name' => 'required|string|max:255',
+            'phone' => 'nullable|string|max:20',
+            'department' => 'nullable|string|max:100',
+            'bio' => 'nullable|string|max:500',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'message' => 'Validation failed',
+                'errors' => $validator->errors()
+            ], 422);
+        }
+
+        $user->update([
+            'name' => $request->name,
+            'phone' => $request->phone,
+            'department' => $request->department,
+            'bio' => $request->bio,
+        ]);
+
+        return response()->json([
+            'message' => 'Profile updated successfully',
+            'user' => $user->fresh()
+        ]);
+    }
+
+    // Upload avatar
+    public function uploadAvatar(Request $request)
+    {
+        $validator = Validator::make($request->all(), [
+            'avatar' => 'required|image|mimes:jpeg,png,jpg,gif|max:2048', // 2MB max
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'message' => 'Invalid file',
+                'errors' => $validator->errors()
+            ], 422);
+        }
+
+        $user = auth()->user();
+
+        // Delete old avatar if exists
+        if ($user->avatar_url) {
+            $oldPath = str_replace('/storage/', '', $user->avatar_url);
+            Storage::disk('public')->delete($oldPath);
+        }
+
+        // Store new avatar
+        $file = $request->file('avatar');
+        $filename = 'avatars/' . $user->id . '_' . time() . '.' . $file->getClientOriginalExtension();
+        $path = $file->storeAs('avatars', $user->id . '_' . time() . '.' . $file->getClientOriginalExtension(), 'public');
+
+        $avatarUrl = '/storage/' . $path;
+
+        $user->update(['avatar_url' => $avatarUrl]);
+
+        return response()->json([
+            'message' => 'Avatar uploaded successfully',
+            'avatar_url' => $avatarUrl
+        ]);
+    }
+
+    // Remove avatar
+    public function removeAvatar()
+    {
+        $user = auth()->user();
+
+        if ($user->avatar_url) {
+            // Delete file from storage
+            $path = str_replace('/storage/', '', $user->avatar_url);
+            Storage::disk('public')->delete($path);
+
+            // Remove from database
+            $user->update(['avatar_url' => null]);
+        }
+
+        return response()->json([
+            'message' => 'Avatar removed successfully'
+        ]);
+    }
+
+    // Your existing dashboard method - update to use profile data
+    
+
+
+
     /**
      * Get system statistics
      */
@@ -477,9 +587,9 @@ class AdminController extends Controller
         // In real implementation, fetch from database or config files
         return response()->json([
             'general' => [
-                'site_name' => 'University Management System',
-                'site_description' => 'Comprehensive university management platform',
-                'timezone' => 'UTC',
+                'site_name' => 'University Health System',
+                'site_description' => 'Comprehensive university Health platform',
+                'timezone' => 'UTC +3',
                 'default_language' => 'en',
                 'maintenance_mode' => false,
                 'registration_enabled' => true,
@@ -501,7 +611,7 @@ class AdminController extends Controller
                 'smtp_port' => 587,
                 'smtp_encryption' => 'tls',
                 'from_address' => 'noreply@university.edu',
-                'from_name' => 'University Management System'
+                'from_name' => 'University Health System'
             ],
             'file_uploads' => [
                 'max_file_size' => 10240, // KB

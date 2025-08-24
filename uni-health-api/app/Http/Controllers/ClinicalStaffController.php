@@ -73,6 +73,244 @@ class ClinicalStaffController extends Controller
     ]);
 }
 
+/**
+ * Send appointment confirmation
+ */
+public function confirmAppointment(Request $request, $id): JsonResponse
+{
+    $validated = $request->validate([
+        'method' => 'required|in:sms,email,both',
+        'custom_message' => 'nullable|string|max:500'
+    ]);
+    
+    $appointment = Appointment::with(['patient', 'doctor'])->findOrFail($id);
+    
+    // Update appointment status to confirmed
+    $appointment->update(['status' => 'confirmed']);
+    
+    // Here you would typically send SMS/Email
+    // For now, we'll just return success
+    
+    $confirmationMessage = $validated['custom_message'] ?? 
+        "Your appointment on {$appointment->date} at {$appointment->time} with Dr. {$appointment->doctor->name} has been confirmed.";
+    
+    // Log the confirmation attempt
+    \Log::info("Appointment confirmation sent", [
+        'appointment_id' => $id,
+        'method' => $validated['method'],
+        'patient_id' => $appointment->patient_id,
+        'message' => $confirmationMessage
+    ]);
+    
+    return response()->json([
+        'message' => 'Appointment confirmation sent successfully',
+        'method' => $validated['method'],
+        'appointment' => $appointment
+    ]);
+}
+
+/**
+ * Get all doctors (for the doctors tab)
+ */
+public function getAllDoctors(Request $request): JsonResponse
+{
+    $doctors = User::where('role', 'doctor')
+        ->where('status', 'active')
+        ->select('id', 'name', 'email', 'phone', 'staff_no', 'department', 'specialty', 'status')
+        ->get()
+        ->map(function($doctor) {
+            return [
+                'id' => $doctor->id,
+                'name' => $doctor->name,
+                'full_name' => $doctor->name, // For compatibility
+                'email' => $doctor->email,
+                'phone' => $doctor->phone,
+                'staff_no' => $doctor->staff_no,
+                'department' => $doctor->department,
+                'specialty' => $doctor->specialty,
+                'status' => $doctor->status
+            ];
+        });
+    
+    return response()->json([
+        'data' => $doctors,
+        'total' => $doctors->count()
+    ]);
+}
+
+    /**
+     * Get available doctors for appointment scheduling
+     */
+    public function getAvailableDoctors(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'date' => 'required|date|after_or_equal:today',
+            'time' => 'required|date_format:H:i',
+            'duration' => 'sometimes|integer|min:15|max:180',
+            'specialty' => 'sometimes|string|max:100'
+        ]);
+
+        $date = $validated['date'];
+        $time = $validated['time'];
+        $duration = $validated['duration'] ?? 30; // Default 30 minutes
+        $specialty = $validated['specialty'] ?? null;
+
+        // Calculate end time for the requested slot
+        $requestedStartTime = Carbon::parse("$date $time");
+        $requestedEndTime = $requestedStartTime->copy()->addMinutes($duration);
+
+        // Get all doctors
+        $doctorsQuery = User::where('role', 'doctor')
+            ->where('status', 'active');
+
+        // Filter by specialty if provided
+        if ($specialty) {
+            $doctorsQuery->where('specialty', $specialty);
+        }
+
+        $doctors = $doctorsQuery->get();
+
+        $availableDoctors = [];
+
+        foreach ($doctors as $doctor) {
+            // Get doctor's appointments for the requested date
+            $existingAppointments = Appointment::where('doctor_id', $doctor->id)
+                ->whereDate('date', $date)
+                ->whereIn('status', ['scheduled', 'confirmed', 'in_progress'])
+                ->get();
+
+            $isAvailable = true;
+
+            // Check for conflicts with existing appointments
+            foreach ($existingAppointments as $appointment) {
+                $existingStart = Carbon::parse($appointment->date . ' ' . $appointment->time);
+                $existingEnd = $existingStart->copy()->addMinutes($appointment->duration ?? 30);
+
+                // Check if there's an overlap
+                if ($requestedStartTime->lt($existingEnd) && $requestedEndTime->gt($existingStart)) {
+                    $isAvailable = false;
+                    break;
+                }
+            }
+
+            // Check doctor's working hours (assuming 8 AM - 5 PM working hours)
+            $workingHoursStart = Carbon::parse("$date 08:00");
+            $workingHoursEnd = Carbon::parse("$date 17:00");
+            
+            if ($requestedStartTime->lt($workingHoursStart) || $requestedEndTime->gt($workingHoursEnd)) {
+                $isAvailable = false;
+            }
+
+            if ($isAvailable) {
+                $availableDoctors[] = [
+                    'id' => $doctor->id,
+                    'name' => $doctor->name,
+                    'specialty' => $doctor->specialty,
+                    'department' => $doctor->department,
+                    'email' => $doctor->email,
+                    'phone' => $doctor->phone,
+                    'staff_no' => $doctor->staff_no,
+                    'experience_years' => $doctor->experience_years ?? null,
+                    'qualifications' => $doctor->qualifications ?? null,
+                    'current_appointments_count' => $existingAppointments->count(),
+                    'next_available_slot' => $this->getNextAvailableSlot($doctor->id, $date, $time)
+                ];
+            } else {
+                // If not available at requested time, still include with next available slot
+                $nextSlot = $this->getNextAvailableSlot($doctor->id, $date, $time);
+                if ($nextSlot) {
+                    $availableDoctors[] = [
+                        'id' => $doctor->id,
+                        'name' => $doctor->name,
+                        'specialty' => $doctor->specialty,
+                        'department' => $doctor->department,
+                        'email' => $doctor->email,
+                        'phone' => $doctor->phone,
+                        'staff_no' => $doctor->staff_no,
+                        'experience_years' => $doctor->experience_years ?? null,
+                        'qualifications' => $doctor->qualifications ?? null,
+                        'available_at_requested_time' => false,
+                        'current_appointments_count' => $existingAppointments->count(),
+                        'next_available_slot' => $nextSlot
+                    ];
+                }
+            }
+        }
+
+        // Sort by availability at requested time first, then by appointment count
+        usort($availableDoctors, function($a, $b) {
+            $aAvailable = $a['available_at_requested_time'] ?? true;
+            $bAvailable = $b['available_at_requested_time'] ?? true;
+            
+            if ($aAvailable !== $bAvailable) {
+                return $bAvailable <=> $aAvailable; // Available first
+            }
+            
+            return $a['current_appointments_count'] <=> $b['current_appointments_count']; // Less busy first
+        });
+
+        return response()->json([
+            'requested_slot' => [
+                'date' => $date,
+                'time' => $time,
+                'duration' => $duration,
+                'specialty' => $specialty
+            ],
+            'available_doctors' => $availableDoctors,
+            'summary' => [
+                'total_doctors' => count($availableDoctors),
+                'available_at_requested_time' => count(array_filter($availableDoctors, function($doc) {
+                    return $doc['available_at_requested_time'] ?? true;
+                })),
+                'specialties_available' => array_unique(array_column($availableDoctors, 'specialty'))
+            ]
+        ]);
+    }
+
+    /**
+     * Get next available slot for a doctor
+     */
+    private function getNextAvailableSlot($doctorId, $date, $requestedTime): ?array
+    {
+        $startTime = Carbon::parse("$date $requestedTime");
+        $workingHoursEnd = Carbon::parse("$date 17:00");
+        
+        // Get all appointments for the doctor on this date
+        $appointments = Appointment::where('doctor_id', $doctorId)
+            ->whereDate('date', $date)
+            ->whereIn('status', ['scheduled', 'confirmed', 'in_progress'])
+            ->orderBy('time')
+            ->get();
+
+        $currentTime = $startTime->copy();
+        
+        while ($currentTime->addMinutes(30)->lte($workingHoursEnd)) {
+            $slotEnd = $currentTime->copy()->addMinutes(30);
+            $isSlotFree = true;
+            
+            foreach ($appointments as $appointment) {
+                $appointmentStart = Carbon::parse($appointment->date . ' ' . $appointment->time);
+                $appointmentEnd = $appointmentStart->copy()->addMinutes($appointment->duration ?? 30);
+                
+                if ($currentTime->lt($appointmentEnd) && $slotEnd->gt($appointmentStart)) {
+                    $isSlotFree = false;
+                    $currentTime = $appointmentEnd->copy()->subMinutes(30); // Jump to end of this appointment
+                    break;
+                }
+            }
+            
+            if ($isSlotFree) {
+                return [
+                    'date' => $date,
+                    'time' => $currentTime->format('H:i'),
+                    'available_duration' => 30
+                ];
+            }
+        }
+        
+        return null; // No available slots found for today
+    }
+
     /**
      * Get patients assigned to clinical staff
      */
@@ -265,6 +503,27 @@ public function updateAppointment(Request $request, $id): JsonResponse
     ]);
 }
 
+/**
+ * Delete an appointment
+ */
+public function deleteAppointment($id): JsonResponse
+{
+    $appointment = Appointment::findOrFail($id);
+    
+    // Only allow deletion of future appointments or those not in progress
+    if ($appointment->status === 'in_progress') {
+        return response()->json([
+            'message' => 'Cannot delete appointment in progress'
+        ], 400);
+    }
+    
+    $appointment->delete();
+    
+    return response()->json([
+        'message' => 'Appointment deleted successfully'
+    ]);
+}
+
     /**
      * Get medical record for viewing
      */
@@ -369,49 +628,218 @@ public function recordMedication(Request $request, $patientId): JsonResponse
 }
 
     /**
-     * Get medication schedule for patients
-     */
-    public function getMedicationSchedule(Request $request): JsonResponse
+ * Add medication to the system
+ */
+public function addMedication(Request $request): JsonResponse
+{
+    $validated = $request->validate([
+        'name' => 'required|string|max:255',
+        'generic_name' => 'nullable|string|max:255',
+        'dosage' => 'required|string|max:100',
+        'frequency' => 'required|in:daily,twice_daily,weekly,as_needed',
+        'start_date' => 'required|date',
+        'end_date' => 'nullable|date|after:start_date',
+        'instructions' => 'nullable|string|max:1000',
+        'status' => 'required|in:active,discontinued,completed',
+        'patient_id' => 'nullable|exists:users,id'
+    ]);
+
+    // If no specific patient, create as a general medication template
+    $medication = Medication::create([
+        'name' => $validated['name'],
+        'generic_name' => $validated['generic_name'],
+        'dosage' => $validated['dosage'],
+        'frequency' => $validated['frequency'],
+        'start_date' => $validated['start_date'],
+        'end_date' => $validated['end_date'],
+        'instructions' => $validated['instructions'],
+        'status' => $validated['status'],
+        'patient_id' => $validated['patient_id'] ?? null,
+        'created_by' => $request->user()->id
+    ]);
+    
+    return response()->json([
+        'message' => 'Medication added successfully',
+        'medication' => $medication
+    ], 201);
+}
+
+/**
+ * Update medication
+ */
+public function updateMedication(Request $request, $id): JsonResponse
+{
+    $medication = Medication::findOrFail($id);
+    
+    $validated = $request->validate([
+        'name' => 'sometimes|string|max:255',
+        'generic_name' => 'sometimes|string|max:255',
+        'dosage' => 'sometimes|string|max:100',
+        'frequency' => 'sometimes|in:daily,twice_daily,weekly,as_needed',
+        'start_date' => 'sometimes|date',
+        'end_date' => 'sometimes|date|after:start_date',
+        'instructions' => 'sometimes|string|max:1000',
+        'status' => 'sometimes|in:active,discontinued,completed'
+    ]);
+    
+    $medication->update($validated);
+    
+    return response()->json([
+        'message' => 'Medication updated successfully',
+        'medication' => $medication
+    ]);
+}
+
+/**
+ * Delete medication
+ */
+public function deleteMedication($id): JsonResponse
+{
+    $medication = Medication::findOrFail($id);
+    
+    // Check if medication is currently being administered
+    if ($medication->status === 'active') {
+        // Soft delete by changing status instead of actual deletion
+        $medication->update(['status' => 'discontinued']);
+        $message = 'Medication discontinued successfully';
+    } else {
+        $medication->delete();
+        $message = 'Medication deleted successfully';
+    }
+    
+    return response()->json([
+        'message' => $message
+    ]);
+}
+
+/**
+ * Get medication schedule with better structure
+ */
+public function getMedicationSchedule(Request $request): JsonResponse
 {
     $date = $request->get('date', now()->format('Y-m-d'));
-    $status = $request->get('status', 'all'); // all, due, administered
-
-    $query = Medication::whereDate('start_date', '<=', $date)
-        ->whereDate('end_date', '>=', $date)
+    
+    // Get medications for the specified date
+    $medications = Medication::with(['patient', 'creator'])
         ->where('status', 'active')
-        ->with(['prescription.patient', 'prescription.doctor']);
-
-    if ($status === 'due') {
-        $query->whereNull('administered_at');
-    } elseif ($status === 'administered') {
-        $query->whereNotNull('administered_at');
-    }
-
-    $medications = $query->get()->map(function ($med) {
-        return [
-            'id' => $med->id,
-            'patient' => [
-                'name' => $med->prescription->patient->name,
-                'student_id' => $med->prescription->patient->student_id ?? null
-            ],
-            'medication' => $med->name,
-            'dosage' => $med->dosage,
-            'status' => $med->administered_at ? 'completed' : 'pending',
-            'prescribing_doctor' => $med->prescription->doctor->name,
-            'administered_by' => $med->administered_by_user->name ?? null,
-            'administered_at' => $med->administered_at
-        ];
-    });
-
+        ->whereDate('start_date', '<=', $date)
+        ->where(function($query) use ($date) {
+            $query->whereNull('end_date')
+                  ->orWhereDate('end_date', '>=', $date);
+        })
+        ->get()
+        ->map(function($medication) {
+            return [
+                'id' => $medication->id,
+                'medication_name' => $medication->name, // Match frontend expectation
+                'generic' => $medication->generic_name,  // Match frontend expectation
+                'dosage' => $medication->dosage,
+                'frequency' => $medication->frequency,
+                'start_date' => $medication->start_date,
+                'end_date' => $medication->end_date,
+                'instructions' => $medication->instructions,
+                'status' => $medication->status,
+                'patient' => $medication->patient ? [
+                    'id' => $medication->patient->id,
+                    'name' => $medication->patient->name,
+                    'student_id' => $medication->patient->student_id
+                ] : null,
+                'created_by' => $medication->creator ? $medication->creator->name : null
+            ];
+        });
+    
     return response()->json([
         'medications' => $medications,
+        'date' => $date,
         'summary' => [
-            'date' => $date,
-            'total_medications' => $medications->count(),
-            'due' => $medications->where('status', 'pending')->count(),
-            'administered' => $medications->where('status', 'completed')->count(),
+            'total' => $medications->count(),
+            'active' => $medications->where('status', 'active')->count()
         ]
     ]);
+}
+
+/**
+ * Check vital signs for alerts
+ */
+private function checkVitalSignsAlerts(array $vitals): array
+{
+    $alerts = [];
+    
+    // Blood pressure alerts
+    if (isset($vitals['blood_pressure_systolic']) && isset($vitals['blood_pressure_diastolic'])) {
+        $systolic = $vitals['blood_pressure_systolic'];
+        $diastolic = $vitals['blood_pressure_diastolic'];
+        
+        if ($systolic >= 140 || $diastolic >= 90) {
+            $alerts[] = [
+                'type' => 'HIGH_BLOOD_PRESSURE',
+                'message' => 'Blood pressure is elevated',
+                'severity' => 'warning'
+            ];
+        } elseif ($systolic < 90 || $diastolic < 60) {
+            $alerts[] = [
+                'type' => 'LOW_BLOOD_PRESSURE',
+                'message' => 'Blood pressure is low',
+                'severity' => 'warning'
+            ];
+        }
+    }
+    
+    // Heart rate alerts
+    if (isset($vitals['heart_rate'])) {
+        $heartRate = $vitals['heart_rate'];
+        
+        if ($heartRate > 100) {
+            $alerts[] = [
+                'type' => 'HIGH_HEART_RATE',
+                'message' => 'Heart rate is elevated (tachycardia)',
+                'severity' => 'warning'
+            ];
+        } elseif ($heartRate < 60) {
+            $alerts[] = [
+                'type' => 'LOW_HEART_RATE',
+                'message' => 'Heart rate is low (bradycardia)',
+                'severity' => 'warning'
+            ];
+        }
+    }
+    
+    // Temperature alerts (assuming Celsius)
+    if (isset($vitals['temperature'])) {
+        $temp = $vitals['temperature'];
+        $unit = $vitals['temperature_unit'] ?? 'C';
+        
+        if ($unit === 'C') {
+            if ($temp >= 38.0) {
+                $alerts[] = [
+                    'type' => 'FEVER',
+                    'message' => 'Patient has fever',
+                    'severity' => 'warning'
+                ];
+            } elseif ($temp <= 35.0) {
+                $alerts[] = [
+                    'type' => 'HYPOTHERMIA',
+                    'message' => 'Patient has low body temperature',
+                    'severity' => 'critical'
+                ];
+            }
+        }
+    }
+    
+    // Oxygen saturation alerts
+    if (isset($vitals['oxygen_saturation'])) {
+        $o2sat = $vitals['oxygen_saturation'];
+        
+        if ($o2sat < 95) {
+            $alerts[] = [
+                'type' => 'LOW_OXYGEN',
+                'message' => 'Oxygen saturation is low',
+                'severity' => $o2sat < 90 ? 'critical' : 'warning'
+            ];
+        }
+    }
+    
+    return $alerts;
 }
 
 
@@ -558,6 +986,23 @@ public function getMedicalCard($studentId): JsonResponse
     ]);
 }
 
+
+/**
+ * Get current shift information
+ */
+private function getCurrentShift(): string
+{
+    $hour = now()->hour;
+    
+    if ($hour >= 6 && $hour < 14) {
+        return 'Morning Shift (6 AM - 2 PM)';
+    } elseif ($hour >= 14 && $hour < 22) {
+        return 'Afternoon Shift (2 PM - 10 PM)';
+    } else {
+        return 'Night Shift (10 PM - 6 AM)';
+    }
+}
+
 public function storeMedicalCard(Request $request, $userId)
 {
     $validated = $request->validate([
@@ -599,226 +1044,105 @@ public function storeMedicalCard(Request $request, $userId)
         $tasks = $query->get()->map(function($record) {
             return [
                 'id' => $record->id,
-                'patient' => [
-                    'name' => $record->patient->name,
-                    'student_id' => $record->patient->student_id
-                ],
-                'description' => $record->content['description'],
-                'status' => $record->content['status'],
-                'assigned_by' => $record->creator->name,
-                'created_at' => $record->created_at
-            ];
-        });
+                'patient' => [                'id' => $record->patient->id,
+                'name' => $record->patient->name,
+                'student_id' => $record->patient->student_id
+            ],
+            'task' => $record->content['task'],
+            'priority' => $record->content['priority'] ?? 'medium',
+            'status' => $record->content['status'] ?? 'pending',
+            'due_time' => $record->content['due_time'] ?? null,
+            'assigned_by' => $record->creator->name,
+            'created_at' => $record->created_at
+        ];
+    });
+    
+    return response()->json([
+        'tasks' => $tasks,
+        'summary' => [
+            'date' => $date,
+            'total_tasks' => $tasks->count(),
+            'pending' => $tasks->where('status', 'pending')->count(),
+            'completed' => $tasks->where('status', 'completed')->count(),
+            'overdue' => $tasks->where('status', 'pending')
+                            ->filter(function($task) {
+                                return $task['due_time'] && now()->gt($task['due_time']);
+                            })->count()
+        ]
+    ]);
+}
+
+    /**
+     * Create a new care task
+     */
+    public function createCareTask(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'patient_id' => 'required|exists:users,id',
+            'task' => 'required|string|max:500',
+            'priority' => 'required|in:low,medium,high',
+            'due_time' => 'required|date_format:Y-m-d H:i',
+            'instructions' => 'nullable|string|max:1000'
+        ]);
+
+        $record = MedicalRecord::create([
+            'patient_id' => $validated['patient_id'],
+            'type' => 'task',
+            'content' => [
+                'task' => $validated['task'],
+                'priority' => $validated['priority'],
+                'status' => 'pending',
+                'due_time' => $validated['due_time'],
+                'instructions' => $validated['instructions'] ?? null
+            ],
+            'diagnosis' => 'Care Task',
+            'treatment' => $validated['task'],
+            'visit_date' => now()->format('Y-m-d'),
+            'created_by' => $request->user()->id
+        ]);
         
         return response()->json([
-            'tasks' => $tasks,
+            'message' => 'Care task created successfully',
+            'task' => $record->load(['patient', 'creator'])
+        ], 201);
+    }
+
+    /**
+     * Get patient vital signs history
+     */
+    public function getVitalSignsHistory(Request $request, $patientId): JsonResponse
+    {
+        $days = $request->get('days', 7); // Default to 1 week
+        
+        $records = MedicalRecord::where('patient_id', $patientId)
+            ->where('type', 'vital_signs')
+            ->whereDate('created_at', '>=', now()->subDays($days))
+            ->orderBy('created_at', 'desc')
+            ->get()
+            ->map(function($record) {
+                return [
+                    'id' => $record->id,
+                    'date' => $record->created_at->format('Y-m-d H:i'),
+                    'blood_pressure' => $record->content['blood_pressure_systolic'] . '/' . 
+                                       $record->content['blood_pressure_diastolic'],
+                    'heart_rate' => $record->content['heart_rate'],
+                    'temperature' => $record->content['temperature'] . '°' . 
+                                    ($record->content['temperature_unit'] ?? 'F'),
+                    'respiratory_rate' => $record->content['respiratory_rate'] ?? null,
+                    'oxygen_saturation' => $record->content['oxygen_saturation'] ?? null,
+                    'recorded_by' => $record->creator->name,
+                    'alerts' => $this->checkVitalSignsAlerts($record->content)
+                ];
+            });
+            
+        return response()->json([
+            'patient_id' => $patientId,
+            'vital_signs_history' => $records,
+            'time_period' => "$days days",
             'summary' => [
-                'date' => $date,
-                'total_tasks' => $tasks->count(),
-                'pending' => $tasks->where('status', 'pending')->count(),
-                'completed' => $tasks->where('status', 'completed')->count(),
+                'total_readings' => $records->count(),
+                'abnormal_readings' => $records->filter(fn($r) => !empty($r['alerts']))->count()
             ]
         ]);
     }
-
-    /**
- * Send appointment confirmation to patient
- */
-public function sendConfirmation(Request $request, $appointmentId): JsonResponse
-{
-    $appointment = Appointment::with(['patient', 'doctor'])
-        ->findOrFail($appointmentId);
-
-    $validated = $request->validate([
-        'method' => 'required|in:email,sms',
-        'custom_message' => 'nullable|string|max:500'
-    ]);
-
-    // Get patient contact info
-    $patient = $appointment->patient;
-    if (!$patient->email && $validated['method'] === 'email') {
-        return response()->json([
-            'message' => 'Patient has no email registered',
-            'error_code' => 'MISSING_CONTACT_INFO'
-        ], 400);
-    }
-
-    // Build confirmation message (example)
-    $message = $validated['custom_message'] ?? 
-        "Your appointment with Dr. {$appointment->doctor->name} " .
-        "is confirmed for {$appointment->date} at {$appointment->time}";
-
-    // In a real app, you would:
-    // 1. Queue a notification (email/SMS)
-    // 2. Log the confirmation
-    // This is just a mock implementation
-    $notification = [
-        'to' => $validated['method'] === 'email' 
-            ? $patient->email 
-            : $patient->phone,
-        'method' => $validated['method'],
-        'message' => $message,
-        'status' => 'queued'
-    ];
-
-    // Update appointment notes
-    $appointment->update([
-    'content' => array_merge($appointment->content ?? [], [
-        'confirmation_sent' => [
-            'method' => $validated['method'],
-            'at' => now()->format('Y-m-d H:i')
-        ]
-    ])
-]);
-
-    return response()->json([
-        'message' => 'Confirmation sent successfully',
-        'notification' => $notification,
-        'appointment' => $appointment
-    ]);
-}
-
-    /**
-     * Complete a care task
-     */
-    public function completeTask(Request $request, $taskId): JsonResponse
-    {
-        $validated = $request->validate([
-            'completion_notes' => 'required|string|max:1000',
-            'actual_duration' => 'nullable|integer|min:1|max:180'
-        ]);
-
-        $task = MedicalRecord::findOrFail($taskId);
-        $content = $task->content;
-        $content['status'] = 'completed';
-        $content['completion_notes'] = $validated['completion_notes'];
-        $content['completed_by'] = $request->user()->id;
-        $content['completed_at'] = now();
-        
-        $task->update([
-            'content' => $content
-        ]);
-        
-        return response()->json([
-            'message' => 'Task completed successfully',
-            'task' => $task
-        ]);
-    }
-
-    /**
-     * Get current shift information
-     */
-    private function getCurrentShift(): string
-    {
-        $hour = now()->hour;
-        
-        if ($hour >= 7 && $hour < 15) {
-            return 'Day Shift (7:00 AM - 3:00 PM)';
-        } elseif ($hour >= 15 && $hour < 23) {
-            return 'Evening Shift (3:00 PM - 11:00 PM)';
-        } else {
-            return 'Night Shift (11:00 PM - 7:00 AM)';
-        }
-    }
-
-    /**
- * Check vital signs for alerts
- */
-private function checkVitalSignsAlerts($vitalSigns): array
-{
-    $alerts = [];
-    
-    // Blood pressure alerts (only if both values are present)
-    if (isset($vitalSigns['blood_pressure_systolic']) && isset($vitalSigns['blood_pressure_diastolic'])) {
-        if ($vitalSigns['blood_pressure_systolic'] > 140 || $vitalSigns['blood_pressure_diastolic'] > 90) {
-            $alerts[] = [
-                'type' => 'high_blood_pressure',
-                'message' => 'Blood pressure elevated - notify doctor',
-                'severity' => 'high'
-            ];
-        }
-        
-        if ($vitalSigns['blood_pressure_systolic'] < 90 || $vitalSigns['blood_pressure_diastolic'] < 60) {
-            $alerts[] = [
-                'type' => 'low_blood_pressure',
-                'message' => 'Blood pressure low - monitor patient',
-                'severity' => 'medium'
-            ];
-        }
-    }
-    
-    // Heart rate alerts
-    if (isset($vitalSigns['heart_rate'])) {
-        if ($vitalSigns['heart_rate'] > 100) {
-            $alerts[] = [
-                'type' => 'tachycardia',
-                'message' => 'Heart rate elevated',
-                'severity' => 'medium'
-            ];
-        } elseif ($vitalSigns['heart_rate'] < 60) {
-            $alerts[] = [
-                'type' => 'bradycardia',
-                'message' => 'Heart rate low',
-                'severity' => 'medium'
-            ];
-        }
-    }
-    
-    // Temperature alerts
-    if (isset($vitalSigns['temperature']) && isset($vitalSigns['temperature_unit'])) {
-        $tempInF = $vitalSigns['temperature_unit'] === 'C' 
-            ? ($vitalSigns['temperature'] * 9/5) + 32 
-            : $vitalSigns['temperature'];
-            
-        if ($tempInF > 100.4) {
-            $alerts[] = [
-                'type' => 'fever',
-                'message' => 'Patient has fever - monitor closely',
-                'severity' => 'high'
-            ];
-        } elseif ($tempInF < 96.0) {
-            $alerts[] = [
-                'type' => 'hypothermia',
-                'message' => 'Low body temperature - check patient condition',
-                'severity' => 'medium'
-            ];
-        }
-    }
-    
-    // Respiratory rate alerts
-    if (isset($vitalSigns['respiratory_rate'])) {
-        if ($vitalSigns['respiratory_rate'] > 24) {
-            $alerts[] = [
-                'type' => 'tachypnea',
-                'message' => 'Respiratory rate elevated',
-                'severity' => 'medium'
-            ];
-        } elseif ($vitalSigns['respiratory_rate'] < 12) {
-            $alerts[] = [
-                'type' => 'bradypnea',
-                'message' => 'Respiratory rate low',
-                'severity' => 'medium'
-            ];
-        }
-    }
-    
-    // Oxygen saturation alerts
-    if (isset($vitalSigns['oxygen_saturation'])) {
-        if ($vitalSigns['oxygen_saturation'] < 90) {
-            $alerts[] = [
-                'type' => 'critical_low_oxygen',
-                'message' => 'Critical low oxygen saturation - immediate attention required',
-                'severity' => 'critical'
-            ];
-        } elseif ($vitalSigns['oxygen_saturation'] < 95) {
-            $alerts[] = [
-                'type' => 'low_oxygen',
-                'message' => 'Low oxygen saturation - monitor closely',
-                'severity' => 'high'
-            ];
-        }
-    }
-    
-    return $alerts;
-}
 }

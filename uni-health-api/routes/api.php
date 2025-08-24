@@ -9,6 +9,7 @@ use App\Http\Controllers\AcademicStaffController;
 use App\Http\Controllers\ClinicalStaffController;
 use App\Http\Controllers\AppointmentController;
 use App\Http\Controllers\AdminController;
+use App\Http\Controllers\SuperAdminController;
 
 // Public routes (no authentication required)
 Route::prefix('auth')->group(function () {
@@ -34,7 +35,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::prefix('auth')->group(function () {
         Route::post('/logout', [AuthController::class, 'logout']);
         Route::get('/profile', [AuthController::class, 'profile']);
-        Route::put('/profile', [AuthController::class, 'updateProfile']);
+        Route::post('/profile', [AuthController::class, 'updateProfile']);
     });
 
     // Global appointment system (accessible by multiple roles)
@@ -54,6 +55,7 @@ Route::middleware('role:student')->prefix('student')->group(function () {
     Route::post('/appointments/schedule', [StudentController::class, 'scheduleAppointment']);
     Route::put('/appointments/{appointment}/reschedule', [StudentController::class, 'rescheduleAppointment']);
     Route::get('/doctors/availability', [StudentController::class, 'getDoctorAvailability']);
+    
 });
 
     // Doctor-specific routes
@@ -71,56 +73,81 @@ Route::middleware('role:student')->prefix('student')->group(function () {
         Route::get('/statistics', [DoctorController::class, 'getStatistics']);
         Route::put('/availability', [DoctorController::class, 'updateAvailability']);
         Route::get('/patients/{id}/medical-card', [ClinicalStaffController::class, 'getMedicalCard']);
+        Route::post('/appointments', [AppointmentController::class, 'store']);
 
     });
 
     // Academic Staff routes (Clinic-focused)
-Route::middleware('role:academic_staff')->prefix('academic-staff')->group(function () {
+Route::group(['prefix' => 'academic-staff', 'middleware' => 'auth:api'], function () {
     // Dashboard
-    Route::get('/dashboard', [AcademicStaffController::class, 'dashboard']);
+     Route::get('/dashboard', [AcademicStaffController::class, 'dashboard']);
     
     // Medical history
     Route::get('/medical-history', [AcademicStaffController::class, 'getMedicalHistory']);
     
     // Appointments
-    Route::get('/appointments', [AcademicStaffController::class, 'getAppointments']);
-    Route::post('/appointments/schedule', [AcademicStaffController::class, 'scheduleAppointment']);
-    Route::put('/appointments/{appointment}/reschedule', [AcademicStaffController::class, 'rescheduleAppointment']);
-    Route::delete('/appointments/{appointment}', [AcademicStaffController::class, 'cancelAppointment']);
+     Route::get('/appointments', [AcademicStaffController::class, 'getAppointments']);
+    Route::post('/schedule-appointment', [AcademicStaffController::class, 'scheduleAppointment']);
+    Route::put('/reschedule-appointment/{appointment}', [AcademicStaffController::class, 'rescheduleAppointment']);
+    Route::put('/cancel-appointment/{appointment}', [AcademicStaffController::class, 'cancelAppointment']);
     
     // Doctor availability
-    Route::get('/doctors/availability', [AcademicStaffController::class, 'getDoctorAvailability']);
-    Route::get('/doctors/{doctor}/available-slots', [AcademicStaffController::class, 'getAvailableSlots']);
+    Route::get('/doctor-availability', [AcademicStaffController::class, 'getDoctorAvailability']);
+    Route::get('/available-slots', [AcademicStaffController::class, 'getAvailableSlots']);
     
     // Profile
     Route::put('/profile', [AcademicStaffController::class, 'updateProfile']);
 });
 
     // Clinical Staff routes
-    Route::middleware('role:clinical_staff')->prefix('clinical')->group(function () {
-        Route::get('/dashboard', [ClinicalStaffController::class, 'dashboard']);
-        Route::get('/patients', [ClinicalStaffController::class, 'getPatients']);
-        Route::put('/patients/{id}', [ClinicalStaffController::class, 'updatePatient']);
-        Route::get('/appointments', [ClinicalStaffController::class, 'getAppointments']);
-        Route::put('/appointments/{id}', [ClinicalStaffController::class, 'updateAppointment']);
-        Route::post('/appointments/schedule', [ClinicalStaffController::class, 'scheduleAppointment']);
-        Route::get('/medical-records/{id}', [ClinicalStaffController::class, 'getMedicalRecord']);
-        Route::post('/patients/{patientId}/medication', [ClinicalStaffController::class, 'recordMedication']);
-        Route::get('/clinical/medications', [ClinicalStaffController::class, 'getMedications']);
-        //Route::post('/medications', [MedicationController::class, 'store']);
-
-        Route::get('/medication-schedule', [ClinicalStaffController::class, 'getMedicationSchedule']);
-        Route::put('/patients/{id}/vital-signs', [ClinicalStaffController::class, 'updateVitalSigns']);        Route::get('/care-tasks', [ClinicalStaffController::class, 'getCareTasks']);
-        Route::post('/tasks/{taskId}/complete', [ClinicalStaffController::class, 'completeTask']);
-        Route::post('/appointments/{id}/confirm', [ClinicalStaffController::class, 'sendConfirmation']);
-        Route::post('/patients/{id}/medical-card', [ClinicalStaffController::class, 'updateMedicalCard']);
-        Route::post('/patients/{id}/medical-documents', [ClinicalStaffController::class, 'uploadMedicalDocument']);
-        Route::get('/patients/{id}/medical-card', [ClinicalStaffController::class, 'getMedicalCard']);
-        Route::get('/patients/{id}/medical-history', [PatientController::class, 'medicalHistory']);
-        Route::get('/patients/search', [PatientController::class, 'search']);
+Route::middleware('auth:sanctum')->group(function () {
+    Route::prefix('clinical')->group(function () {
+        // Dashboard
+        Route::get('dashboard', [ClinicalStaffController::class, 'dashboard']);
+        
+        // Appointments
+        Route::get('appointments', [ClinicalStaffController::class, 'getAppointments']);
+        Route::post('appointments/schedule', [ClinicalStaffController::class, 'scheduleAppointment']);
+        Route::put('appointments/{id}', [ClinicalStaffController::class, 'updateAppointment']);
+        Route::delete('appointments/{id}', [ClinicalStaffController::class, 'deleteAppointment']);
+        Route::post('appointments/{id}/confirm', [ClinicalStaffController::class, 'confirmAppointment']);
+        
+        // Doctors
+        Route::get('available-doctors', [ClinicalStaffController::class, 'getAvailableDoctors']);
+        Route::get('doctors', [ClinicalStaffController::class, 'getAllDoctors']); // Add this for the doctors tab
+        
+        // Patients
+        Route::get('patients', [ClinicalStaffController::class, 'getPatients']);
+        Route::put('patients/{id}', [ClinicalStaffController::class, 'updatePatient']);
+        Route::put('patients/{id}/vital-signs', [ClinicalStaffController::class, 'updateVitalSigns']);
+        Route::get('patients/{id}/vital-signs/history', [ClinicalStaffController::class, 'getVitalSignsHistory']);
+        Route::post('patients/{id}/medication', [ClinicalStaffController::class, 'recordMedication']);
+        Route::get('patients/{id}/medical-card', [ClinicalStaffController::class, 'getMedicalCard']);
+        Route::post('patients/{id}/medical-card', [ClinicalStaffController::class, 'updateMedicalCard']);
+        
+        // Medications
+        Route::get('medications', [ClinicalStaffController::class, 'getMedications']);
+        Route::post('medications', [ClinicalStaffController::class, 'addMedication']);
+        Route::put('medications/{id}', [ClinicalStaffController::class, 'updateMedication']);
+        Route::delete('medications/{id}', [ClinicalStaffController::class, 'deleteMedication']);
+        Route::get('medication-schedule', [ClinicalStaffController::class, 'getMedicationSchedule']);
+        
+        // Care Tasks
+        Route::get('care-tasks', [ClinicalStaffController::class, 'getCareTasks']);
+        Route::post('care-tasks', [ClinicalStaffController::class, 'createCareTask']);
+        
+        // Medical Records
+        Route::get('medical-records/{id}', [ClinicalStaffController::class, 'getMedicalRecord']);
     });
+});
 
     // Admin routes
+     // Profile (no need to require role:admin unless you want to)
+        Route::get('/profile',          [AdminController::class, 'getProfile']);
+        Route::put('/profile',          [AdminController::class, 'updateProfile']);
+        Route::post('/profile/avatar',  [AdminController::class, 'uploadAvatar']);
+        Route::delete('/profile/avatar',[AdminController::class, 'removeAvatar']);
+
     Route::middleware('role:admin')->prefix('admin')->group(function () {
         Route::get('/dashboard', [AdminController::class, 'dashboard']);
         
@@ -152,6 +179,13 @@ Route::middleware('role:academic_staff')->prefix('academic-staff')->group(functi
     Route::post('/notifications', [AdminController::class, 'sendBulkNotification']);
     Route::get('/notifications/{notificationId}/status', [AdminController::class, 'getNotificationStatus']);
     });
+});
+
+Route::middleware(['auth:sanctum','role:superadmin'])->group(function() {
+    Route::post('/login', [AuthController::class, 'login']);
+    Route::get('/superadmin/users', [SuperAdminController::class,'index']);
+    Route::post('/superadmin/users', [SuperAdminController::class,'store']);
+    Route::delete('/superadmin/users/{user}', [SuperAdminController::class,'destroy']);
 });
 
 Route::middleware(['auth:sanctum', 'permission'])->group(function () {

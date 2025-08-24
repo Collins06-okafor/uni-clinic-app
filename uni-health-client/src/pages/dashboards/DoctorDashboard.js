@@ -12,6 +12,7 @@ const EnhancedDoctorDashboard = ({ user, onLogout }) => {
   const [selectedPatient, setSelectedPatient] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [message, setMessage] = useState({ type: '', text: '' });
+  const API_BASE_URL = 'http://127.0.0.1:8000/api';
   
   // Form states
   const [availabilityForm, setAvailabilityForm] = useState({
@@ -74,157 +75,204 @@ const EnhancedDoctorDashboard = ({ user, onLogout }) => {
 
   const stats = getDashboardStats();
 
-  // Mock API calls (replace with actual API endpoints)
   const fetchAppointments = async () => {
-    setLoading(true);
-    try {
-      const response = await fetch(`/api/doctor/appointments?date=${selectedDate}`, {
-        headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
-      });
-      const data = await response.json();
-      setAppointments(data.appointments || []);
-    } catch (error) {
-      console.error('Error fetching appointments:', error);
-      setMessage({ type: 'error', text: 'Failed to load appointments' });
-      setTimeout(() => setMessage({ type: '', text: '' }), 5000);
+  setLoading(true);
+  try {
+    const response = await fetch(`${API_BASE_URL}/doctor/appointments?date=${selectedDate}`, {
+      headers: { 
+        'Authorization': `Bearer ${localStorage.getItem('token')}`,
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
+      }
+    });
+    
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
     }
-    setLoading(false);
-  };
+    
+    const data = await response.json();
+    setAppointments(data.appointments || []);
+  } catch (error) {
+    console.error('Error fetching appointments:', error);
+    setMessage({ type: 'error', text: 'Failed to load appointments' });
+    setTimeout(() => setMessage({ type: '', text: '' }), 5000);
+  }
+  setLoading(false);
+};
 
-  const fetchPatients = async () => {
-    setLoading(true);
-    try {
-      const response = await fetch('/api/doctor/patients', {
-        headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
-      });
-      const data = await response.json();
-      setPatients(data.patients?.data || []);
-    } catch (error) {
-      console.error('Error fetching patients:', error);
-      setMessage({ type: 'error', text: 'Failed to load patients' });
-      setTimeout(() => setMessage({ type: '', text: '' }), 5000);
+  // 3. Fix fetchPatients function (around line 103)
+const fetchPatients = async () => {
+  setLoading(true);
+  try {
+    const response = await fetch(`${API_BASE_URL}/doctor/patients`, {
+      headers: { 
+        'Authorization': `Bearer ${localStorage.getItem('token')}`,
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
+      }
+    });
+    
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
     }
-    setLoading(false);
-  };
+    
+    const data = await response.json();
+    setPatients(data.patients?.data || []);
+  } catch (error) {
+    console.error('Error fetching patients:', error);
+    setMessage({ type: 'error', text: 'Failed to load patients' });
+    setTimeout(() => setMessage({ type: '', text: '' }), 5000);
+  }
+  setLoading(false);
+};
 
-  const fetchPrescriptions = async () => {
-    setLoading(true);
-    try {
-      const response = await fetch('/api/doctor/prescriptions', {
-        headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
-      });
-      const data = await response.json();
-      setPrescriptions(data.prescriptions?.data || []);
-    } catch (error) {
-      console.error('Error fetching prescriptions:', error);
-      setMessage({ type: 'error', text: 'Failed to load prescriptions' });
-      setTimeout(() => setMessage({ type: '', text: '' }), 5000);
+  // 4. Fix fetchPrescriptions function (around line 119)
+const fetchPrescriptions = async () => {
+  setLoading(true);
+  try {
+    const response = await fetch(`${API_BASE_URL}/doctor/prescriptions`, {
+      headers: { 
+        'Authorization': `Bearer ${localStorage.getItem('token')}`,
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
+      }
+    });
+    
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
     }
-    setLoading(false);
-  };
+    
+    const data = await response.json();
+    setPrescriptions(data.prescriptions?.data || []);
+  } catch (error) {
+    console.error('Error fetching prescriptions:', error);
+    setMessage({ type: 'error', text: 'Failed to load prescriptions' });
+    setTimeout(() => setMessage({ type: '', text: '' }), 5000);
+  }
+  setLoading(false);
+};
 
   const updateAvailability = async () => {
-    try {
-      const response = await fetch('/api/doctor/availability', {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        },
-        body: JSON.stringify(availabilityForm)
-      });
-      
-      if (response.ok) {
-        setMessage({ type: 'success', text: 'Availability updated successfully!' });
-        setShowModal('');
-        setTimeout(() => setMessage({ type: '', text: '' }), 5000);
-      }
-    } catch (error) {
-      console.error('Error updating availability:', error);
-      setMessage({ type: 'error', text: 'Failed to update availability' });
-      setTimeout(() => setMessage({ type: '', text: '' }), 5000);
-    }
-  };
-
-  const createAppointment = async () => {
-    try {
-      const response = await fetch('/api/appointments', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        },
-        body: JSON.stringify(appointmentForm)
-      });
-      
-      if (response.ok) {
-        setMessage({ type: 'success', text: 'Appointment created successfully!' });
-        setShowModal('');
-        setAppointmentForm({ patient_id: '', date: '', time: '', reason: '' });
-        fetchAppointments();
-        setTimeout(() => setMessage({ type: '', text: '' }), 5000);
-      }
-    } catch (error) {
-      console.error('Error creating appointment:', error);
-      setMessage({ type: 'error', text: 'Failed to create appointment' });
-      setTimeout(() => setMessage({ type: '', text: '' }), 5000);
-    }
-  };
-
-  const createMedicalRecord = async () => {
-    if (!selectedPatient) return;
+  try {
+    const response = await fetch(`${API_BASE_URL}/doctor/availability`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+        'Authorization': `Bearer ${localStorage.getItem('token')}`
+      },
+      body: JSON.stringify(availabilityForm)
+    });
     
-    try {
-      const response = await fetch(`/api/doctor/patients/${selectedPatient.id}/records`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        },
-        body: JSON.stringify(medicalRecordForm)
-      });
-      
-      if (response.ok) {
-        setMessage({ type: 'success', text: 'Medical record created successfully!' });
-        setShowModal('');
-        setMedicalRecordForm({ diagnosis: '', treatment: '', notes: '', visit_date: new Date().toISOString().split('T')[0] });
-        setTimeout(() => setMessage({ type: '', text: '' }), 5000);
-      }
-    } catch (error) {
-      console.error('Error creating medical record:', error);
-      setMessage({ type: 'error', text: 'Failed to create medical record' });
-      setTimeout(() => setMessage({ type: '', text: '' }), 5000);
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
     }
-  };
+    
+    const data = await response.json();
+    setMessage({ type: 'success', text: 'Availability updated successfully!' });
+    setShowModal('');
+    setTimeout(() => setMessage({ type: '', text: '' }), 5000);
+  } catch (error) {
+    console.error('Error updating availability:', error);
+    setMessage({ type: 'error', text: 'Failed to update availability' });
+    setTimeout(() => setMessage({ type: '', text: '' }), 5000);
+  }
+};
 
-  const createPrescription = async () => {
-    try {
-      const response = await fetch('/api/doctor/prescriptions', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        },
-        body: JSON.stringify(prescriptionForm)
-      });
-      
-      if (response.ok) {
-        setMessage({ type: 'success', text: 'Prescription created successfully!' });
-        setShowModal('');
-        setPrescriptionForm({
-          patient_id: '',
-          medications: [{ name: '', dosage: '', instructions: '', start_date: '', end_date: '' }],
-          notes: ''
-        });
-        fetchPrescriptions();
-        setTimeout(() => setMessage({ type: '', text: '' }), 5000);
-      }
-    } catch (error) {
-      console.error('Error creating prescription:', error);
-      setMessage({ type: 'error', text: 'Failed to create prescription' });
-      setTimeout(() => setMessage({ type: '', text: '' }), 5000);
+  // Fix createAppointment function
+const createAppointment = async () => {
+  try {
+    const response = await fetch(`${API_BASE_URL}/appointments`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+        'Authorization': `Bearer ${localStorage.getItem('token')}`
+      },
+      body: JSON.stringify(appointmentForm)
+    });
+    
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
     }
-  };
+    
+    const data = await response.json();
+    setMessage({ type: 'success', text: 'Appointment created successfully!' });
+    setShowModal('');
+    setAppointmentForm({ patient_id: '', date: '', time: '', reason: '' });
+    fetchAppointments();
+    setTimeout(() => setMessage({ type: '', text: '' }), 5000);
+  } catch (error) {
+    console.error('Error creating appointment:', error);
+    setMessage({ type: 'error', text: 'Failed to create appointment' });
+    setTimeout(() => setMessage({ type: '', text: '' }), 5000);
+  }
+};
+
+  // Fix createMedicalRecord function
+const createMedicalRecord = async () => {
+  if (!selectedPatient) return;
+  
+  try {
+    const response = await fetch(`${API_BASE_URL}/doctor/patients/${selectedPatient.id}/records`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+        'Authorization': `Bearer ${localStorage.getItem('token')}`
+      },
+      body: JSON.stringify(medicalRecordForm)
+    });
+    
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+    
+    const data = await response.json();
+    setMessage({ type: 'success', text: 'Medical record created successfully!' });
+    setShowModal('');
+    setMedicalRecordForm({ diagnosis: '', treatment: '', notes: '', visit_date: new Date().toISOString().split('T')[0] });
+    setTimeout(() => setMessage({ type: '', text: '' }), 5000);
+  } catch (error) {
+    console.error('Error creating medical record:', error);
+    setMessage({ type: 'error', text: 'Failed to create medical record' });
+    setTimeout(() => setMessage({ type: '', text: '' }), 5000);
+  }
+};
+
+  // Fix createPrescription function
+const createPrescription = async () => {
+  try {
+    const response = await fetch(`${API_BASE_URL}/doctor/prescriptions`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+        'Authorization': `Bearer ${localStorage.getItem('token')}`
+      },
+      body: JSON.stringify(prescriptionForm)
+    });
+    
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+    
+    const data = await response.json();
+    setMessage({ type: 'success', text: 'Prescription created successfully!' });
+    setShowModal('');
+    setPrescriptionForm({
+      patient_id: '',
+      medications: [{ name: '', dosage: '', instructions: '', start_date: '', end_date: '' }],
+      notes: ''
+    });
+    fetchPrescriptions();
+    setTimeout(() => setMessage({ type: '', text: '' }), 5000);
+  } catch (error) {
+    console.error('Error creating prescription:', error);
+    setMessage({ type: 'error', text: 'Failed to create prescription' });
+    setTimeout(() => setMessage({ type: '', text: '' }), 5000);
+  }
+};
 
   const addMedication = () => {
     setPrescriptionForm(prev => ({

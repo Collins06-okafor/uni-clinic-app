@@ -37,8 +37,13 @@ class AuthController extends Controller
                 }
             ],
             'password' => 'required|string|min:8|confirmed',
-            'role' => 'required|in:student,doctor,clinical_staff,academic_staff,admin',
-            'phone' => 'nullable|string|max:20',
+            'role' => 'required|in:student,academic_staff',
+            'phone_number' => [
+                'nullable',
+                'string',
+                'max:15',
+                'regex:/^\+[1-9]\d{1,14}$/', // E.164 format validation
+            ],
         ];
 
         // Role-specific validation rules
@@ -50,21 +55,6 @@ class AuthController extends Controller
                 ]);
                 break;
 
-            case 'doctor':
-                $rules = array_merge($rules, [
-                    'medical_license_number' => 'required|string|unique:users,medical_license_number|max:50',
-                    'specialization' => 'required|string|max:100',
-                    'staff_no' => 'nullable|string|unique:users,staff_no|max:20',
-                ]);
-                break;
-
-            case 'clinical_staff':
-                $rules = array_merge($rules, [
-                    'staff_no' => 'required|string|unique:users,staff_no|max:20',
-                    'department' => 'required|string|max:100',
-                ]);
-                break;
-
             case 'academic_staff':
                 $rules = array_merge($rules, [
                     'staff_no' => 'required|string|unique:users,staff_no|max:20',
@@ -72,14 +62,16 @@ class AuthController extends Controller
                     'department' => 'nullable|string|max:100',
                 ]);
                 break;
-
-            case 'admin':
-                $rules = array_merge($rules, [
-                    'staff_no' => 'required|string|unique:users,staff_no|max:20',
+                
+            // Remove doctor, clinical_staff, and admin cases completely
+            default:
+                // Reject any other roles
+                throw ValidationException::withMessages([
+                    'role' => ['Selected role is not allowed for registration.'],
                 ]);
-                break;
         }
 
+        // Validate the request with the complete rules
         $validated = $request->validate($rules);
 
         // Example: Department remapping
@@ -93,7 +85,7 @@ class AuthController extends Controller
             'email' => $validated['email'],
             'password' => bcrypt($validated['password']),
             'role' => $validated['role'],
-            'phone' => $validated['phone'] ?? null,
+            'phone_number' => $validated['phone_number'] ?? null,
             'status' => 'active',
             'email_verified_at' => now(),
         ];
@@ -119,45 +111,46 @@ class AuthController extends Controller
     }
 
     /**
-     * Login (Email-only version)
-     */
-    public function login(Request $request)
-    {
-        $request->validate([
-            'email' => 'required|email',
-            'password' => 'required|string',
-        ]);
+ * Login (Email-only version)
+ */
+public function login(Request $request)
+{
+    $request->validate([
+        'email' => 'required|email',
+        'password' => 'required|string',
+    ]);
 
-        $user = User::where('email', $request->email)->first();
+    $user = User::where('email', $request->email)->first();
 
-        if (!$user) {
-            throw ValidationException::withMessages([
-                'email' => ['No account found for this email.'],
-            ]);
-        }
-
-        if ($user->status !== 'active') {
-            throw ValidationException::withMessages([
-                'email' => ['Account is not active. Please verify your email or contact admin.'],
-            ]);
-        }
-
-        if (!Hash::check($request->password, $user->password)) {
-            throw ValidationException::withMessages([
-                'password' => ['The provided password is incorrect.'],
-            ]);
-        }
-
-        Auth::login($user);
-        $token = $user->createToken('api-token')->plainTextToken;
-
-        return response()->json([
-            'message' => 'Login successful',
-            'user' => $user->getFormattedUserData(),
-            'token' => $token,
-            'permissions' => $this->getUserPermissions($user),
+    if (!$user) {
+        throw ValidationException::withMessages([
+            'email' => ['No account found for this email.'],
         ]);
     }
+
+    if ($user->status !== 'active') {
+        throw ValidationException::withMessages([
+            'email' => ['Account is not active. Please verify your email or contact admin.'],
+        ]);
+    }
+
+    if (!Hash::check($request->password, $user->password)) {
+        throw ValidationException::withMessages([
+            'password' => ['Incorrect password.'],
+        ]);
+    }
+
+    Auth::login($user);
+    $token = $user->createToken('api-token')->plainTextToken;
+
+    return response()->json([
+        'message' => 'Login successful',
+        'user' => $user->getFormattedUserData(),
+        'role' => $user->role, // ✅ This works without Spatie
+        'token' => $token,
+        'permissions' => $this->getUserPermissions($user),
+    ]);
+}
 
     /**
      * Logout
@@ -256,6 +249,107 @@ class AuthController extends Controller
         ]);
     }
 
+
+/**
+ * Update user profile
+ */
+public function updateProfile(Request $request)
+{
+    try {
+        $user = $request->user();
+        
+        $userRules = [
+            'name' => 'sometimes|string|max:255',
+            'email' => 'sometimes|email|unique:users,email,' . $user->id,
+        ];
+        
+        $profileRules = [
+            'phone_number' => 'sometimes|nullable|string|max:20',
+            'date_of_birth' => 'sometimes|nullable|date|before:today',
+            'emergency_contact_name' => 'sometimes|nullable|string|max:255',
+            'emergency_contact_phone' => 'sometimes|nullable|string|max:20',
+            'allergies' => 'sometimes|nullable|string',
+            'has_known_allergies' => 'sometimes|boolean',
+            'allergies_uncertain' => 'sometimes|boolean',
+            'addictions' => 'sometimes|nullable|string',
+            'medical_history' => 'sometimes|nullable|string',
+            'profile_image' => 'sometimes|nullable|image|mimes:jpeg,png,jpg,gif|max:2048', // ✅ Changed to handle file uploads
+        ];
+        
+        // Add role-specific rules
+        switch ($user->role) {
+            case 'student':
+                $userRules['department'] = 'sometimes|string|max:100';
+                break;
+            case 'doctor':
+                $userRules['specialization'] = 'sometimes|string|max:100';
+                break;
+            case 'clinical_staff':
+            case 'academic_staff':
+                $userRules['department'] = 'sometimes|string|max:100';
+                break;
+        }
+        
+        // Validate user data
+        $userValidated = $request->validate($userRules);
+        
+        // Validate profile data
+        $profileValidated = $request->validate($profileRules);
+        
+        // Handle profile image upload
+        if ($request->hasFile('profile_image')) {
+            $image = $request->file('profile_image');
+            $imageName = time() . '_' . $user->id . '.' . $image->getClientOriginalExtension();
+            
+            // Store in public/storage/profile_images directory
+            $imagePath = $image->storeAs('profile_images', $imageName, 'public');
+            
+            // Delete old image if exists
+            if ($user->profile && $user->profile->profile_image) {
+                \Storage::disk('public')->delete($user->profile->profile_image);
+            }
+            
+            $profileValidated['profile_image'] = $imagePath;
+        }
+        
+        // Update user
+        $user->update($userValidated);
+        
+        // Update or create profile
+        if ($user->profile) {
+            $user->profile->update($profileValidated);
+        } else {
+            $user->profile()->create($profileValidated);
+        }
+        
+        // Load fresh data with profile
+        $user->load('profile');
+        
+        // Add full image URL for frontend
+        if ($user->profile && $user->profile->profile_image) {
+            $user->profile->profile_image_url = asset('storage/' . $user->profile->profile_image);
+        }
+        
+        return response()->json([
+            'message' => 'Profile updated successfully',
+            'user' => $user->makeHidden(['password']),
+            'profile' => $user->profile
+        ]);
+        
+    } catch (\Illuminate\Validation\ValidationException $e) {
+        return response()->json([
+            'message' => 'Validation failed',
+            'errors' => $e->errors()
+        ], 422);
+    } catch (\Exception $e) {
+        \Log::error('Profile update error: ' . $e->getMessage());
+        return response()->json([
+            'message' => 'Failed to update profile',
+            'error' => 'An unexpected error occurred'
+        ], 500);
+    }
+}
+
     /**
      * Get user permissions based on role
      */
@@ -273,23 +367,17 @@ class AuthController extends Controller
                 'cancel_appointments',
                 'update_emergency_contact'
             ],
-
-            'doctor' => [
-                'view_own_profile', 'update_own_profile', 'view_patients',
-                'manage_patients', 'view_medical_records', 'create_medical_records', 'prescribe_medication'
-            ],
-            'clinical_staff' => [
-                'view_own_profile', 'update_own_profile', 'view_patients',
-                'update_patient_info', 'schedule_appointments', 'view_medical_records'
-            ],
             'academic_staff' => [
-                'view_own_profile', 'update_own_profile', 'manage_courses',
-                'view_students', 'grade_assignments', 'create_announcements'
+                'view_own_profile', 
+                'update_own_profile', 
+                'request_appointments', 
+                'view_appointment_history', 
+                'reschedule_appointments',
+                'view_doctor_availability', 
+                'view_medical_history', 
+                'cancel_appointments'
             ],
-            'admin' => [
-                'full_access', 'manage_users', 'manage_roles',
-                'view_system_logs', 'manage_settings'
-            ],
+            // Remove doctor, clinical_staff, and admin permissions
         ];
 
         return $permissions[$user->role] ?? [];
