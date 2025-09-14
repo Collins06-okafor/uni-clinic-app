@@ -1,0 +1,50 @@
+/* Simple page transitions */
+.page-container {
+  animation: fadeSlideIn 0.4s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+}
+
+.page-container.transitioning {
+  opacity: 0;
+  transform: translateY(10px);
+}
+
+@keyframes fadeSlideIn {
+  from {
+    opacity: 0;
+    transform: translateY(20px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+/* Enhanced transitions for your login/register cards */
+.wehealth-container,
+.wehealth-register-container {
+  animation: slideUpFade 0.5s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+}
+
+@keyframes slideUpFade {
+  from {
+    opacity: 0;
+    transform: translateY(30px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Smooth link transitions */
+.signup-link,
+.register-signin-link,
+.register-signin-section-link {
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+}
+
+.signup-link:hover,
+.register-signin-link:hover,
+.register-signin-section-link:hover {
+  transform: translateY(-1px);
+}

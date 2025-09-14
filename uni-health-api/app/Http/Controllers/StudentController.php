@@ -63,171 +63,293 @@ class StudentController extends Controller
     }
 
     /**
-     * Get student's appointments
-     */
-    public function getAppointments(Request $request): JsonResponse
-    {
-        $user = $request->user();
-        $status = $request->get('status', 'all');
-
-        $query = Appointment::where('patient_id', $user->id);
-
-        // Filter by status
-        switch ($status) {
-            case 'upcoming':
-                $query->where('date', '>=', now()->toDateString())
-                      ->whereNotIn('status', ['cancelled', 'completed']);
-                break;
-            case 'past':
-                $query->where('date', '<', now()->toDateString())
-                      ->orWhere('status', 'completed');
-                break;
-            case 'cancelled':
-                $query->where('status', 'cancelled');
-                break;
-        }
-
-        $appointments = $query->with(['doctor:id,name,specialization,phone'])
-                             ->orderBy('date', 'desc')
-                             ->orderBy('time', 'desc')
-                             ->get();
-
-        return response()->json([
-            'appointments' => $appointments->map(function ($appt) {
-                return [
-                    'id' => $appt->id,
-                    'date' => $appt->date,
-                    'time' => $appt->time,
-                    'doctor' => $appt->doctor->name ?? 'N/A',
-                    'status' => $appt->status,
-                    'reason' => $appt->reason,
-                    'notes' => $appt->notes
-                ];
-            }),
-            'summary' => [
-                'total' => $appointments->count(),
-                'upcoming' => $appointments->where('date', '>=', now()->toDateString())->where('status', '!=', 'cancelled')->count(),
-                'completed' => $appointments->where('status', 'completed')->count(),
-                'cancelled' => $appointments->where('status', 'cancelled')->count()
-            ]
-        ]);
-    }
-
-   /**
- * Schedule a new appointment (supports specialization or doctor_id)
+ * Get user profile data
  */
-public function scheduleAppointment(Request $request): JsonResponse
+public function getProfile(Request $request): JsonResponse
 {
     try {
-        // Validate inputs
-        $validated = $request->validate([
-            'specialization' => 'nullable|string|exists:users,specialization', // optional, but must exist in DB if sent
-            'doctor_id' => 'nullable|exists:users,id',
-            'date' => 'required|date|after_or_equal:today',
-            'time' => 'required|date_format:H:i',
-            'reason' => 'required|string|max:500'
-        ]);
-
-        // Ensure at least one is provided
-        if (empty($validated['doctor_id']) && empty($validated['specialization'])) {
-            return response()->json([
-                'message' => 'Either doctor_id or specialization must be provided',
-                'errors' => [
-                    'doctor_id' => ['Either doctor_id or specialization is required'],
-                    'specialization' => ['Either doctor_id or specialization is required']
-                ]
-            ], 422);
-        }
-
-        // If specialization provided, pick a doctor
-        if (!empty($validated['specialization']) && empty($validated['doctor_id'])) {
-            $doctor = User::where('specialization', $validated['specialization'])
-                ->where('role', User::ROLE_DOCTOR)
-                ->first();
-
-            if (!$doctor) {
-                return response()->json([
-                    'message' => 'No doctor found with the given specialization',
-                    'errors' => ['specialization' => ['No available doctor matches this specialization']]
-                ], 422);
-            }
-
-            $validated['doctor_id'] = $doctor->id;
-        }
-
-        // Check if user already has an appointment that day
-        $existingUserAppointment = Appointment::where('patient_id', $request->user()->id)
-            ->where('date', $validated['date'])
-            ->whereIn('status', ['scheduled', 'confirmed'])
-            ->first();
-
-        if ($existingUserAppointment) {
-            return response()->json([
-                'message' => 'You already have an appointment scheduled for this date',
-                'errors' => ['date' => ['Only one appointment per day is allowed']]
-            ], 422);
-        }
-
-        // Verify doctor exists and has doctor role
-        $doctor = User::where('id', $validated['doctor_id'])
-            ->where('role', User::ROLE_DOCTOR)
-            ->first();
-
-        if (!$doctor) {
-            return response()->json([
-                'message' => 'Selected doctor not found or invalid',
-                'errors' => ['doctor_id' => ['Selected doctor is invalid']]
-            ], 422);
-        }
-
-        // Check for time slot availability
-        $existingDoctorAppointment = Appointment::where('doctor_id', $validated['doctor_id'])
-            ->where('date', $validated['date'])
-            ->where('time', $validated['time'])
-            ->whereIn('status', ['scheduled', 'confirmed'])
-            ->first();
-
-        if ($existingDoctorAppointment) {
-            return response()->json([
-                'message' => 'Doctor is not available at this time',
-                'errors' => ['time' => ['This time slot is already booked']]
-            ], 422);
-        }
-
-        // Create appointment
-        $appointment = Appointment::create([
-            'patient_id' => $request->user()->id,
-            'doctor_id' => $validated['doctor_id'],
-            'date' => $validated['date'],
-            'time' => $validated['time'],
-            'reason' => $validated['reason'],
-            'status' => 'pending'
-        ]);
-
-        $appointment->load('doctor');
-
+        $user = $request->user();
+        
         return response()->json([
-            'message' => 'Appointment scheduled successfully',
-            'appointment' => [
-                'id' => $appointment->id,
-                'date' => $appointment->date,
-                'time' => $appointment->time,
-                'doctor' => $appointment->doctor->name,
-                'reason' => $appointment->reason,
-                'status' => $appointment->status
-            ]
-        ], 201);
+            'student_id' => $user->student_id,
+            'name' => $user->name,
+            'email' => $user->email,
+            'department' => $user->department,
+            'avatar_url' => $user->avatar_url,
+            'allergies' => $user->allergies,
+            'has_known_allergies' => $user->has_known_allergies ?? false,
+            'allergies_uncertain' => $user->allergies_uncertain ?? false,
+            'addictions' => $user->addictions,
+            'phone_number' => $user->phone,
+            'date_of_birth' => $user->date_of_birth,
+            'emergency_contact_name' => $user->emergency_contact_name,
+            'emergency_contact_phone' => $user->emergency_contact_phone,
+            'medical_history' => $user->medical_history
+        ]);
+        
+    } catch (\Exception $e) {
+        \Log::error('Get profile error: ' . $e->getMessage());
+        
+        return response()->json([
+            'message' => 'Profile not found'
+        ], 404);
+    }
+}
 
+// Add this method to StudentController
+private function isProfileComplete($user): bool
+{
+    $requiredFields = [
+        'name', 'email', 'department', 'phone', 
+        'date_of_birth', 'emergency_contact_name', 'emergency_contact_phone'
+    ];
+    
+    foreach ($requiredFields as $field) {
+        if (empty($user->$field)) {
+            return false;
+        }
+    }
+    
+    return true;
+}
+
+/**
+ * Handle profile image upload
+ */
+public function uploadAvatar(Request $request): JsonResponse
+{
+    try {
+        $request->validate([
+            'avatar' => 'required|image|mimes:jpeg,png,jpg,gif|max:2048'
+        ]);
+
+        $user = $request->user();
+        
+        if ($request->hasFile('avatar')) {
+            $file = $request->file('avatar');
+            
+            // Delete old avatar if exists
+            if ($user->avatar_url) {
+                $oldPath = str_replace('/storage/', '', $user->avatar_url);
+                if (Storage::disk('public')->exists($oldPath)) {
+                    Storage::disk('public')->delete($oldPath);
+                }
+            }
+            
+            // Store new avatar
+            $path = $file->store('avatars', 'public');
+            $avatarUrl = '/storage/' . $path;
+            
+            // Update user record
+            $user->update(['avatar_url' => $avatarUrl]);
+            
+            return response()->json([
+                'message' => 'Avatar uploaded successfully',
+                'avatar_url' => $avatarUrl
+            ]);
+        }
+        
+        return response()->json([
+            'message' => 'No file uploaded'
+        ], 400);
+        
     } catch (\Illuminate\Validation\ValidationException $e) {
         return response()->json([
             'message' => 'Validation failed',
             'errors' => $e->errors()
         ], 422);
     } catch (\Exception $e) {
-        \Log::error('Appointment scheduling error: ' . $e->getMessage());
+        \Log::error('Avatar upload error: ' . $e->getMessage());
         
         return response()->json([
-            'message' => 'Failed to schedule appointment',
+            'message' => 'Failed to upload avatar',
+            'error' => 'An unexpected error occurred'
+        ], 500);
+    }
+}
+
+    /**
+     * Get student's appointments
+     */
+public function getAppointments(Request $request): JsonResponse
+{
+    $user = $request->user();
+    $status = $request->get('status', 'all');
+
+    $query = Appointment::where('patient_id', $user->id);
+
+    // Filter by status
+    switch ($status) {
+        case 'upcoming':
+            $query->where('date', '>=', now()->toDateString())
+                  ->whereNotIn('status', ['cancelled', 'completed']);
+            break;
+        case 'past':
+            $query->where('date', '<', now()->toDateString())
+                  ->orWhere('status', 'completed');
+            break;
+        case 'cancelled':
+            $query->where('status', 'cancelled');
+            break;
+    }
+
+    $appointments = $query->with(['doctor:id,name,specialization,phone'])
+                         ->orderBy('date', 'desc')
+                         ->orderBy('time', 'desc')
+                         ->get();
+
+    return response()->json([
+        'appointments' => $appointments->map(function ($appt) {
+            return [
+                'id' => $appt->id,
+                'date' => $appt->date,
+                'time' => $appt->time,
+                'doctor' => $appt->doctor->name ?? 'To be assigned',
+                // FIX: Show appointment specialization first, fallback to doctor specialization
+                'specialty' => $appt->specialization ?? ($appt->doctor->specialization ?? 'General Medicine'),
+                'status' => $appt->status,
+                'reason' => $appt->reason,
+                'notes' => $appt->notes,
+                // FIX: Show correct urgency/priority (check both fields)
+                'urgency' => $appt->urgency ?? $appt->priority ?? 'normal'
+            ];
+        }),
+        'summary' => [
+            'total' => $appointments->count(),
+            'upcoming' => $appointments->where('date', '>=', now()->toDateString())->where('status', '!=', 'cancelled')->count(),
+            'completed' => $appointments->where('status', 'completed')->count(),
+            'cancelled' => $appointments->where('status', 'cancelled')->count()
+        ]
+    ]);
+}
+
+/**
+ * Schedule a new appointment (Debug Version)
+ */
+public function scheduleAppointment(Request $request): JsonResponse
+{
+    try {
+        // Log everything for debugging
+        \Log::info('=== APPOINTMENT REQUEST START ===');
+        \Log::info('Request data:', $request->all());
+        \Log::info('User:', $request->user()->toArray());
+
+        $validated = $request->validate([
+            'specialization' => 'nullable|string|max:100',
+            'doctor_id' => 'nullable|exists:users,id',
+            'date' => 'required|date|after_or_equal:today',
+            'time' => 'required|date_format:H:i',
+            'reason' => 'required|string|max:500',
+            'urgency' => 'sometimes|in:normal,high,urgent'
+        ]);
+
+        \Log::info('Validation passed:', $validated);
+
+        $validated['urgency'] = $validated['urgency'] ?? 'normal';
+
+        // Simple appointment creation without extra checks for now
+        $appointment = Appointment::create([
+            'patient_id' => $request->user()->id,
+            'doctor_id' => $validated['doctor_id'] ?? null,
+            'specialization' => $validated['specialization'] ?? null,
+            'date' => $validated['date'],
+            'time' => $validated['time'],
+            'reason' => $validated['reason'],
+            'urgency' => $validated['urgency'],
+            'priority' => $validated['urgency'],
+            'status' => 'pending',
+            'type' => 'student_request'
+        ]);
+
+        \Log::info('Appointment created:', $appointment->toArray());
+
+        return response()->json([
+            'message' => 'Appointment request submitted successfully.',
+            'appointment' => $appointment
+        ], 201);
+
+    } catch (\Illuminate\Validation\ValidationException $e) {
+        \Log::error('Validation error:', $e->errors());
+        return response()->json([
+            'message' => 'Validation failed',
+            'errors' => $e->errors()
+        ], 422);
+    } catch (\Exception $e) {
+        \Log::error('Appointment creation error:', [
+            'message' => $e->getMessage(),
+            'file' => $e->getFile(),
+            'line' => $e->getLine(),
+            'trace' => $e->getTraceAsString()
+        ]);
+        
+        return response()->json([
+            'message' => 'Failed to create appointment request',
+            'error' => $e->getMessage()
+        ], 500);
+    }
+}
+
+/**
+ * Cancel an existing appointment
+ */
+public function cancelAppointment(Request $request, Appointment $appointment): JsonResponse
+{
+    try {
+        // Check if user owns this appointment
+        if ($appointment->patient_id !== $request->user()->id) {
+            return response()->json([
+                'message' => 'Unauthorized to modify this appointment'
+            ], 403);
+        }
+
+        // Check if appointment can be cancelled
+        if (!in_array($appointment->status, ['pending', 'scheduled', 'assigned'])) {
+            return response()->json([
+                'message' => 'This appointment cannot be cancelled',
+                'errors' => ['status' => ['Appointment status does not allow cancellation']]
+            ], 422);
+        }
+
+        // Update only the status field (remove fields that might not exist)
+        $appointment->update([
+            'status' => 'cancelled'
+        ]);
+
+        // Try to load doctor relationship safely
+        try {
+            $appointment->load('doctor');
+        } catch (\Exception $e) {
+            \Log::warning('Could not load doctor relationship: ' . $e->getMessage());
+        }
+
+        // Try to broadcast the cancellation (don't fail if broadcasting fails)
+        try {
+            broadcast(new \App\Events\AppointmentStatusUpdated($appointment));
+        } catch (\Exception $e) {
+            \Log::warning('Failed to broadcast appointment cancellation: ' . $e->getMessage());
+        }
+
+        return response()->json([
+            'message' => 'Appointment cancelled successfully',
+            'appointment' => [
+                'id' => $appointment->id,
+                'date' => $appointment->date,
+                'time' => $appointment->time,
+                'doctor' => $appointment->doctor->name ?? 'N/A',
+                'status' => $appointment->status
+            ]
+        ]);
+
+    } catch (\Exception $e) {
+        \Log::error('Appointment cancellation error: ' . $e->getMessage());
+        \Log::error('Error details: ', [
+            'appointment_id' => $appointment->id ?? 'unknown',
+            'user_id' => $request->user()->id ?? 'unknown',
+            'stack_trace' => $e->getTraceAsString()
+        ]);
+        
+        return response()->json([
+            'message' => 'Failed to cancel appointment',
             'error' => 'An unexpected error occurred'
         ], 500);
     }
@@ -237,12 +359,13 @@ public function scheduleAppointment(Request $request): JsonResponse
     /**
      * Get available doctors and their time slots (simplified like AcademicStaffController)
      */
-    public function getDoctorAvailability(Request $request): JsonResponse
+public function getDoctorAvailability(Request $request): JsonResponse
 {
     try {
         $doctorId = $request->get('doctor_id');
         
-        $query = User::where('role', User::ROLE_DOCTOR)
+        // FIX: Use string instead of constant
+        $query = User::where('role', 'doctor') // Use string instead of User::ROLE_DOCTOR
             ->where('status', 'active');
             
         if ($doctorId) {

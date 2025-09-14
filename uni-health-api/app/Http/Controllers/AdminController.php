@@ -7,6 +7,8 @@ use Illuminate\Http\JsonResponse;
 use App\Models\User;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Facades\Storage;
 
 class AdminController extends Controller
 {
@@ -313,7 +315,7 @@ public function getProfile()
             'phone' => $user->phone ?? '',
             'department' => $user->department ?? '',
             'bio' => $user->bio ?? '',
-            'avatar_url' => $user->avatar_url,
+            'avatar_url' => $user->avatar_url ? url($user->avatar_url) : null,
             'last_login' => $user->last_login,
             'created_at' => $user->created_at,
         ]);
@@ -378,7 +380,7 @@ public function getProfile()
         $filename = 'avatars/' . $user->id . '_' . time() . '.' . $file->getClientOriginalExtension();
         $path = $file->storeAs('avatars', $user->id . '_' . time() . '.' . $file->getClientOriginalExtension(), 'public');
 
-        $avatarUrl = '/storage/' . $path;
+        $avatarUrl = url('/storage/' . $path);
 
         $user->update(['avatar_url' => $avatarUrl]);
 

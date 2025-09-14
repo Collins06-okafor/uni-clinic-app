@@ -15,8 +15,12 @@ const ClinicalStaffDashboard = ({ user, onLogout }) => {
   const [showModal, setShowModal] = useState('');
   const [formData, setFormData] = useState({});
   const [loading, setLoading] = useState(false);
-  const [filters, setFilters] = useState({ status: 'all', priority: 'all', date: new Date().toISOString().split('T')[0] });
-  const [searchTerm, setSearchTerm] = useState('');
+// 2. UPDATE filters state initialization (around line 15)
+const [filters, setFilters] = useState({ 
+  status: 'all', 
+  priority: 'all' 
+  // Remove: date: new Date().toISOString().split('T')[0] 
+});  const [searchTerm, setSearchTerm] = useState('');
   const [dashboardData, setDashboardData] = useState({
     staff_member: {},
     today_overview: {},
@@ -220,21 +224,22 @@ const [availableDoctors, setAvailableDoctors] = useState([]);
     }
   };
 
-  // Load appointments - fix the endpoint
+  // 1. MODIFY loadAppointments function (around line 200)
 const loadAppointments = async () => {
   try {
     setLoading(true);
     console.log('Loading appointments with filters:', filters);
+    
+    // Remove date from params - only include status and priority
     const params = new URLSearchParams({
-      date: filters.date,
       status: filters.status,
       priority: filters.priority
+      // Remove: date: filters.date,
     }).toString();
     
-    // Changed from 'available-doctors' to 'appointments'
     const data = await api.get(`appointments?${params}`);
     console.log('Appointments data received:', data);
-    setAppointments(data.appointments || []); // Match backend response structure
+    setAppointments(data.appointments || []);
   } catch (error) {
     console.error('Error loading appointments:', error);
     setMessage({ type: 'error', text: `Failed to load appointments: ${error.message}` });
@@ -320,15 +325,13 @@ const loadDoctors = async () => {
     setLoading(true);
     console.log('Loading all doctors...');
     
-    // Get all doctors by calling the available doctors endpoint without date/time filters
-    const data = await api.get('available-doctors');
+    // Call the correct endpoint that matches your backend method
+    const data = await api.get('doctors'); // ✅ This calls getAllDoctors()
     console.log('Doctors data received:', data);
     
-    // Handle the response structure from getAvailableDoctors
-    if (data.available_doctors) {
-      setDoctors(data.available_doctors);
-    } else if (data.data) {
-      setDoctors(data.data);
+    // Handle the response structure from getAllDoctors
+    if (data.data) {
+      setDoctors(data.data); // Your backend returns { data: [...], total: N }
     } else {
       setDoctors([]);
     }
@@ -742,10 +745,10 @@ const loadAvailableDoctors = async (date, time) => {
 
   // Reload appointments when filters change
   useEffect(() => {
-    if (activeTab === 'appointments') {
-      loadAppointments();
-    }
-  }, [filters.status, filters.priority, filters.date]);
+  if (activeTab === 'appointments') {
+    loadAppointments();
+  }
+}, [filters.status, filters.priority]); 
 
   // Reload medications when date filter changes
   useEffect(() => {
@@ -993,69 +996,72 @@ const getAppointmentsByStatus = (status) => {
 
   // Appointments Management Component
   const AppointmentsManagement = () => (
-    <div className="card shadow-sm border-0" style={{ borderRadius: '1rem' }}>
-      <div className="card-header bg-gradient" style={{ background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' }}>
-        <h3 className="card-title text-white mb-0 d-flex align-items-center">
-          <Calendar size={24} className="me-2" />
-          Appointments Management
-        </h3>
-      </div>
-      <div className="card-body p-4">
-        {/* Filters */}
-        <div className="row g-3 mb-4">
-          <div className="col-md-3">
-            <label className="form-label fw-semibold">Date</label>
+  <div className="card shadow-sm border-0" style={{ borderRadius: '1rem' }}>
+    <div className="card-header bg-gradient" style={{ background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' }}>
+      <h3 className="card-title text-white mb-0 d-flex align-items-center">
+        <Calendar size={24} className="me-2" />
+        Appointments Management
+      </h3>
+    </div>
+    <div className="card-body p-4">
+      {/* MODIFIED Filters - Remove date filter */}
+      <div className="row g-3 mb-4">
+        {/* REMOVE this entire col-md-3 div for date filter
+        <div className="col-md-3">
+          <label className="form-label fw-semibold">Date</label>
+          <input
+            type="date"
+            value={filters.date}
+            onChange={(e) => setFilters({...filters, date: e.target.value})}
+            className="form-control"
+          />
+        </div>
+        */}
+        
+        <div className="col-md-4"> {/* Changed from col-md-3 to col-md-4 for better spacing */}
+          <label className="form-label fw-semibold">Status</label>
+          <select
+            value={filters.status}
+            onChange={(e) => setFilters({...filters, status: e.target.value})}
+            className="form-select"
+          >
+            <option value="all">All Statuses</option>
+            <option value="scheduled">Scheduled</option>
+            <option value="confirmed">Confirmed</option>
+            <option value="in_progress">In Progress</option>
+            <option value="completed">Completed</option>
+            <option value="cancelled">Cancelled</option>
+          </select>
+        </div>
+        <div className="col-md-4"> {/* Changed from col-md-3 to col-md-4 */}
+          <label className="form-label fw-semibold">Priority</label>
+          <select
+            value={filters.priority}
+            onChange={(e) => setFilters({...filters, priority: e.target.value})}
+            className="form-select"
+          >
+            <option value="all">All Priorities</option>
+            <option value="normal">Normal</option>
+            <option value="high">High</option>
+            <option value="urgent">Urgent</option>
+          </select>
+        </div>
+        <div className="col-md-4"> {/* Changed from col-md-3 to col-md-4 */}
+          <label className="form-label fw-semibold">Search</label>
+          <div className="input-group">
+            <span className="input-group-text">
+              <Search size={16} />
+            </span>
             <input
-              type="date"
-              value={filters.date}
-              onChange={(e) => setFilters({...filters, date: e.target.value})}
+              type="text"
+              placeholder="Search patients..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
               className="form-control"
             />
           </div>
-          <div className="col-md-3">
-            <label className="form-label fw-semibold">Status</label>
-            <select
-              value={filters.status}
-              onChange={(e) => setFilters({...filters, status: e.target.value})}
-              className="form-select"
-            >
-              <option value="all">All Statuses</option>
-              <option value="scheduled">Scheduled</option>
-              <option value="confirmed">Confirmed</option>
-              <option value="in_progress">In Progress</option>
-              <option value="completed">Completed</option>
-              <option value="cancelled">Cancelled</option>
-            </select>
-          </div>
-          <div className="col-md-3">
-            <label className="form-label fw-semibold">Priority</label>
-            <select
-              value={filters.priority}
-              onChange={(e) => setFilters({...filters, priority: e.target.value})}
-              className="form-select"
-            >
-              <option value="all">All Priorities</option>
-              <option value="normal">Normal</option>
-              <option value="high">High</option>
-              <option value="urgent">Urgent</option>
-            </select>
-          </div>
-          <div className="col-md-3">
-            <label className="form-label fw-semibold">Search</label>
-            <div className="input-group">
-              <span className="input-group-text">
-                <Search size={16} />
-              </span>
-              <input
-                type="text"
-                placeholder="Search patients..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="form-control"
-              />
-            </div>
-          </div>
         </div>
+      </div>
 
         {/* Quick filter buttons */}
         <div className="d-flex flex-wrap gap-2 mb-4">

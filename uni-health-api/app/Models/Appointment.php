@@ -30,6 +30,7 @@ class Appointment extends Model
         'doctor_id',
         'date',
         'time', // Consider adding if you need specific time
+        'type',
         'reason',
         'status',
         'priority',
@@ -43,7 +44,8 @@ class Appointment extends Model
      */
     protected $casts = [
         'date' => 'date',
-        'time' => 'datetime:H:i'  // Cast time properly
+        'time' => 'datetime:H:i',  // Cast time properly
+        'doctor_id' => 'integer'
     ];
 
     /**

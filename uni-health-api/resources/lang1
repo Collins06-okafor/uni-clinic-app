@@ -1,0 +1,162 @@
+<?php
+// resources/lang/en/messages.php
+return [
+    // Authentication
+    'login_successful' => 'Login successful',
+    'registration_successful' => 'Registration successful. Account is now active.',
+    'logout_successful' => 'Logout successful',
+    'unauthorized' => 'Unauthorized access',
+    
+    // Appointments
+    'appointment_created' => 'Appointment scheduled successfully',
+    'appointment_updated' => 'Appointment updated successfully',
+    'appointment_cancelled' => 'Appointment cancelled successfully',
+    'appointment_rescheduled' => 'Appointment rescheduled successfully',
+    'appointment_not_found' => 'Appointment not found',
+    'appointment_conflict' => 'Doctor is not available at this time',
+    'appointment_limit_reached' => 'You already have an appointment scheduled for this date',
+    
+    // Medical Records
+    'medical_record_created' => 'Medical record created successfully',
+    'medical_history_updated' => 'Medical history updated successfully',
+    'vital_signs_recorded' => 'Vital signs recorded successfully',
+    'medication_recorded' => 'Medication administration recorded successfully',
+    
+    // User Management
+    'profile_updated' => 'Profile updated successfully',
+    'user_created' => 'User created successfully',
+    'user_not_found' => 'User not found',
+    'invalid_credentials' => 'Invalid credentials provided',
+    
+    // Notifications
+    'welcome_patient' => 'Welcome to University Health Center',
+    'new_patient_registered' => 'New patient has registered',
+    'appointment_reminder' => 'You have an appointment tomorrow',
+    
+    // Validation
+    'validation_failed' => 'Validation failed',
+    'required_field' => 'This field is required',
+    'invalid_email' => 'Please provide a valid email address',
+    'invalid_phone' => 'Please provide a valid phone number',
+    'invalid_student_id' => 'Invalid student ID format',
+    
+    // Dashboard
+    'welcome_to_dashboard' => 'Welcome to :role Dashboard',
+    'today_overview' => 'Today\'s Overview',
+    'upcoming_appointments' => 'Upcoming Appointments',
+    'medical_history' => 'Medical History',
+    'patient_queue' => 'Patient Queue',
+    
+    // Departments
+    'computer_engineering' => 'Computer Engineering',
+    'mechanical_engineering' => 'Mechanical Engineering',
+    'electrical_engineering' => 'Electrical Engineering',
+    'medicine' => 'Medicine',
+    'psychology' => 'Psychology',
+    'mathematics' => 'Mathematics',
+    'physics' => 'Physics',
+    'chemistry' => 'Chemistry',
+    
+    // Medical Terms
+    'blood_pressure' => 'Blood Pressure',
+    'heart_rate' => 'Heart Rate',
+    'temperature' => 'Temperature',
+    'weight' => 'Weight',
+    'height' => 'Height',
+    'allergies' => 'Allergies',
+    'medications' => 'Medications',
+    'symptoms' => 'Symptoms',
+    'diagnosis' => 'Diagnosis',
+    'treatment' => 'Treatment',
+    
+    // Status
+    'active' => 'Active',
+    'inactive' => 'Inactive',
+    'pending' => 'Pending',
+    'scheduled' => 'Scheduled',
+    'confirmed' => 'Confirmed',
+    'completed' => 'Completed',
+    'cancelled' => 'Cancelled',
+    'in_progress' => 'In Progress',
+];
+
+// resources/lang/tr/messages.php
+return [
+    // Authentication
+    'login_successful' => 'Giriş başarılı',
+    'registration_successful' => 'Kayıt başarılı. Hesabınız artık aktif.',
+    'logout_successful' => 'Çıkış başarılı',
+    'unauthorized' => 'Yetkisiz erişim',
+    
+    // Appointments
+    'appointment_created' => 'Randevu başarıyla planlandı',
+    'appointment_updated' => 'Randevu başarıyla güncellendi',
+    'appointment_cancelled' => 'Randevu başarıyla iptal edildi',
+    'appointment_rescheduled' => 'Randevu başarıyla yeniden planlandı',
+    'appointment_not_found' => 'Randevu bulunamadı',
+    'appointment_conflict' => 'Doktor bu saatte müsait değil',
+    'appointment_limit_reached' => 'Bu tarih için zaten bir randevunuz var',
+    
+    // Medical Records
+    'medical_record_created' => 'Tıbbi kayıt başarıyla oluşturuldu',
+    'medical_history_updated' => 'Tıbbi geçmiş başarıyla güncellendi',
+    'vital_signs_recorded' => 'Vital bulgular başarıyla kaydedildi',
+    'medication_recorded' => 'İlaç uygulaması başarıyla kaydedildi',
+    
+    // User Management
+    'profile_updated' => 'Profil başarıyla güncellendi',
+    'user_created' => 'Kullanıcı başarıyla oluşturuldu',
+    'user_not_found' => 'Kullanıcı bulunamadı',
+    'invalid_credentials' => 'Geçersiz giriş bilgileri',
+    
+    // Notifications
+    'welcome_patient' => 'Üniversite Sağlık Merkezine Hoş Geldiniz',
+    'new_patient_registered' => 'Yeni hasta kaydoldu',
+    'appointment_reminder' => 'Yarın randevunuz var',
+    
+    // Validation
+    'validation_failed' => 'Doğrulama başarısız',
+    'required_field' => 'Bu alan zorunludur',
+    'invalid_email' => 'Lütfen geçerli bir e-posta adresi girin',
+    'invalid_phone' => 'Lütfen geçerli bir telefon numarası girin',
+    'invalid_student_id' => 'Geçersiz öğrenci numarası formatı',
+    
+    // Dashboard
+    'welcome_to_dashboard' => ':role Paneline Hoş Geldiniz',
+    'today_overview' => 'Bugünün Özeti',
+    'upcoming_appointments' => 'Yaklaşan Randevular',
+    'medical_history' => 'Tıbbi Geçmiş',
+    'patient_queue' => 'Hasta Kuyruğu',
+    
+    // Departments
+    'computer_engineering' => 'Bilgisayar Mühendisliği',
+    'mechanical_engineering' => 'Makine Mühendisliği',
+    'electrical_engineering' => 'Elektrik Mühendisliği',
+    'medicine' => 'Tıp',
+    'psychology' => 'Psikoloji',
+    'mathematics' => 'Matematik',
+    'physics' => 'Fizik',
+    'chemistry' => 'Kimya',
+    
+    // Medical Terms
+    'blood_pressure' => 'Tansiyon',
+    'heart_rate' => 'Nabız',
+    'temperature' => 'Ateş',
+    'weight' => 'Kilo',
+    'height' => 'Boy',
+    'allergies' => 'Alerjiler',
+    'medications' => 'İlaçlar',
+    'symptoms' => 'Belirtiler',
+    'diagnosis' => 'Teşhis',
+    'treatment' => 'Tedavi',
+    
+    // Status
+    'active' => 'Aktif',
+    'inactive' => 'Pasif',
+    'pending' => 'Bekliyor',
+    'scheduled' => 'Planlandı',
+    'confirmed' => 'Onaylandı',
+    'completed' => 'Tamamlandı',
+    'cancelled' => 'İptal Edildi',
+    'in_progress' => 'Devam Ediyor',
+];

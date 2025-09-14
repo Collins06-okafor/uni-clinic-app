@@ -15,26 +15,26 @@ use App\Models\Medication;
 class ClinicalStaffController extends Controller
 {
     /**
-     * Clinical staff dashboard with nursing and support overview
-     */
-    public function dashboard(Request $request): JsonResponse
+ * Clinical staff dashboard with nursing, support overview, and student requests
+ */
+public function dashboard(Request $request): JsonResponse
 {
     $user = $request->user();
     $today = now()->format('Y-m-d');
-    
+
     // Get today's appointments count by status
     $appointmentStats = Appointment::whereDate('date', $today)
         ->select('status', DB::raw('count(*) as count'))
         ->groupBy('status')
         ->pluck('count', 'status');
-        
-    // Get patient queue for today
+
+    // Get patient queue for today - FIX: Handle null doctors
     $patientQueue = Appointment::with(['patient', 'doctor'])
         ->whereDate('date', $today)
         ->orderBy('time')
         ->limit(10)
         ->get()
-        ->map(function($appointment) {
+        ->map(function ($appointment) {
             return [
                 'id' => $appointment->id,
                 'patient_name' => $appointment->patient->name,
@@ -43,9 +43,20 @@ class ClinicalStaffController extends Controller
                 'status' => $appointment->status,
                 'priority' => $appointment->priority,
                 'reason' => $appointment->reason,
-                'assigned_doctor' => $appointment->doctor->name
+                'assigned_doctor' => $appointment->doctor ? $appointment->doctor->name : 'Unassigned'
             ];
         });
+
+    // Count pending + under review student requests
+    $studentRequestsCount = Appointment::whereIn('status', ['pending', 'under_review'])
+        ->count();
+
+    // Get latest student requests (limit 5)
+    $studentRequests = Appointment::with(['patient'])
+        ->whereIn('status', ['pending', 'under_review'])
+        ->orderBy('created_at', 'desc')
+        ->limit(5)
+        ->get();
 
     return response()->json([
         'message' => 'Welcome to Clinical Staff Dashboard',
@@ -66,12 +77,110 @@ class ClinicalStaffController extends Controller
             'pending_tasks' => ($appointmentStats->get('pending', 0) + $appointmentStats->get('confirmed', 0)),
             'patients_seen' => $appointmentStats->get('completed', 0),
             'urgent_cases' => Appointment::whereDate('date', $today)
-                                ->where('priority', 'urgent')
-                                ->count(),
+                ->where('priority', 'urgent')
+                ->count(),
+            'pending_student_requests' => $studentRequestsCount,
         ],
         'patient_queue' => $patientQueue,
+        'student_requests' => $studentRequests,
     ]);
 }
+
+
+/**
+ * Assign student request to doctor
+ */
+public function assignStudentRequest(Request $request, $id): JsonResponse
+{
+    $validated = $request->validate([
+        'doctor_id' => 'required|exists:users,id',
+        'notes' => 'nullable|string|max:500'
+    ]);
+
+    $appointment = Appointment::findOrFail($id);
+    
+    // FIX: Preserve original reason
+    $updateData = [
+        'status' => 'assigned',
+        'doctor_id' => $validated['doctor_id'],
+        'assigned_at' => now()
+    ];
+    
+    // Only add notes if provided
+    if (!empty($validated['notes'])) {
+        $updateData['notes'] = $validated['notes'];
+    }
+    
+    $appointment->update($updateData);
+
+    // Broadcast the status change
+    try {
+        broadcast(new \App\Events\AppointmentStatusUpdated($appointment));
+    } catch (\Exception $e) {
+        \Log::warning('Failed to broadcast appointment assignment: ' . $e->getMessage());
+    }
+
+    return response()->json([
+        'message' => 'Student request assigned successfully',
+        'appointment' => $appointment->load(['patient', 'doctor'])
+    ]);
+}
+
+/**
+ * Approve student request
+ */
+public function approveStudentRequest(Request $request, $id): JsonResponse
+{
+    $validated = $request->validate([
+        'doctor_id' => 'required|exists:users,id',
+        'notes' => 'nullable|string|max:500'
+    ]);
+
+    $appointment = Appointment::findOrFail($id);
+    
+    // Fix: Don't overwrite reason, only update what we need
+    $appointment->status = 'scheduled';
+    $appointment->doctor_id = $validated['doctor_id'];
+    $appointment->approved_at = now();
+    
+    if (!empty($validated['notes'])) {
+        $appointment->notes = $validated['notes'];
+    }
+    
+    $appointment->save();
+
+    return response()->json([
+        'message' => 'Student request approved successfully',
+        'appointment' => $appointment->load(['patient', 'doctor'])
+    ]);
+}
+
+
+/**
+ * Reject student request
+ */
+public function rejectStudentRequest(Request $request, $id): JsonResponse
+{
+    $validated = $request->validate([
+        'rejection_reason' => 'required|string|max:500',
+        'notes' => 'nullable|string|max:500'
+    ]);
+
+    $appointment = Appointment::findOrFail($id);
+    
+    $appointment->update([
+        'status' => 'rejected',
+        'rejection_reason' => $validated['rejection_reason'],
+        'rejected_at' => now(),
+        'notes' => $validated['notes']
+    ]);
+
+    return response()->json([
+        'message' => 'Student request rejected',
+        'appointment' => $appointment->load(['patient'])
+    ]);
+}
+
 
 /**
  * Assign appointment to doctor
@@ -181,6 +290,12 @@ public function confirmAppointment(Request $request, $id): JsonResponse
     
     // Here you would typically send SMS/Email
     // For now, we'll just return success
+
+        // ✅ ADD BROADCASTING
+    broadcast(new \App\Events\DashboardStatsUpdated('clinical-staff', [
+        'confirmed_appointments' => Appointment::where('status', 'confirmed')->count(),
+        'pending_appointments' => Appointment::where('status', 'pending')->count()
+    ]));
     
     $confirmationMessage = $validated['custom_message'] ?? 
         "Your appointment on {$appointment->date} at {$appointment->time} with Dr. {$appointment->doctor->name} has been confirmed.";
@@ -200,6 +315,65 @@ public function confirmAppointment(Request $request, $id): JsonResponse
     ]);
 }
 
+// Add to ClinicalStaffController
+public function registerWalkInPatient(Request $request): JsonResponse
+{
+    $validated = $request->validate([
+        'student_id' => 'required|string',
+        'complaints' => 'required|string',
+        'urgency' => 'required|in:normal,urgent,emergency',
+        'walk_in_time' => 'required|date',
+    ]);
+
+    // Create immediate appointment or queue entry
+    $appointment = Appointment::create([
+        'patient_id' => $this->findOrCreatePatient($validated['student_id']),
+        'type' => 'walk_in',
+        'status' => 'waiting',
+        'priority' => $validated['urgency'],
+        'date' => now()->format('Y-m-d'),
+        'time' => now()->format('H:i'),
+        'reason' => $validated['complaints']
+    ]);
+
+    return response()->json([
+        'message' => 'Walk-in patient registered successfully',
+        'queue_number' => $this->generateQueueNumber(),
+        'estimated_wait_time' => $this->calculateWaitTime(),
+        'appointment' => $appointment
+    ]);
+}
+
+// Add to ClinicalStaffController
+public function getPatientQueue(Request $request): JsonResponse
+{
+    $date = $request->get('date', now()->format('Y-m-d'));
+    
+    $queue = Appointment::whereDate('date', $date)
+        ->whereIn('status', ['waiting', 'confirmed', 'in_progress'])
+        ->orderBy('priority', 'desc') // Emergency first
+        ->orderBy('created_at', 'asc') // Then FIFO
+        ->with(['patient', 'doctor'])
+        ->get()
+        ->map(function($appointment, $index) {
+            return [
+                'queue_position' => $index + 1,
+                'patient_name' => $appointment->patient->name,
+                'student_id' => $appointment->patient->student_id,
+                'type' => $appointment->type, // 'scheduled' or 'walk_in'
+                'priority' => $appointment->priority,
+                'estimated_wait_time' => $this->calculateWaitTime($index),
+                'status' => $appointment->status
+            ];
+        });
+
+    return response()->json([
+        'queue' => $queue,
+        'total_waiting' => $queue->count(),
+        'estimated_total_wait' => $queue->sum('estimated_wait_time')
+    ]);
+}
+
 /**
  * Get all doctors (for the doctors tab)
  */
@@ -207,7 +381,8 @@ public function getAllDoctors(Request $request): JsonResponse
 {
     $doctors = User::where('role', 'doctor')
         ->where('status', 'active')
-        ->select('id', 'name', 'email', 'phone', 'staff_no', 'department', 'specialty', 'status')
+        // Use 'specialization' instead of 'specialty'
+        ->select('id', 'name', 'email', 'phone', 'staff_no', 'department', 'specialization', 'status')
         ->get()
         ->map(function($doctor) {
             return [
@@ -218,7 +393,7 @@ public function getAllDoctors(Request $request): JsonResponse
                 'phone' => $doctor->phone,
                 'staff_no' => $doctor->staff_no,
                 'department' => $doctor->department,
-                'specialty' => $doctor->specialty,
+                'specialty' => $doctor->specialization, // Map 'specialization' to 'specialty' for frontend consistency
                 'status' => $doctor->status
             ];
         });
@@ -233,48 +408,56 @@ public function getAllDoctors(Request $request): JsonResponse
      * Get available doctors for appointment scheduling
      */
     public function getAvailableDoctors(Request $request): JsonResponse
-    {
-        $validated = $request->validate([
-            'date' => 'required|date|after_or_equal:today',
-            'time' => 'required|date_format:H:i',
-            'duration' => 'sometimes|integer|min:15|max:180',
-            'specialty' => 'sometimes|string|max:100'
-        ]);
+{
+    $validated = $request->validate([
+        'date' => 'required|date|after_or_equal:today',
+        'time' => 'required|date_format:H:i',
+        'duration' => 'sometimes|integer|min:15|max:180',
+        'specialization' => 'sometimes|string|max:100'
+    ]);
 
-        $date = $validated['date'];
-        $time = $validated['time'];
-        $duration = $validated['duration'] ?? 30; // Default 30 minutes
-        $specialty = $validated['specialty'] ?? null;
+    $date = $validated['date'];
+    $time = $validated['time'];
+    $duration = $validated['duration'] ?? 30;
+    $specialization = $validated['specialization'] ?? null;
 
-        // Calculate end time for the requested slot
-        $requestedStartTime = Carbon::parse("$date $time");
+    // FIX: Parse date and time separately, then combine them properly
+    try {
+        $requestedStartTime = Carbon::createFromFormat('Y-m-d H:i', "$date $time");
         $requestedEndTime = $requestedStartTime->copy()->addMinutes($duration);
+    } catch (\Exception $e) {
+        return response()->json([
+            'message' => 'Invalid date or time format',
+            'error' => $e->getMessage()
+        ], 400);
+    }
 
-        // Get all doctors
-        $doctorsQuery = User::where('role', 'doctor')
-            ->where('status', 'active');
+    // Get all doctors
+    $doctorsQuery = User::where('role', 'doctor')
+        ->where('status', 'active');
 
-        // Filter by specialty if provided
-        if ($specialty) {
-            $doctorsQuery->where('specialty', $specialty);
-        }
+    // Filter by specialization if provided
+    if ($specialization) {
+        $doctorsQuery->where('specialization', $specialization);
+    }
 
-        $doctors = $doctorsQuery->get();
+    $doctors = $doctorsQuery->get();
+    $availableDoctors = [];
 
-        $availableDoctors = [];
+    foreach ($doctors as $doctor) {
+        // Get doctor's appointments for the requested date
+        $existingAppointments = Appointment::where('doctor_id', $doctor->id)
+            ->whereDate('date', $date)
+            ->whereIn('status', ['scheduled', 'confirmed', 'in_progress'])
+            ->get();
 
-        foreach ($doctors as $doctor) {
-            // Get doctor's appointments for the requested date
-            $existingAppointments = Appointment::where('doctor_id', $doctor->id)
-                ->whereDate('date', $date)
-                ->whereIn('status', ['scheduled', 'confirmed', 'in_progress'])
-                ->get();
+        $isAvailable = true;
 
-            $isAvailable = true;
-
-            // Check for conflicts with existing appointments
-            foreach ($existingAppointments as $appointment) {
-                $existingStart = Carbon::parse($appointment->date . ' ' . $appointment->time);
+        // Check for conflicts with existing appointments
+        foreach ($existingAppointments as $appointment) {
+            try {
+                // FIX: Create Carbon instances more safely
+                $existingStart = Carbon::createFromFormat('Y-m-d H:i', $appointment->date . ' ' . $appointment->time);
                 $existingEnd = $existingStart->copy()->addMinutes($appointment->duration ?? 30);
 
                 // Check if there's an overlap
@@ -282,126 +465,250 @@ public function getAllDoctors(Request $request): JsonResponse
                     $isAvailable = false;
                     break;
                 }
+            } catch (\Exception $e) {
+                // If there's an error parsing appointment time, skip this appointment check
+                \Log::warning("Error parsing appointment time for appointment {$appointment->id}: " . $e->getMessage());
+                continue;
             }
+        }
 
-            // Check doctor's working hours (assuming 8 AM - 5 PM working hours)
-            $workingHoursStart = Carbon::parse("$date 08:00");
-            $workingHoursEnd = Carbon::parse("$date 17:00");
+        // FIX: Check doctor's working hours more safely
+        try {
+            $workingHoursStart = Carbon::createFromFormat('Y-m-d H:i', "$date 08:00");
+            $workingHoursEnd = Carbon::createFromFormat('Y-m-d H:i', "$date 17:00");
             
             if ($requestedStartTime->lt($workingHoursStart) || $requestedEndTime->gt($workingHoursEnd)) {
                 $isAvailable = false;
             }
+        } catch (\Exception $e) {
+            // If error with working hours, assume doctor is available during normal hours
+            \Log::warning("Error checking working hours for doctor {$doctor->id}: " . $e->getMessage());
+        }
 
-            if ($isAvailable) {
+        if ($isAvailable) {
+            $availableDoctors[] = [
+                'id' => $doctor->id,
+                'name' => $doctor->name,
+                'specialization' => $doctor->specialization,
+                'department' => $doctor->department,
+                'email' => $doctor->email,
+                'phone' => $doctor->phone,
+                'staff_no' => $doctor->staff_no,
+                'experience_years' => $doctor->experience_years ?? null,
+                'qualifications' => $doctor->qualifications ?? null,
+                'current_appointments_count' => $existingAppointments->count(),
+                'next_available_slot' => $this->getNextAvailableSlot($doctor->id, $date, $time),
+                'availability_status' => 'available'
+            ];
+        } else {
+            // If not available at requested time, still include with next available slot
+            $nextSlot = $this->getNextAvailableSlot($doctor->id, $date, $time);
+            if ($nextSlot) {
                 $availableDoctors[] = [
                     'id' => $doctor->id,
                     'name' => $doctor->name,
-                    'specialty' => $doctor->specialty,
+                    'specialization' => $doctor->specialization,
                     'department' => $doctor->department,
                     'email' => $doctor->email,
                     'phone' => $doctor->phone,
                     'staff_no' => $doctor->staff_no,
                     'experience_years' => $doctor->experience_years ?? null,
                     'qualifications' => $doctor->qualifications ?? null,
+                    'available_at_requested_time' => false,
                     'current_appointments_count' => $existingAppointments->count(),
-                    'next_available_slot' => $this->getNextAvailableSlot($doctor->id, $date, $time)
+                    'next_available_slot' => $nextSlot,
+                    'availability_status' => 'busy'
                 ];
-            } else {
-                // If not available at requested time, still include with next available slot
-                $nextSlot = $this->getNextAvailableSlot($doctor->id, $date, $time);
-                if ($nextSlot) {
-                    $availableDoctors[] = [
-                        'id' => $doctor->id,
-                        'name' => $doctor->name,
-                        'specialty' => $doctor->specialty,
-                        'department' => $doctor->department,
-                        'email' => $doctor->email,
-                        'phone' => $doctor->phone,
-                        'staff_no' => $doctor->staff_no,
-                        'experience_years' => $doctor->experience_years ?? null,
-                        'qualifications' => $doctor->qualifications ?? null,
-                        'available_at_requested_time' => false,
-                        'current_appointments_count' => $existingAppointments->count(),
-                        'next_available_slot' => $nextSlot
-                    ];
-                }
             }
         }
-
-        // Sort by availability at requested time first, then by appointment count
-        usort($availableDoctors, function($a, $b) {
-            $aAvailable = $a['available_at_requested_time'] ?? true;
-            $bAvailable = $b['available_at_requested_time'] ?? true;
-            
-            if ($aAvailable !== $bAvailable) {
-                return $bAvailable <=> $aAvailable; // Available first
-            }
-            
-            return $a['current_appointments_count'] <=> $b['current_appointments_count']; // Less busy first
-        });
-
-        return response()->json([
-            'requested_slot' => [
-                'date' => $date,
-                'time' => $time,
-                'duration' => $duration,
-                'specialty' => $specialty
-            ],
-            'available_doctors' => $availableDoctors,
-            'summary' => [
-                'total_doctors' => count($availableDoctors),
-                'available_at_requested_time' => count(array_filter($availableDoctors, function($doc) {
-                    return $doc['available_at_requested_time'] ?? true;
-                })),
-                'specialties_available' => array_unique(array_column($availableDoctors, 'specialty'))
-            ]
-        ]);
     }
+
+    // Sort by availability at requested time first, then by appointment count
+    usort($availableDoctors, function($a, $b) {
+        $aAvailable = $a['available_at_requested_time'] ?? true;
+        $bAvailable = $b['available_at_requested_time'] ?? true;
+        
+        if ($aAvailable !== $bAvailable) {
+            return $bAvailable <=> $aAvailable; // Available first
+        }
+        
+        return $a['current_appointments_count'] <=> $b['current_appointments_count']; // Less busy first
+    });
+
+    return response()->json([
+        'requested_slot' => [
+            'date' => $date,
+            'time' => $time,
+            'duration' => $duration,
+            'specialization' => $specialization
+        ],
+        'available_doctors' => $availableDoctors,
+        'summary' => [
+            'total_doctors' => count($availableDoctors),
+            'available_at_requested_time' => count(array_filter($availableDoctors, function($doc) {
+                return $doc['available_at_requested_time'] ?? true;
+            })),
+            'specializations_available' => array_unique(array_column($availableDoctors, 'specialization'))
+        ]
+    ]);
+}
 
     /**
      * Get next available slot for a doctor
      */
     private function getNextAvailableSlot($doctorId, $date, $requestedTime): ?array
-    {
-        $startTime = Carbon::parse("$date $requestedTime");
-        $workingHoursEnd = Carbon::parse("$date 17:00");
-        
-        // Get all appointments for the doctor on this date
-        $appointments = Appointment::where('doctor_id', $doctorId)
-            ->whereDate('date', $date)
-            ->whereIn('status', ['scheduled', 'confirmed', 'in_progress'])
-            ->orderBy('time')
-            ->get();
+{
+    try {
+        $startTime = Carbon::createFromFormat('Y-m-d H:i', "$date $requestedTime");
+        $workingHoursEnd = Carbon::createFromFormat('Y-m-d H:i', "$date 17:00");
+    } catch (\Exception $e) {
+        \Log::warning("Error parsing time in getNextAvailableSlot: " . $e->getMessage());
+        return null;
+    }
+    
+    // Get all appointments for the doctor on this date
+    $appointments = Appointment::where('doctor_id', $doctorId)
+        ->whereDate('date', $date)
+        ->whereIn('status', ['scheduled', 'confirmed', 'in_progress'])
+        ->orderBy('time')
+        ->get();
 
-        $currentTime = $startTime->copy();
+    $currentTime = $startTime->copy();
+    
+    while ($currentTime->addMinutes(30)->lte($workingHoursEnd)) {
+        $slotEnd = $currentTime->copy()->addMinutes(30);
+        $isSlotFree = true;
         
-        while ($currentTime->addMinutes(30)->lte($workingHoursEnd)) {
-            $slotEnd = $currentTime->copy()->addMinutes(30);
-            $isSlotFree = true;
-            
-            foreach ($appointments as $appointment) {
-                $appointmentStart = Carbon::parse($appointment->date . ' ' . $appointment->time);
+        foreach ($appointments as $appointment) {
+            try {
+                $appointmentStart = Carbon::createFromFormat('Y-m-d H:i', $appointment->date . ' ' . $appointment->time);
                 $appointmentEnd = $appointmentStart->copy()->addMinutes($appointment->duration ?? 30);
                 
                 if ($currentTime->lt($appointmentEnd) && $slotEnd->gt($appointmentStart)) {
                     $isSlotFree = false;
-                    $currentTime = $appointmentEnd->copy()->subMinutes(30); // Jump to end of this appointment
+                    $currentTime = $appointmentEnd->copy()->subMinutes(30);
                     break;
                 }
-            }
-            
-            if ($isSlotFree) {
-                return [
-                    'date' => $date,
-                    'time' => $currentTime->format('H:i'),
-                    'available_duration' => 30
-                ];
+            } catch (\Exception $e) {
+                // Skip problematic appointments
+                \Log::warning("Error parsing appointment time in getNextAvailableSlot: " . $e->getMessage());
+                continue;
             }
         }
         
-        return null; // No available slots found for today
+        if ($isSlotFree) {
+            return [
+                'date' => $date,
+                'time' => $currentTime->format('H:i'),
+                'available_duration' => 30
+            ];
+        }
+    }
+    
+    return null; // No available slots found for today
+}
+
+
+/**
+ * Get walk-in patients for today
+ */
+public function getWalkInPatients(Request $request): JsonResponse
+{
+    $date = $request->get('date', now()->format('Y-m-d'));
+    
+    $patients = Appointment::where('type', 'walk_in')
+        ->whereDate('date', $date)
+        ->with(['patient'])
+        ->orderBy('created_at', 'asc')
+        ->get()
+        ->map(function($appointment, $index) {
+            return [
+                'id' => $appointment->id,
+                'patient_name' => $appointment->patient->name,
+                'student_id' => $appointment->patient->student_id,
+                'complaints' => $appointment->reason,
+                'urgency' => $appointment->priority,
+                'walk_in_time' => $appointment->created_at->toISOString(),
+                'queue_number' => $index + 1,
+                'estimated_wait_time' => ($index * 15), // 15 min per patient
+                'status' => $appointment->status
+            ];
+        });
+
+    return response()->json([
+        'patients' => $patients,
+        'next_queue_number' => $patients->count() + 1
+    ]);
+}
+
+public function createWalkInPatient(Request $request): JsonResponse
+{
+    $validated = $request->validate([
+        'student_id' => 'required|string',
+        'patient_name' => 'sometimes|string',
+        'complaints' => 'required|string',
+        'urgency' => 'required|in:normal,urgent,emergency',
+        'notes' => 'sometimes|string'
+    ]);
+
+    // Find or create patient
+    $patient = User::where('student_id', $validated['student_id'])->first();
+    if (!$patient) {
+        $patient = User::create([
+            'student_id' => $validated['student_id'],
+            'name' => $validated['patient_name'] ?? 'Walk-in Patient ' . $validated['student_id'],
+            'role' => 'student',
+            'email' => $validated['student_id'] . '@walkin.placeholder.edu',
+            'password' => bcrypt('temporary123'),
+            'email_verified_at' => now(),
+        ]);
     }
 
+    // Create walk-in appointment
+    $appointment = Appointment::create([
+        'patient_id' => $patient->id,
+        'doctor_id' => null,  // Explicitly set to null for walk-ins
+        'type' => 'walk_in',
+        'status' => 'waiting',
+        'priority' => $validated['urgency'],
+        'date' => now()->format('Y-m-d'),
+        'time' => now()->format('H:i'),
+        'reason' => $validated['complaints']
+    ]);
+
+    return response()->json([
+        'message' => 'Walk-in patient registered successfully',
+        'patient' => [
+            'id' => $appointment->id,
+            'patient_name' => $patient->name,
+            'student_id' => $patient->student_id,
+            'complaints' => $appointment->reason,
+            'urgency' => $appointment->priority,
+            'walk_in_time' => $appointment->created_at->toISOString(),
+            'queue_number' => Appointment::where('type', 'walk_in')->whereDate('date', now())->count(),
+            'estimated_wait_time' => 15,
+            'status' => $appointment->status
+        ]
+    ]);
+}
+
+/**
+ * Update walk-in patient status
+ */
+public function updateWalkInPatientStatus(Request $request, $id): JsonResponse
+{
+    $validated = $request->validate([
+        'status' => 'required|in:waiting,called,in_progress,completed'
+    ]);
+
+    $appointment = Appointment::findOrFail($id);
+    $appointment->update(['status' => $validated['status']]);
+
+    return response()->json([
+        'message' => 'Patient status updated successfully',
+        'appointment' => $appointment
+    ]);
+}
     /**
      * Get patients assigned to clinical staff
      */
@@ -492,35 +799,35 @@ public function getAllDoctors(Request $request): JsonResponse
      * Get appointments for clinical staff
      */
     public function getAppointments(Request $request): JsonResponse
-    {
-        $date = $request->get('date', now()->format('Y-m-d'));
-        $status = $request->get('status', 'all');
+{
+    $date = $request->get('date', now()->format('Y-m-d'));
+    $status = $request->get('status', 'all');
+    
+    $query = Appointment::with(['patient', 'doctor'])
+        ->whereDate('date', $date);
         
-        $query = Appointment::with(['patient', 'doctor'])
-            ->whereDate('date', $date);
-            
-        if ($status !== 'all') {
-            $query->where('status', $status);
-        }
-        
-        $appointments = $query->get()->map(function($appointment) {
-            return [
-                'id' => $appointment->id,
-                'date' => $appointment->date,
-                'time' => $appointment->time,
-                'duration' => $appointment->duration,
-                'patient' => [
-                    'name' => $appointment->patient->name,
-                    'student_id' => $appointment->patient->student_id,
-                    'department' => $appointment->patient->department
-                ],
-                'type' => $appointment->type,
-                'doctor' => $appointment->doctor->name,
-                'status' => $appointment->status,
-                'room' => $appointment->room,
-                'notes' => $appointment->notes
-            ];
-        });
+    if ($status !== 'all') {
+        $query->where('status', $status);
+    }
+    
+    $appointments = $query->get()->map(function($appointment) {
+        return [
+            'id' => $appointment->id,
+            'date' => $appointment->date,
+            'time' => $appointment->time,
+            'duration' => $appointment->duration,
+            'patient' => [
+                'name' => $appointment->patient->name,
+                'student_id' => $appointment->patient->student_id,
+                'department' => $appointment->patient->department
+            ],
+            'type' => $appointment->type,
+            'doctor' => $appointment->doctor ? $appointment->doctor->name : 'Unassigned', // FIX THIS LINE
+            'status' => $appointment->status,
+            'room' => $appointment->room,
+            'notes' => $appointment->notes
+        ];
+    });
         
         return response()->json([
             'appointments' => $appointments,
@@ -535,9 +842,68 @@ public function getAllDoctors(Request $request): JsonResponse
     }
 
     /**
+ * Get student appointment requests for clinical staff to review
+ */
+public function getStudentRequests(Request $request): JsonResponse
+{
+    try {
+        $status = $request->get('status', 'all');
+        
+        $query = Appointment::with(['patient', 'doctor'])
+            ->whereIn('status', ['pending', 'under_review', 'approved', 'assigned', 'scheduled']);
+            
+        if ($status !== 'all') {
+            $query->where('status', $status);
+        }
+        
+        $requests = $query->orderBy('created_at', 'desc')->get()->map(function($appointment) {
+            return [
+                'id' => $appointment->id,
+                'patient' => $appointment->patient ? [
+                    'name' => $appointment->patient->name,
+                    'student_id' => $appointment->patient->student_id,
+                    'department' => $appointment->patient->department
+                ] : null,
+                'doctor' => $appointment->doctor ? [
+                    'name' => $appointment->doctor->name,
+                    'specialization' => $appointment->doctor->specialization
+                ] : null,
+                'date' => $appointment->date,
+                'time' => $appointment->time,
+                'reason' => $appointment->reason,
+                'specialization' => $appointment->specialization, // Preserve specialization
+                'appointment_type' => $appointment->type,
+                'priority' => $appointment->priority ?? $appointment->urgency ?? 'normal', // Preserve priority/urgency
+                'urgency' => $appointment->urgency ?? $appointment->priority ?? 'normal', // Preserve urgency/priority
+                'status' => $appointment->status,
+                'requested_date' => $appointment->date,
+                'requested_time' => $appointment->time,
+                'message' => $appointment->reason,
+                'created_at' => $appointment->created_at,
+                'updated_at' => $appointment->updated_at
+            ];
+        });
+        
+        return response()->json([
+            'student_requests' => $requests,
+            'summary' => [
+                'total' => $requests->count(),
+                'pending' => $requests->where('status', 'pending')->count(),
+                'under_review' => $requests->where('status', 'under_review')->count(),
+                'approved' => $requests->where('status', 'approved')->count(),
+                'assigned' => $requests->where('status', 'assigned')->count(),
+            ]
+        ]);
+    } catch (\Exception $e) {
+        \Log::error('Error loading student requests: ' . $e->getMessage());
+        return response()->json(['message' => 'Failed to load student requests'], 500);
+    }
+}
+
+    /**
      * Schedule a new appointment
      */
-    public function scheduleAppointment(Request $request): JsonResponse
+    public function createAppointment(Request $request): JsonResponse
     {
         $validated = $request->validate([
             'patient_id' => 'required|exists:users,id',
@@ -712,8 +1078,17 @@ public function recordMedication(Request $request, $patientId): JsonResponse
         'created_by' => $request->user()->id
     ]);
     
+
+    // ✅ ADD BROADCASTING
+    broadcast(new \App\Events\DashboardStatsUpdated('medical-staff', [
+        'medications_administered_today' => MedicalRecord::where('type', 'medication')
+            ->whereDate('created_at', now())->count(),
+        'total_medical_records' => MedicalRecord::count()
+    ]));
+
+
     return response()->json([
-        'message' => 'Medication administration recorded successfully',
+        'message' => __('messages.medication_recorded'), // ✅ Localized
         'record' => $record->load(['patient', 'doctor', 'creator']),
     ], 201);
 }
@@ -937,10 +1312,11 @@ private function checkVitalSignsAlerts(array $vitals): array
    public function updateVitalSigns(Request $request, $patientId): JsonResponse
 {
     $validated = $request->validate([
+        'blood_pressure' => 'sometimes|string|max:20',  // ADD THIS
         'blood_pressure_systolic' => 'required|integer|min:60|max:250',
         'blood_pressure_diastolic' => 'required|integer|min:40|max:150',
         'heart_rate' => 'required|integer|min:30|max:200',
-        'temperature' => 'required|numeric|min:90|max:110',
+        'temperature' => 'required|numeric|min:30|max:45', // Fixed range for Celsius
         'temperature_unit' => 'required|in:F,C',
         'respiratory_rate' => 'nullable|integer|min:8|max:40',
         'oxygen_saturation' => 'nullable|integer|min:70|max:100',
@@ -959,6 +1335,14 @@ private function checkVitalSignsAlerts(array $vitals): array
         $doctorId = $todayAppointment ? $todayAppointment->doctor_id : null;
     }
 
+    if (isset($validated['blood_pressure']) && !isset($validated['blood_pressure_systolic'])) {
+    $bp = explode('/', $validated['blood_pressure']);
+    if (count($bp) === 2) {
+        $validated['blood_pressure_systolic'] = (int)$bp[0];
+        $validated['blood_pressure_diastolic'] = (int)$bp[1];
+    }
+}
+
     unset($validated['doctor_id']);
 
     $record = MedicalRecord::create([
@@ -973,7 +1357,7 @@ private function checkVitalSignsAlerts(array $vitals): array
     ]);
     
     return response()->json([
-        'message' => 'Vital signs recorded successfully',
+        'message' => __('messages.vital_signs_recorded'), // ✅ Localized
         'record' => $record->load(['patient', 'doctor']),
         'alerts' => $this->checkVitalSignsAlerts($validated)
     ], 201);

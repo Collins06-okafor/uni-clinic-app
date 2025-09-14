@@ -7,107 +7,168 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Password;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Validation\ValidationException;
+use App\Mail\PatientRegistrationConfirmation;
+use App\Services\NotificationService;
 
 class AuthController extends Controller
 {
     /**
-     * Register a new user with role-specific validation
-     */
-    public function register(Request $request)
-    {
-        $role = $request->input('role', 'student');
+ * Register a new user with role-specific validation
+ */
+public function register(Request $request)
+{
+    $role = $request->input('role', 'student');
 
-        // Base validation rules
-        $rules = [
-            'name' => 'required|string|max:255',
-            'email' => [
-                'required',
-                'email',
-                'unique:users,email',
-                function ($attribute, $value, $fail) use ($role) {
-                    // Only allow university domains for students & academic staff
-                    if (in_array($role, ['student', 'academic_staff'])) {
-                        $allowedDomains = ['university.edu', 'uni.edu', 'final.edu.tr', 'student.edu'];
-                        $domain = substr(strrchr($value, "@"), 1);
-                        if (!in_array($domain, $allowedDomains)) {
-                            $fail("Email must be from a university domain for {$role} role.");
-                        }
+    // Base validation rules
+    $rules = [
+        'name' => 'required|string|max:255',
+        'email' => [
+            'required',
+            'email',
+            'unique:users,email',
+            function ($attribute, $value, $fail) use ($role) {
+                // Only allow university domains for students & academic staff
+                if (in_array($role, ['student', 'academic_staff'])) {
+                    $allowedDomains = ['university.edu', 'uni.edu', 'final.edu.tr', 'student.edu'];
+                    $domain = substr(strrchr($value, "@"), 1);
+                    if (!in_array($domain, $allowedDomains)) {
+                        $fail("Email must be from a university domain for {$role} role.");
                     }
                 }
-            ],
-            'password' => 'required|string|min:8|confirmed',
-            'role' => 'required|in:student,academic_staff',
-            'phone_number' => [
-                'nullable',
-                'string',
-                'max:15',
-                'regex:/^\+[1-9]\d{1,14}$/', // E.164 format validation
-            ],
-        ];
+            }
+        ],
+        'password' => [
+            'required',
+            'string',
+            'min:8',
+            'confirmed',
+            'regex:/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).+$/' // At least one lowercase, uppercase, and number
+        ],
+        'role' => 'required|in:student,academic_staff',
+        'phone_number' => [
+            'nullable',
+            'string',
+            'max:15',
+            'regex:/^\+[1-9]\d{1,14}$/', // E.164 format validation
+        ],
+    ];
 
-        // Role-specific validation rules
-        switch ($role) {
-            case 'student':
-                $rules = array_merge($rules, [
-                    'student_id' => 'required|string|unique:users,student_id|max:20',
-                    'department' => 'required|string|max:100',
-                ]);
-                break;
+    // Role-specific validation rules
+    switch ($role) {
+        case 'student':
+            $rules = array_merge($rules, [
+                'student_id' => [
+                    'required',
+                    'string',
+                    'unique:users,student_id',
+                    'max:20',
+                    'regex:/^\d+$/' // Only numbers allowed
+                ],
+                'department' => 'required|string|max:100',
+            ]);
+            break;
 
-            case 'academic_staff':
-                $rules = array_merge($rules, [
-                    'staff_no' => 'required|string|unique:users,staff_no|max:20',
-                    'faculty' => 'required|string|max:100',
-                    'department' => 'nullable|string|max:100',
-                ]);
-                break;
-                
-            // Remove doctor, clinical_staff, and admin cases completely
-            default:
-                // Reject any other roles
-                throw ValidationException::withMessages([
-                    'role' => ['Selected role is not allowed for registration.'],
-                ]);
+        case 'academic_staff':
+            $rules = array_merge($rules, [
+                'staff_no' => 'required|string|unique:users,staff_no|max:20',
+                'faculty' => 'required|string|max:100',
+                'department' => 'nullable|string|max:100',
+            ]);
+            break;
+            
+        // Remove doctor, clinical_staff, and admin cases completely
+        default:
+            // Reject any other roles
+            throw ValidationException::withMessages([
+                'role' => ['Selected role is not allowed for registration.'],
+            ]);
+    }
+
+    // Validate the request with the complete rules
+    $validated = $request->validate($rules);
+
+    // Example: Department remapping
+    if (isset($validated['department']) && strtolower($validated['department']) === 'computer engineering') {
+        $validated['department'] = 'Computer Engineering';
+    }
+
+    // Create user
+    $userData = [
+        'name' => $validated['name'],
+        'email' => $validated['email'],
+        'password' => bcrypt($validated['password']),
+        'role' => $validated['role'],
+        'phone_number' => $validated['phone_number'] ?? null,
+        'preferred_language' => $request->header('X-Locale', 'en'),
+        'status' => 'active',
+        'email_verified_at' => now(),
+    ];
+
+    // Add role-specific fields
+    $roleFields = [
+        'student_id', 'department', 'medical_license_number',
+        'specialization', 'staff_no', 'faculty'
+    ];
+
+    foreach ($roleFields as $field) {
+        if (isset($validated[$field])) {
+            $userData[$field] = $validated[$field];
+        }
+    }
+
+    $user = User::create($userData);
+
+    // Add these lines to auto-login after registration
+    Auth::login($user);
+    $token = $user->createToken('api-token')->plainTextToken;
+
+    try {
+            $locale = $request->header('X-Locale', 'en');
+            $notificationService = new NotificationService();
+            
+            // Send registration confirmation
+            $notificationService->sendRegistrationConfirmation($user, $locale);
+            
+            // Notify clinical staff
+            $notificationService->notifyClinicalStaffNewPatient($user, $locale);
+            
+        } catch (\Exception $e) {
+            \Log::error('Registration notifications failed: ' . $e->getMessage(), [
+                'user_id' => $user->id,
+                'email' => $user->email,
+                'error' => $e->getMessage()
+            ]);
         }
 
-        // Validate the request with the complete rules
-        $validated = $request->validate($rules);
+    return response()->json([
+        'message' => __('messages.registration_successful'), // ✅ Localized
+        'user' => $user->getFormattedUserData(),
+        'token' => $token, // Add this line
+        'role' => $user->role, // Add this line
+        'permissions' => $this->getUserPermissions($user), // Add this line
+    ], 201);
+}
 
-        // Example: Department remapping
-        if (isset($validated['department']) && strtolower($validated['department']) === 'computer engineering') {
-            $validated['department'] = 'Computer Engineering';
-        }
+ /**
+     * ✅ ADD THIS HELPER METHOD
+     * Notify clinical staff of new patient registration
+     */
+    private function notifyClinicalStaff($newPatient, $locale)
+    {
+        $clinicalStaff = User::where('role', 'clinical_staff')
+            ->where('status', 'active')
+            ->get();
 
-        // Create user
-        $userData = [
-            'name' => $validated['name'],
-            'email' => $validated['email'],
-            'password' => bcrypt($validated['password']),
-            'role' => $validated['role'],
-            'phone_number' => $validated['phone_number'] ?? null,
-            'status' => 'active',
-            'email_verified_at' => now(),
-        ];
-
-        // Add role-specific fields
-        $roleFields = [
-            'student_id', 'department', 'medical_license_number',
-            'specialization', 'staff_no', 'faculty'
-        ];
-
-        foreach ($roleFields as $field) {
-            if (isset($validated[$field])) {
-                $userData[$field] = $validated[$field];
+        foreach ($clinicalStaff as $staff) {
+            try {
+                // You can create ClinicalStaffNewPatientNotification later
+                // Mail::to($staff->email)->send(new ClinicalStaffNewPatientNotification($newPatient, $locale));
+            } catch (\Exception $e) {
+                \Log::error('Clinical staff notification failed: ' . $e->getMessage());
             }
         }
-
-        $user = User::create($userData);
-
-        return response()->json([
-            'message' => 'Registration successful. Account is now active.',
-            'user' => $user->getFormattedUserData(),
-        ], 201);
     }
 
     /**
@@ -124,13 +185,13 @@ public function login(Request $request)
 
     if (!$user) {
         throw ValidationException::withMessages([
-            'email' => ['No account found for this email.'],
+            'email' => [__('messages.user_not_found')], // ✅ Localized
         ]);
     }
 
     if ($user->status !== 'active') {
         throw ValidationException::withMessages([
-            'email' => ['Account is not active. Please verify your email or contact admin.'],
+            'email' => [__('auth.account_not_active')], // ✅ Localized
         ]);
     }
 
@@ -144,7 +205,7 @@ public function login(Request $request)
     $token = $user->createToken('api-token')->plainTextToken;
 
     return response()->json([
-        'message' => 'Login successful',
+        'message' => __('messages.login_successful'), // ✅ Localized
         'user' => $user->getFormattedUserData(),
         'role' => $user->role, // ✅ This works without Spatie
         'token' => $token,
@@ -237,18 +298,30 @@ public function login(Request $request)
         ]);
     }
 
-    /**
-     * Get current user profile
-     */
-    public function profile(Request $request)
-    {
-        $user = $request->user();
-        return response()->json([
-            'user' => $user->getFormattedUserData(),
-            'permissions' => $this->getUserPermissions($user),
-        ]);
-    }
-
+/**
+ * Get current user profile
+ */
+public function profile(Request $request)
+{
+    $user = $request->user();
+    
+    return response()->json([
+        'student_id' => $user->student_id,
+        'name' => $user->name,
+        'email' => $user->email,
+        'department' => $user->department,
+        'avatar_url' => $user->avatar_url,
+        'allergies' => $user->allergies ?? '',
+        'has_known_allergies' => $user->has_known_allergies ?? false,
+        'allergies_uncertain' => $user->allergies_uncertain ?? false,
+        'addictions' => $user->addictions ?? '',
+        'phone_number' => $user->phone,
+        'date_of_birth' => $user->date_of_birth,
+        'emergency_contact_name' => $user->emergency_contact_name,
+        'emergency_contact_phone' => $user->emergency_contact_phone,
+        'medical_history' => $user->medical_history ?? ''
+    ]);
+}
 
 /**
  * Update user profile
@@ -258,89 +331,52 @@ public function updateProfile(Request $request)
     try {
         $user = $request->user();
         
-        $userRules = [
-            'name' => 'sometimes|string|max:255',
-            'email' => 'sometimes|email|unique:users,email,' . $user->id,
+        $validated = $request->validate([
+            'student_id' => 'sometimes|string|max:255',
+            'name' => 'required|string|max:255',
+            'email' => 'required|email|max:255|unique:users,email,' . $user->id,
+            'department' => 'required|string|max:255',
+            'avatar_url' => 'nullable|string',
+            'allergies' => 'nullable|string',
+            'has_known_allergies' => 'boolean',
+            'allergies_uncertain' => 'boolean',
+            'addictions' => 'nullable|string',
+            'phone_number' => 'required|string|max:255',
+            'date_of_birth' => 'required|date|before:today',
+            'emergency_contact_name' => 'required|string|max:255',
+            'emergency_contact_phone' => 'required|string|max:255',
+            'medical_history' => 'nullable|string'
+        ]);
+
+        // Update all fields in the users table
+        $userFields = [
+            'name' => $validated['name'],
+            'email' => $validated['email'],
+            'department' => $validated['department'],
+            'avatar_url' => $validated['avatar_url'] ?? $user->avatar_url,
+            'allergies' => $validated['allergies'] ?? '',
+            'has_known_allergies' => $validated['has_known_allergies'] ?? false,
+            'allergies_uncertain' => $validated['allergies_uncertain'] ?? false,
+            'addictions' => $validated['addictions'] ?? '',
+            'phone' => $validated['phone_number'], // Map to 'phone' column
+            'date_of_birth' => $validated['date_of_birth'],
+            'emergency_contact_name' => $validated['emergency_contact_name'],
+            'emergency_contact_phone' => $validated['emergency_contact_phone'],
+            'medical_history' => $validated['medical_history'] ?? ''
         ];
-        
-        $profileRules = [
-            'phone_number' => 'sometimes|nullable|string|max:20',
-            'date_of_birth' => 'sometimes|nullable|date|before:today',
-            'emergency_contact_name' => 'sometimes|nullable|string|max:255',
-            'emergency_contact_phone' => 'sometimes|nullable|string|max:20',
-            'allergies' => 'sometimes|nullable|string',
-            'has_known_allergies' => 'sometimes|boolean',
-            'allergies_uncertain' => 'sometimes|boolean',
-            'addictions' => 'sometimes|nullable|string',
-            'medical_history' => 'sometimes|nullable|string',
-            'profile_image' => 'sometimes|nullable|image|mimes:jpeg,png,jpg,gif|max:2048', // ✅ Changed to handle file uploads
-        ];
-        
-        // Add role-specific rules
-        switch ($user->role) {
-            case 'student':
-                $userRules['department'] = 'sometimes|string|max:100';
-                break;
-            case 'doctor':
-                $userRules['specialization'] = 'sometimes|string|max:100';
-                break;
-            case 'clinical_staff':
-            case 'academic_staff':
-                $userRules['department'] = 'sometimes|string|max:100';
-                break;
+
+        if (isset($validated['student_id'])) {
+            $userFields['student_id'] = $validated['student_id'];
         }
-        
-        // Validate user data
-        $userValidated = $request->validate($userRules);
-        
-        // Validate profile data
-        $profileValidated = $request->validate($profileRules);
-        
-        // Handle profile image upload
-        if ($request->hasFile('profile_image')) {
-            $image = $request->file('profile_image');
-            $imageName = time() . '_' . $user->id . '.' . $image->getClientOriginalExtension();
-            
-            // Store in public/storage/profile_images directory
-            $imagePath = $image->storeAs('profile_images', $imageName, 'public');
-            
-            // Delete old image if exists
-            if ($user->profile && $user->profile->profile_image) {
-                \Storage::disk('public')->delete($user->profile->profile_image);
-            }
-            
-            $profileValidated['profile_image'] = $imagePath;
-        }
-        
-        // Update user
-        $user->update($userValidated);
-        
-        // Update or create profile
-        if ($user->profile) {
-            $user->profile->update($profileValidated);
-        } else {
-            $user->profile()->create($profileValidated);
-        }
-        
-        // Load fresh data with profile
-        $user->load('profile');
-        
-        // Add full image URL for frontend
-        if ($user->profile && $user->profile->profile_image) {
-            $user->profile->profile_image_url = asset('storage/' . $user->profile->profile_image);
-        }
+
+        $user->update($userFields);
+        $user->refresh();
         
         return response()->json([
             'message' => 'Profile updated successfully',
-            'user' => $user->makeHidden(['password']),
-            'profile' => $user->profile
+            'user' => $user->makeHidden(['password'])
         ]);
-        
-    } catch (\Illuminate\Validation\ValidationException $e) {
-        return response()->json([
-            'message' => 'Validation failed',
-            'errors' => $e->errors()
-        ], 422);
+
     } catch (\Exception $e) {
         \Log::error('Profile update error: ' . $e->getMessage());
         return response()->json([

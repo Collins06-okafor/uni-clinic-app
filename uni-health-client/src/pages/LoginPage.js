@@ -138,9 +138,9 @@ const handleLogin = async (e) => {
                 {loading ? 'Signing in...' : 'Log In'}
               </button>
 
-              <Link to="/forgot-password" className="forgot-password">
+              {/*<Link to="/forgot-password" className="forgot-password">
                 Don't access your account?
-              </Link>
+              </Link>*/}
             </form>
           </div>
         </div>

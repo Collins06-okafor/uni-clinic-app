@@ -35,7 +35,23 @@ class User extends Authenticatable
         'bio',
         'avatar_url',
         'last_login',
-        'medical_card_id'
+        'date_of_birth',
+        'emergency_contact_name',
+        'emergency_contact_phone',
+        'medical_history',
+        'allergies',
+        'has_known_allergies',
+        'allergies_uncertain',
+        'addictions',
+        'preferred_language', // ✅ ADD THIS LINE
+        'medical_card_id',
+        'years_of_experience',
+        'certifications',
+        'languages_spoken',
+        'available_days',
+        'working_hours_start',
+        'working_hours_end',
+        'is_available',
     ];
 
     /**
@@ -62,6 +78,10 @@ class User extends Authenticatable
         'password' => 'hashed',
         'last_login' => 'datetime',
         'permissions' => 'array',
+        'available_days' => 'array', // ✅ Add this
+        'has_known_allergies' => 'boolean',
+        'allergies_uncertain' => 'boolean',
+        'is_available' => 'boolean', // ✅ Add this
     ];
 
     /**
@@ -220,19 +240,6 @@ class User extends Authenticatable
     }
 
     
-// Add this relationship
-public function profile(): HasOne
-{
-    return $this->hasOne(Profile::class);
-}
-
-// Create profile when user is created
-protected static function booted()
-{
-    static::created(function ($user) {
-        $user->profile()->create();
-    });
-}
 
     /* ================== ATTRIBUTES ================== */
 

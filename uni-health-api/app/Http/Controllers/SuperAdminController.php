@@ -22,7 +22,8 @@ class SuperAdminController extends Controller
             'name' => $request->name,
             'email' => $request->email,
             'password' => Hash::make($request->password),
-            'role' => $request->role, // save role as string
+            'role' => $request->role,
+            'status' => 'active', // Set default status
         ]);
 
         return response()->json([
@@ -33,21 +34,27 @@ class SuperAdminController extends Controller
 
     // Delete a user
     public function destroy($id)
-{
-    $user = User::find($id);
+    {
+        $user = User::find($id);
 
-    if (!$user) {
-        return response()->json(['message' => 'User not found'], 404);
+        if (!$user) {
+            return response()->json(['message' => 'User not found'], 404);
+        }
+
+        $user->delete();
+        return response()->json(['message' => 'User deleted successfully']);
     }
-
-    $user->delete();
-    return response()->json(['message' => 'User deleted successfully']);
-}
 
     // List all privileged users
     public function index()
     {
-        $users = User::whereIn('role', ['doctor','admin','clinical_staff'])->get(['id','name','email','role']);
-        return response()->json($users);
+        try {
+            $users = User::whereIn('role', ['doctor','admin','clinical_staff'])
+                        ->get(['id','name','email','role','status','created_at']);
+            
+            return response()->json($users);
+        } catch (\Exception $e) {
+            return response()->json(['message' => 'Failed to fetch users'], 500);
+        }
     }
 }

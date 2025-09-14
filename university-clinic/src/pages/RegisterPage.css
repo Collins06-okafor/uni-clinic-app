@@ -1,0 +1,694 @@
+/* RegisterPage.css */
+.wehealth-register-container {
+  min-height: 100vh;
+  background: linear-gradient(135deg, #fbf7f7 0%, #d4b8b8 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+}
+
+.wehealth-register-card {
+  width: 100%;
+  max-width: 1200px;
+  min-height: 700px;
+  background: #ffffff;
+  border-radius: 24px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.1);
+  overflow: hidden;
+  display: flex;
+}
+
+/* Left Panel - Register Form */
+.register-panel {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding: 20px;
+  flex: 1.5; /* Bigger than login to accommodate more fields */
+  overflow-y: auto;
+  max-height: 700px;
+}
+
+.register-panel img {
+  display: block;
+  margin: 0 auto 20px auto;
+}
+
+.register-logo-section {
+  position: relative;
+  align-items: center;
+  margin-bottom: 30px;
+}
+
+.register-brand-logo {
+  width: 100px;
+  height: 70px;
+  margin-right: 12px;
+  border-radius: 8px;
+}
+
+.register-brand-name {
+  font-size: 22px;
+  font-weight: 700;
+  color: #1e3a8a;
+  margin: 0;
+}
+
+.register-form-container {
+  max-width: 500px;
+  width: 100%;
+}
+
+.register-form-title {
+  font-size: 26px;
+  font-weight: 700;
+  color: #1f2937;
+  margin: 0 0 8px 0;
+}
+
+.register-form-subtitle {
+  font-size: 15px;
+  color: #6b7280;
+  margin: 0 0 25px 0;
+}
+
+.register-error-alert {
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  color: #dc2626;
+  padding: 12px 16px;
+  border-radius: 8px;
+  margin-bottom: 20px;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.register-form {
+  display: flex;
+  flex-direction: column;
+}
+
+.register-form-row {
+  display: flex;
+  gap: 15px;
+  margin-bottom: 15px;
+}
+
+.register-form-col {
+  flex: 1;
+}
+
+.register-form-group {
+  margin-bottom: 15px;
+}
+
+.register-form-label {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #495057;
+}
+
+.register-form-input {
+  width: 100%;
+  padding: 14px 18px;
+  border: 2px solid #e5e7eb;
+  border-radius: 12px;
+  font-size: 15px;
+  transition: all 0.3s ease;
+  background: #ffffff;
+  box-sizing: border-box;
+}
+
+/* Hide built-in browser password reveal button for register form */
+.register-form-input[type="password"]::-ms-reveal,
+.register-form-input[type="password"]::-ms-clear {
+  display: none;
+}
+
+.register-form-input[type="password"]::-webkit-credentials-auto-fill-button,
+.register-form-input[type="password"]::-webkit-strong-password-auto-fill-button {
+  display: none !important;
+  position: absolute;
+  right: 0;
+  width: 0;
+  height: 0;
+  margin: 0;
+  padding: 0;
+  border: none;
+  background: none;
+}
+
+.register-form-input:focus {
+  outline: none;
+  border-color: #dfa7a7;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+.register-form-input::placeholder {
+  color: #9ca3af;
+}
+
+.register-form-input.is-invalid {
+  border-color: #dc2626;
+}
+
+.register-form-select {
+  width: 100%;
+  padding: 14px 18px;
+  border: 2px solid #e5e7eb;
+  border-radius: 12px;
+  font-size: 15px;
+  transition: all 0.3s ease;
+  background: #ffffff;
+  box-sizing: border-box;
+  background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='m6 8 4 4 4-4'/%3e%3c/svg%3e");
+  background-position: right 12px center;
+  background-repeat: no-repeat;
+  background-size: 16px;
+  appearance: none;
+}
+
+.register-form-select:focus {
+  outline: none;
+  border-color: #dfa7a7;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+.register-form-select.is-invalid {
+  border-color: #dc2626;
+}
+
+.register-password-wrapper {
+  position: relative;
+}
+
+.register-password-toggle {
+  position: absolute;
+  right: 16px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: none;
+  border: none;
+  color: #6b7280;
+  cursor: pointer;
+  font-size: 16px;
+  padding: 4px;
+  z-index: 10;
+}
+
+.register-password-toggle:hover {
+  color: #de4545;
+}
+
+.register-invalid-feedback {
+  color: #dc2626;
+  font-size: 13px;
+  margin-top: 4px;
+  display: block;
+}
+
+.register-role-section {
+  background: rgba(40, 167, 69, 0.05);
+  border-radius: 12px;
+  border: 1px solid rgba(40, 167, 69, 0.1);
+  padding: 20px;
+  margin-bottom: 20px;
+}
+
+.register-role-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: #142850;
+  margin-bottom: 15px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.register-phone-container {
+  margin-bottom: 15px;
+}
+
+.register-phone-container .react-tel-input {
+  width: 100%;
+}
+
+.register-phone-container .react-tel-input .form-control {
+  width: 100% !important;
+  height: auto !important;
+  padding: 14px 18px 14px 58px !important;
+  border: 2px solid #e5e7eb !important;
+  border-radius: 12px !important;
+  font-size: 15px !important;
+  background: #ffffff !important;
+}
+
+.register-phone-container .react-tel-input .form-control:focus {
+  border-color: #dfa7a7 !important;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1) !important;
+}
+
+.register-phone-container .react-tel-input .flag-dropdown {
+  border: 2px solid #e5e7eb !important;
+  border-radius: 12px 0 0 12px !important;
+  background: #ffffff !important;
+}
+
+.register-button {
+  width: 100%;
+  padding: 16px;
+  background: linear-gradient(135deg, #dc2626 0%, #dc2626 100%);
+  color: white;
+  border: none;
+  border-radius: 12px;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin-bottom: 20px;
+  margin-top: 20px;
+}
+
+.register-button:hover:not(:disabled) {
+  background: linear-gradient(135deg, #dc2626 0%, #dc2626 100%);
+  transform: translateY(-1px);
+  box-shadow: 0 10px 25px rgba(59, 130, 246, 0.3);
+}
+
+.register-button:disabled {
+  background: #9ca3af;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
+.register-spinner {
+  width: 16px;
+  height: 16px;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-top: 2px solid white;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+.register-signin-link {
+  color: #3b82f6;
+  text-decoration: none;
+  font-weight: 600;
+  transition: color 0.3s ease;
+}
+
+.register-signin-link:hover {
+  color: #1d4ed8;
+  text-decoration: underline;
+}
+
+/* Right Panel - Doctor Section (Same as Login) */
+.register-doctor-panel {
+  flex: 1;
+  background: linear-gradient(135deg, #f72626 0%, #ab2828 50%, #ef5e5e 100%);
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 40px;
+  overflow: hidden;
+}
+
+.register-doctor-panel::before {
+  content: '';
+  position: absolute;
+  top: -50%;
+  right: -50%;
+  width: 100%;
+  height: 100%;
+  background: radial-gradient(circle, rgba(255, 255, 255, 0.1) 0%, transparent 70%);
+  border-radius: 50%;
+}
+
+.register-doctor-section {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  z-index: 2;
+}
+
+.register-doctor-image {
+  width: 280px;
+  height: 350px;
+  object-fit: cover;
+}
+
+.register-info-bubble {
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(15px);
+  border-radius: 16px;
+  padding: 20px 24px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  max-width: 280px;
+}
+
+.register-bubble-icon {
+  width: 48px;
+  height: 48px;
+  background: linear-gradient(135deg, #dc2626 0%, #dc2626 100%);
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  font-size: 20px;
+  flex-shrink: 0;
+}
+
+.register-bubble-content h4 {
+  margin: 0 0 4px 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: #1f2937;
+}
+
+.register-bubble-content p {
+  margin: 0;
+  font-size: 14px;
+  color: #6b7280;
+  line-height: 1.4;
+}
+
+.register-signin-section {
+  text-align: center;
+  position: relative;
+  padding: 20px;
+  z-index: 2;
+}
+
+.register-signin-section p {
+  color: rgba(255, 255, 255, 0.9);
+  margin: 0 0 8px 0;
+  font-size: 14px;
+}
+
+.register-signin-section-link {
+  color: #ffffff;
+  text-decoration: none;
+  font-weight: 600;
+  font-size: 16px;
+  padding: 8px 16px;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-radius: 8px;
+  display: inline-block;
+  transition: all 0.3s ease;
+  backdrop-filter: blur(10px);
+}
+
+.register-signin-section-link:hover {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.5);
+  transform: translateY(-1px);
+}
+
+/* Small text styles */
+.register-form-text {
+  font-size: 12px;
+  color: #6b7280;
+  margin-top: 4px;
+}
+
+.register-copyright {
+  color: rgba(255, 255, 255, 0.9);
+  font-size: 12px;
+  text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.5);
+  text-align: center;
+  margin-top: 20px;
+}
+
+/* ===== LANGUAGE SWITCHER STYLES ===== */
+
+/* Language Switcher Container */
+.language-switcher {
+  position: relative;
+  z-index: 1000;
+}
+
+/* Language Button Styling */
+.language-switcher button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(10px);
+  border: 2px solid rgba(220, 38, 38, 0.1);
+  border-radius: 12px;
+  color: #374151;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+  min-width: 120px;
+  justify-content: center;
+}
+
+.language-switcher button:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 1);
+  border-color: rgba(220, 38, 38, 0.3);
+  transform: translateY(-1px);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.15);
+}
+
+.language-switcher button:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+  transform: none;
+}
+
+/* Flag emoji styling */
+.language-switcher button span:first-of-type {
+  font-size: 18px;
+}
+
+/* Loading spinner for language switcher */
+.language-switcher .spinner {
+  width: 16px;
+  height: 16px;
+  border: 2px solid rgba(220, 38, 38, 0.2);
+  border-top: 2px solid #dc2626;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+/* Dropdown styling */
+.language-switcher .dropdown {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  margin-top: 8px;
+  min-width: 200px;
+  background: #ffffff;
+  border-radius: 16px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.15);
+  border: 1px solid rgba(220, 38, 38, 0.1);
+  overflow: hidden;
+  z-index: 1001;
+}
+
+.language-switcher .dropdown-header {
+  padding: 12px 16px;
+  background: #f9fafb;
+  border-bottom: 1px solid #e5e7eb;
+  font-size: 12px;
+  font-weight: 600;
+  color: #6b7280;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.language-switcher .dropdown-option {
+  width: 100%;
+  padding: 12px 16px;
+  background: none;
+  border: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+  text-align: left;
+}
+
+.language-switcher .dropdown-option:hover {
+  background: #f3f4f6;
+}
+
+.language-switcher .dropdown-option-content {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.language-switcher .dropdown-option-flag {
+  font-size: 20px;
+}
+
+.language-switcher .dropdown-option-text .native-name {
+  font-weight: 500;
+  color: #1f2937;
+  font-size: 14px;
+}
+
+.language-switcher .dropdown-option-text .english-name {
+  font-size: 12px;
+  color: #6b7280;
+}
+
+.language-switcher .dropdown-option-check {
+  color: #dc2626;
+}
+
+/* Integration with register page */
+.wehealth-register-container .language-switcher {
+  position: absolute;
+  top: 20px;
+  right: 20px;
+}
+
+/* Responsive Design */
+@media (max-width: 992px) {
+  .wehealth-register-card {
+    flex-direction: column;
+    height: auto;
+    max-width: 500px;
+    min-height: auto;
+  }
+  
+  .register-panel {
+    padding: 30px;
+    max-height: none;
+  }
+  
+  .register-doctor-panel {
+    padding: 30px;
+    min-height: 400px;
+  }
+  
+  .register-doctor-image {
+    width: 200px;
+    height: 250px;
+  }
+  
+  .register-form-title {
+    font-size: 24px;
+  }
+  
+  .register-brand-name {
+    font-size: 18px;
+  }
+
+  .register-form-row {
+    flex-direction: column;
+    gap: 0;
+  }
+
+  /* Language switcher responsive */
+  .language-switcher button {
+    padding: 8px 12px;
+    min-width: 100px;
+    font-size: 13px;
+  }
+  
+  .language-switcher .dropdown {
+    min-width: 180px;
+  }
+}
+
+
+
+@media (max-width: 768px) {
+  .wehealth-register-container {
+    padding: 10px;
+  }
+  
+  .register-panel {
+    padding: 20px;
+  }
+  
+  .register-doctor-panel {
+    padding: 20px;
+  }
+  
+  .register-doctor-image {
+    width: 160px;
+    height: 200px;
+  }
+  
+  .register-info-bubble {
+    max-width: 240px;
+    padding: 16px 20px;
+  }
+
+  .register-form-container {
+    max-width: 100%;
+  }
+}
+
+@media (max-width: 480px) {
+  .register-form-input,
+  .register-form-select {
+    padding: 12px 16px;
+    font-size: 14px;
+  }
+  
+  .register-button {
+    padding: 14px;
+    font-size: 15px;
+  }
+  
+  .register-brand-logo {
+    width: 80px;
+    height: 60px;
+  }
+  
+  .register-brand-name {
+    font-size: 16px;
+  }
+
+  /* Language switcher mobile */
+  .wehealth-register-container .language-switcher {
+    top: 15px;
+    right: 15px;
+  }
+  
+  .language-switcher button {
+    padding: 6px 10px;
+    min-width: 80px;
+    font-size: 12px;
+  }
+  
+  .language-switcher button span:last-child {
+    display: none; /* Hide text on very small screens, keep only flag */
+  }
+}

@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { Calendar, Clock, Users, FileText, Pill, User, Plus, Search, Eye, Edit, CheckCircle, XCircle, Stethoscope, Heart, Brain, Thermometer, BarChart3, Activity, TrendingUp } from 'lucide-react';
+import React, { useState, useEffect } from 'react'; //Doctordash
+import { Calendar, Clock, Users, FileText, Pill, User, Plus, Search, Eye, Edit, CheckCircle, XCircle, Stethoscope, Heart, Brain, Thermometer, BarChart3, Activity, TrendingUp, Check, X } from 'lucide-react';
 import { APPOINTMENT_STATUSES, getStatusText, getStatusBadgeClass } from '../../constants/appointmentStatuses';
 import api from '../../services/api';
 
@@ -9,12 +9,14 @@ const EnhancedDoctorDashboard = ({ user, onLogout }) => {
   const [patients, setPatients] = useState([]);
   const [prescriptions, setPrescriptions] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
+  const [selectedDate, setSelectedDate] = useState(''); // Start with no date selected
   const [showModal, setShowModal] = useState('');
   const [selectedPatient, setSelectedPatient] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [message, setMessage] = useState({ type: '', text: '' });
   const API_BASE_URL = 'http://127.0.0.1:8000/api';
+  const [filteredAppointments, setFilteredAppointments] = useState([]);
+  const [selectedAppointment, setSelectedAppointment] = useState(null);
   
   // Form states
   const [availabilityForm, setAvailabilityForm] = useState({
@@ -80,7 +82,8 @@ const EnhancedDoctorDashboard = ({ user, onLogout }) => {
   const fetchAppointments = async () => {
   setLoading(true);
   try {
-    const response = await fetch(`${API_BASE_URL}/doctor/appointments?date=${selectedDate}`, {
+    // Remove date parameter to get ALL appointments
+    const response = await fetch(`${API_BASE_URL}/doctor/appointments`, {
       headers: { 
         'Authorization': `Bearer ${localStorage.getItem('token')}`,
         'Content-Type': 'application/json',
@@ -93,13 +96,35 @@ const EnhancedDoctorDashboard = ({ user, onLogout }) => {
     }
     
     const data = await response.json();
-    setAppointments(data.appointments || []);
+    const allApts = data.appointments || [];
+    setAppointments(allApts);
+    setFilteredAppointments(allApts);
   } catch (error) {
     console.error('Error fetching appointments:', error);
     setMessage({ type: 'error', text: 'Failed to load appointments' });
     setTimeout(() => setMessage({ type: '', text: '' }), 5000);
   }
   setLoading(false);
+};
+
+// ADD THIS NEW FUNCTION:
+const filterAppointmentsByDate = (date) => {
+  if (!date) {
+    setFilteredAppointments(appointments);
+  } else {
+    const filtered = appointments.filter(apt => {
+      // Convert appointment date to YYYY-MM-DD format for comparison
+      const appointmentDate = new Date(apt.date).toISOString().split('T')[0];
+      return appointmentDate === date;
+    });
+    setFilteredAppointments(filtered);
+  }
+};
+
+// UPDATE selectedDate handler:
+const handleDateChange = (date) => {
+  setSelectedDate(date);
+  filterAppointmentsByDate(date);
 };
 
   // 3. Fix fetchPatients function (around line 103)
@@ -119,7 +144,19 @@ const fetchPatients = async () => {
     }
     
     const data = await response.json();
-    setPatients(data.patients?.data || []);
+    console.log('Patients data:', data);
+    
+    // Handle both direct array and paginated response
+    let patientsArray = [];
+    if (Array.isArray(data.patients)) {
+      patientsArray = data.patients;
+    } else if (data.patients && data.patients.data) {
+      patientsArray = data.patients.data; // Laravel pagination
+    } else if (data.patients) {
+      patientsArray = data.patients; // Direct object
+    }
+    
+    setPatients(patientsArray || []);
   } catch (error) {
     console.error('Error fetching patients:', error);
     setMessage({ type: 'error', text: 'Failed to load patients' });
@@ -163,27 +200,32 @@ const fetchPrescriptions = async () => {
         'Accept': 'application/json',
         'Authorization': `Bearer ${localStorage.getItem('token')}`
       },
-      body: JSON.stringify(availabilityForm)
+      body: JSON.stringify({
+        available_days: availabilityForm.available_days,
+        working_hours_start: availabilityForm.working_hours_start,
+        working_hours_end: availabilityForm.working_hours_end,
+        is_available: availabilityForm.is_available,
+        break_start: availabilityForm.break_start,
+        break_end: availabilityForm.break_end
+      })
     });
     
     if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}`);
     }
     
-    const data = await response.json();
     setMessage({ type: 'success', text: 'Availability updated successfully!' });
     setShowModal('');
-    setTimeout(() => setMessage({ type: '', text: '' }), 5000);
   } catch (error) {
     console.error('Error updating availability:', error);
     setMessage({ type: 'error', text: 'Failed to update availability' });
-    setTimeout(() => setMessage({ type: '', text: '' }), 5000);
   }
+  setTimeout(() => setMessage({ type: '', text: '' }), 5000);
 };
 
 // Add doctor availability management:
 
-const setAvailability = async (availabilityData) => {
+/*const setAvailability = async (availabilityData) => {
   try {
     await api.put('doctor/availability', {
       available_days: availabilityData.days,
@@ -195,35 +237,65 @@ const setAvailability = async (availabilityData) => {
   } catch (error) {
     setMessage({ type: 'error', text: 'Failed to update availability' });
   }
-};
+};*/
 
 // Add appointment confirmation/rescheduling:
-const handleAppointmentAction = async (appointmentId, action, data = {}) => {
+// ADD THESE NEW FUNCTIONS:
+const handleAppointmentAction = async (appointment, action) => {
   try {
     let updateData = {};
     
     switch (action) {
       case 'confirm':
-        updateData = { 
-          status: APPOINTMENT_STATUSES.CONFIRMED, 
-          confirmed_at: new Date().toISOString() 
-        };
+        updateData = { status: 'confirmed' };
+        break;
+      case 'complete':
+        updateData = { status: 'completed' };
+        break;
+      case 'cancel':
+        updateData = { status: 'cancelled' };
         break;
       case 'reschedule':
-        updateData = { 
-          status: APPOINTMENT_STATUSES.RESCHEDULED,
-          new_date: data.newDate,
-          new_time: data.newTime,
-          reschedule_reason: data.reason
-        };
-        break;
+        setSelectedAppointment(appointment);
+        setShowModal('reschedule');
+        return;
     }
     
-    await api.put(`appointments/${appointmentId}`, updateData);
-    fetchAppointments();
+    console.log('Updating appointment:', appointment.id, 'with data:', updateData); // ADD THIS
+    
+    const response = await fetch(`${API_BASE_URL}/doctor/appointments/${appointment.id}/status`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${localStorage.getItem('token')}`
+      },
+      body: JSON.stringify(updateData)
+    });
+    
+    console.log('Response status:', response.status); // ADD THIS
+    console.log('Response ok:', response.ok); // ADD THIS
+    
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('Error response:', errorText); // ADD THIS
+      throw new Error('Failed to update appointment');
+    }
+    
+    const responseData = await response.json(); // ADD THIS
+    console.log('Response data:', responseData); // ADD THIS
+    
+    setMessage({ type: 'success', text: `Appointment ${action}ed successfully!` });
+    fetchAppointments(); // Reload appointments
   } catch (error) {
+    console.error('Full error:', error); // ADD THIS
     setMessage({ type: 'error', text: `Failed to ${action} appointment` });
   }
+  setTimeout(() => setMessage({ type: '', text: '' }), 5000);
+};
+
+const viewAppointmentDetails = (appointment) => {
+  setSelectedAppointment(appointment);
+  setShowModal('viewAppointment');
 };
 
   // Fix createAppointment function
@@ -287,9 +359,41 @@ const createMedicalRecord = async () => {
   }
 };
 
-  // Fix createPrescription function
+// Fix createPrescription function
+// Fix createPrescription function with better error handling
 const createPrescription = async () => {
   try {
+    // Validate required fields
+    if (!prescriptionForm.patient_id) {
+      setMessage({ type: 'error', text: 'Please select a patient' });
+      return;
+    }
+
+    // Validate medications
+    const invalidMedications = prescriptionForm.medications.filter(med => 
+      !med.name || !med.dosage || !med.instructions || !med.start_date || !med.end_date
+    );
+    
+    if (invalidMedications.length > 0) {
+      setMessage({ type: 'error', text: 'Please fill all fields for each medication' });
+      return;
+    }
+
+    // Format dates properly for the API
+    const formattedPrescription = {
+      patient_id: prescriptionForm.patient_id,
+      notes: prescriptionForm.notes,
+      medications: prescriptionForm.medications.map(med => ({
+        name: med.name,
+        dosage: med.dosage,
+        instructions: med.instructions,
+        start_date: formatDateForAPI(med.start_date),
+        end_date: formatDateForAPI(med.end_date)
+      }))
+    };
+
+    console.log('Sending prescription data:', formattedPrescription);
+
     const response = await fetch(`${API_BASE_URL}/doctor/prescriptions`, {
       method: 'POST',
       headers: {
@@ -297,14 +401,34 @@ const createPrescription = async () => {
         'Accept': 'application/json',
         'Authorization': `Bearer ${localStorage.getItem('token')}`
       },
-      body: JSON.stringify(prescriptionForm)
+      body: JSON.stringify(formattedPrescription)
     });
     
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
+    const responseText = await response.text();
+    let responseData;
+    
+    try {
+      responseData = responseText ? JSON.parse(responseText) : {};
+    } catch (e) {
+      console.error('Failed to parse response as JSON:', responseText);
+      responseData = { message: responseText };
     }
     
-    const data = await response.json();
+    if (!response.ok) {
+      // Handle different error types
+      if (response.status === 500) {
+        console.error('Server error details:', responseData);
+        throw new Error(`Server error: ${responseData.message || 'Internal server error'}`);
+      }
+      
+      if (response.status === 422 && responseData.errors) {
+        const errorMessages = Object.values(responseData.errors).flat().join(', ');
+        throw new Error(`Validation error: ${errorMessages}`);
+      }
+      
+      throw new Error(`HTTP error! status: ${response.status}, message: ${responseData.message || 'Unknown error'}`);
+    }
+    
     setMessage({ type: 'success', text: 'Prescription created successfully!' });
     setShowModal('');
     setPrescriptionForm({
@@ -316,9 +440,27 @@ const createPrescription = async () => {
     setTimeout(() => setMessage({ type: '', text: '' }), 5000);
   } catch (error) {
     console.error('Error creating prescription:', error);
-    setMessage({ type: 'error', text: 'Failed to create prescription' });
+    setMessage({ type: 'error', text: error.message || 'Failed to create prescription. Please check console for details.' });
     setTimeout(() => setMessage({ type: '', text: '' }), 5000);
   }
+};
+
+// Add this helper function to format dates
+const formatDateForAPI = (dateString) => {
+  if (!dateString) return '';
+  
+  // Convert to YYYY-MM-DD format
+  const date = new Date(dateString);
+  if (isNaN(date.getTime())) {
+    console.warn('Invalid date:', dateString);
+    return dateString; // Return original if invalid
+  }
+  
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  
+  return `${year}-${month}-${day}`;
 };
 
   const addMedication = () => {
@@ -338,15 +480,28 @@ const createPrescription = async () => {
   
 
   useEffect(() => {
-    if (activeTab === 'appointments') fetchAppointments();
-    if (activeTab === 'patients') fetchPatients();
-    if (activeTab === 'prescriptions') fetchPrescriptions();
-  }, [activeTab, selectedDate]);
+  if (activeTab === 'appointments') fetchAppointments();
+  if (activeTab === 'patients') fetchPatients();
+  if (activeTab === 'prescriptions') fetchPrescriptions();
+}, [activeTab]); // Only reload when tab changes, not when date changes
 
-  const filteredPatients = patients.filter(patient => 
-    patient.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    patient.student_id?.includes(searchTerm)
-  );
+// ADD this useEffect to sync filteredAppointments when appointments change:
+useEffect(() => {
+  if (appointments.length > 0) {
+    if (selectedDate) {
+      filterAppointmentsByDate(selectedDate);
+    } else {
+      setFilteredAppointments(appointments); // Show all appointments when no date selected
+    }
+  } else {
+    setFilteredAppointments([]); // Clear filtered appointments when no appointments
+  }
+}, [appointments, selectedDate]); // Add selectedDate to dependencies
+
+  const filteredPatients = (Array.isArray(patients) ? patients : patients.data || []).filter(patient => 
+  patient.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+  patient.student_id?.includes(searchTerm)
+);
 
   const getStatusBadge = (status) => {
   return getStatusBadgeClass(status);
@@ -466,7 +621,12 @@ const createPrescription = async () => {
                 <button 
                   className="btn btn-outline-success w-100 py-3" 
                   style={{ borderRadius: '0.75rem' }}
-                  onClick={() => setShowModal('prescription')}
+                  onClick={() => {
+                    if (patients.length === 0) {
+                      fetchPatients(); // Load patients if not already loaded
+                    }
+                    setShowModal('prescription');
+                  }}
                 >
                   <Pill size={24} className="mb-2" />
                   <div className="fw-semibold">Create Prescription</div>
@@ -487,7 +647,11 @@ const createPrescription = async () => {
                 <h5 className="fw-bold mb-0">Today's Appointments</h5>
                 <button 
                   className="btn btn-sm btn-outline-primary"
-                  onClick={() => setActiveTab('appointments')}
+                  onClick={() => {
+                    setActiveTab('appointments');
+                    setSelectedDate(''); // Clear date filter when clicking View All
+                    setFilteredAppointments(appointments); // Show all appointments
+                  }}
                   style={{ borderRadius: '0.5rem' }}
                 >
                   View All
@@ -522,103 +686,148 @@ const createPrescription = async () => {
     </div>
   );
 
-  const AppointmentsTab = () => (
-    <div className="card shadow-sm">
-      <div className="card-header bg-gradient" style={{ background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' }}>
-        <div className="d-flex justify-content-between align-items-center">
-          <h3 className="card-title text-white mb-0 d-flex align-items-center">
-            <Calendar size={24} className="me-2" />
-            Appointments
-          </h3>
-          <div className="d-flex gap-2">
-            <input
-              type="date"
-              value={selectedDate}
-              onChange={(e) => setSelectedDate(e.target.value)}
-              className="form-control form-control-sm"
-              style={{ maxWidth: '150px' }}
-            />
-            <button
-              onClick={() => setShowModal('appointment')}
-              className="btn btn-light btn-sm"
-              style={{ borderRadius: '0.5rem' }}
-            >
-              <Plus size={16} className="me-1" />
-              New Appointment
-            </button>
-          </div>
+  // UPDATE the AppointmentsTab component:
+const AppointmentsTab = () => (
+  <div className="card shadow-sm">
+    <div className="card-header bg-gradient" style={{ background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' }}>
+      <div className="d-flex justify-content-between align-items-center">
+        <h3 className="card-title text-white mb-0 d-flex align-items-center">
+          <Calendar size={24} className="me-2" />
+          Appointments ({filteredAppointments.length})
+        </h3>
+        <div className="d-flex gap-2">
+          <button
+            onClick={() => {
+              setSelectedDate('');
+              setFilteredAppointments(appointments);
+            }}
+            className="btn btn-sm btn-primary"
+          >
+            All Appointments
+          </button>
+          <input
+            type="date"
+            value={selectedDate}
+            onChange={(e) => handleDateChange(e.target.value)}
+            className="form-control form-control-sm"
+            style={{ maxWidth: '150px' }}
+          />
+          <button
+            onClick={() => setShowModal('availability')}
+            className="btn btn-warning btn-sm"
+          >
+            Set Availability
+          </button>
+          <button
+            onClick={() => setShowModal('appointment')}
+            className="btn btn-light btn-sm"
+          >
+            <Plus size={16} className="me-1" />
+            New Appointment
+          </button>
         </div>
       </div>
-      <div className="card-body p-4">
-        {loading ? (
-          <div className="text-center py-5">
-            <div className="spinner-border text-primary mb-3" role="status">
-              <span className="visually-hidden">Loading...</span>
-            </div>
-            <p className="text-muted">Loading appointments...</p>
+    </div>
+    <div className="card-body p-4">
+      {loading ? (
+        <div className="text-center py-5">
+          <div className="spinner-border text-primary mb-3" role="status">
+            <span className="visually-hidden">Loading...</span>
           </div>
-        ) : appointments.length === 0 ? (
-          <div className="text-center py-5">
-            <Calendar size={48} className="text-muted mb-3" />
-            <p className="text-muted">No appointments found for selected date</p>
-          </div>
-        ) : (
-          <div className="table-responsive">
-            <table className="table table-hover">
-              <thead>
-                <tr>
-                  <th>Patient</th>
-                  <th>Date & Time</th>
-                  <th>Reason</th>
-                  <th>Status</th>
-                  <th>Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {appointments.map(appointment => (
-                  <tr key={appointment.id}>
-                    <td>
-                      <div className="d-flex align-items-center">
-                        <div className="me-2">
-                          <User size={20} className="text-primary" />
-                        </div>
-                        <div>
-                          <div className="fw-semibold">{appointment.patient?.name}</div>
-                          <small className="text-muted">{appointment.patient?.student_id}</small>
-                        </div>
+          <p className="text-muted">Loading appointments...</p>
+        </div>
+      ) : filteredAppointments.length === 0 ? (
+        <div className="text-center py-5">
+          <Calendar size={48} className="text-muted mb-3" />
+          <p className="text-muted">
+            {selectedDate ? `No appointments found for ${selectedDate}` : 'No appointments found'}
+          </p>
+        </div>
+      ) : (
+        <div className="table-responsive">
+          <table className="table table-hover">
+            <thead>
+              <tr>
+                <th>Patient</th>
+                <th>Date & Time</th>
+                <th>Reason</th>
+                <th>Status</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filteredAppointments.map(appointment => (
+                <tr key={appointment.id}>
+                  <td>
+                    <div className="d-flex align-items-center">
+                      <div className="me-2">
+                        <User size={20} className="text-primary" />
                       </div>
-                    </td>
-                    <td>
-                      <div className="d-flex align-items-center">
-                        <Calendar size={14} className="me-1 text-muted" />
-                        {new Date(appointment.date).toLocaleDateString()}
-                        <Clock size={14} className="ms-3 me-1 text-muted" />
-                        {appointment.time}
+                      <div>
+                        <div className="fw-semibold">{appointment.patient?.name}</div>
+                        <small className="text-muted">{appointment.patient?.student_id}</small>
                       </div>
-                    </td>
-                    <td>{appointment.reason}</td>
-                    <td>
-                      <span className={`${getStatusBadge(appointment.status)}`}>
-                        {appointment.status.charAt(0).toUpperCase() + appointment.status.slice(1)}
-                      </span>
-                    </td>
-                    <td>
-                      <button className="btn btn-sm btn-outline-primary me-2">
+                    </div>
+                  </td>
+                  <td>
+                    <div className="d-flex align-items-center">
+                      <Calendar size={14} className="me-1 text-muted" />
+                      {new Date(appointment.date).toLocaleDateString()}
+                      <Clock size={14} className="ms-3 me-1 text-muted" />
+                      {appointment.time}
+                    </div>
+                  </td>
+                  <td>{appointment.reason}</td>
+                  <td>
+                    <span className={`${getStatusBadgeClass(appointment.status)}`}>
+                      {appointment.status.charAt(0).toUpperCase() + appointment.status.slice(1)}
+                    </span>
+                  </td>
+                  <td>
+                    <div className="d-flex gap-1">
+                      <button 
+                        className="btn btn-sm btn-outline-primary" 
+                        onClick={() => viewAppointmentDetails(appointment)}
+                        title="View Details"
+                      >
                         <Eye size={16} />
                       </button>
-                      <button className="btn btn-sm btn-outline-secondary">
+                      {appointment.status === 'scheduled' && (
+                        <button 
+                          className="btn btn-sm btn-outline-success" 
+                          onClick={() => handleAppointmentAction(appointment, 'confirm')}
+                          title="Confirm"
+                        >
+                          <Check size={16} />
+                        </button>
+                      )}
+                      {appointment.status === 'confirmed' && (
+                        <button 
+                          className="btn btn-sm btn-outline-info" 
+                          onClick={() => handleAppointmentAction(appointment, 'complete')}
+                          title="Mark Complete"
+                        >
+                          <CheckCircle size={16} />
+                        </button>
+                      )}
+                      <button 
+                        className="btn btn-sm btn-outline-secondary" 
+                        onClick={() => handleAppointmentAction(appointment, 'reschedule')}
+                        title="Reschedule"
+                      >
                         <Edit size={16} />
                       </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
-  );
+  </div>
+);
 
   const PatientsTab = () => (
     <div className="card shadow-sm">
@@ -1102,7 +1311,7 @@ const createPrescription = async () => {
               </div>
               
               {prescriptionForm.medications.map((med, index) => (
-                <div key={index} className="border p-3 rounded mb-3">
+                <div key={`medication-${index}-${prescriptionForm.medications.length}`} className="border p-3 rounded mb-3">
                   <div className="row g-3">
                     <div className="col-md-6">
                       <label className="form-label">Medication Name</label>
@@ -1226,6 +1435,178 @@ const createPrescription = async () => {
       </div>
     </div>
   );
+
+  // ADD THIS NEW MODAL HERE:
+  const ViewAppointmentModal = () => (
+    <div className="modal fade show d-block" tabIndex="-1" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
+      <div className="modal-dialog modal-dialog-centered">
+        <div className="modal-content" style={{ borderRadius: '1rem' }}>
+          <div className="modal-header border-0 pb-0">
+            <h5 className="modal-title fw-bold">Appointment Details</h5>
+            <button
+              type="button"
+              className="btn-close"
+              onClick={() => setShowModal('')}
+            ></button>
+          </div>
+          <div className="modal-body pt-0">
+            {selectedAppointment && (
+              <div>
+                <div className="mb-3">
+                  <strong>Patient:</strong> {selectedAppointment.patient?.name}
+                  <br />
+                  <small className="text-muted">ID: {selectedAppointment.patient?.student_id}</small>
+                </div>
+                <div className="mb-3">
+                  <strong>Date & Time:</strong> {new Date(selectedAppointment.date).toLocaleDateString()} at {selectedAppointment.time}
+                </div>
+                <div className="mb-3">
+                  <strong>Status:</strong> 
+                  <span className={`ms-2 ${getStatusBadgeClass(selectedAppointment.status)}`}>
+                    {selectedAppointment.status.charAt(0).toUpperCase() + selectedAppointment.status.slice(1)}
+                  </span>
+                </div>
+                <div className="mb-3">
+                  <strong>Reason:</strong> {selectedAppointment.reason}
+                </div>
+              </div>
+            )}
+          </div>
+          <div className="modal-footer border-0">
+            <button
+              onClick={() => setShowModal('')}
+              className="btn btn-outline-secondary"
+              style={{ borderRadius: '0.5rem' }}
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+
+  const RescheduleModal = () => {
+  // Initialize local state for the form
+  const [rescheduleForm, setRescheduleForm] = useState({
+    new_date: '',
+    new_time: '',
+    reschedule_reason: ''
+  });
+
+  return (
+    <div className="modal fade show d-block" tabIndex="-1" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
+      <div className="modal-dialog modal-dialog-centered">
+        <div className="modal-content" style={{ borderRadius: '1rem' }}>
+          <div className="modal-header border-0 pb-0">
+            <h5 className="modal-title fw-bold">
+              Reschedule Appointment - {selectedAppointment?.patient?.name}
+            </h5>
+            <button
+              type="button"
+              className="btn-close"
+              onClick={() => setShowModal('')}
+            ></button>
+          </div>
+          <div className="modal-body pt-0">
+            {selectedAppointment && (
+              <>
+                <div className="mb-3 p-3 bg-light rounded">
+                  <strong>Current:</strong> {new Date(selectedAppointment.date).toLocaleDateString()} at {selectedAppointment.time}
+                </div>
+                
+                <div className="row g-3 mb-3">
+                  <div className="col-md-6">
+                    <label className="form-label fw-semibold">New Date</label>
+                    <input
+                      type="date"
+                      className="form-control"
+                      value={rescheduleForm.new_date}
+                      min={getMinDate()}
+                      onChange={(e) => setRescheduleForm(prev => ({...prev, new_date: e.target.value}))}
+                    />
+                  </div>
+                  <div className="col-md-6">
+                    <label className="form-label fw-semibold">New Time</label>
+                    <select
+                      className="form-select"
+                      value={rescheduleForm.new_time}
+                      onChange={(e) => setRescheduleForm(prev => ({...prev, new_time: e.target.value}))}
+                    >
+                      <option value="">Select time...</option>
+                      {timeSlots.map((time) => (
+                        <option key={time} value={time}>{time}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+                
+                <div className="mb-3">
+                  <label className="form-label fw-semibold">Reason for Rescheduling</label>
+                  <textarea
+                    className="form-control"
+                    rows="3"
+                    value={rescheduleForm.reschedule_reason}
+                    placeholder="Optional reason..."
+                    onChange={(e) => setRescheduleForm(prev => ({...prev, reschedule_reason: e.target.value}))}
+                  />
+                </div>
+              </>
+            )}
+          </div>
+          <div className="modal-footer border-0">
+            <button
+              onClick={() => setShowModal('')}
+              className="btn btn-outline-secondary"
+              style={{ borderRadius: '0.5rem' }}
+            >
+              Cancel
+            </button>
+            <button
+              onClick={async () => {
+                try {
+                  const response = await fetch(`${API_BASE_URL}/doctor/appointments/${selectedAppointment.id}/reschedule`, {
+                    method: 'PUT',
+                    headers: {
+                      'Content-Type': 'application/json',
+                      'Authorization': `Bearer ${localStorage.getItem('token')}`
+                    },
+                    body: JSON.stringify({
+                      new_date: rescheduleForm.new_date,
+                      new_time: rescheduleForm.new_time,
+                      reason: rescheduleForm.reschedule_reason
+                    })
+                  });
+                  
+                  if (response.ok) {
+                    setMessage({ type: 'success', text: 'Appointment rescheduled successfully!' });
+                    fetchAppointments();
+                    setShowModal('');
+                    setRescheduleForm({ new_date: '', new_time: '', reschedule_reason: '' }); // Reset form
+                  } else {
+                    throw new Error('Failed to reschedule');
+                  }
+                } catch (error) {
+                  setMessage({ type: 'error', text: 'Failed to reschedule appointment' });
+                }
+                setTimeout(() => setMessage({ type: '', text: '' }), 5000);
+              }}
+              className="btn btn-primary"
+              disabled={!rescheduleForm.new_date || !rescheduleForm.new_time}
+              style={{ 
+                background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                border: 'none',
+                borderRadius: '0.5rem'
+              }}
+            >
+              Reschedule Appointment
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
 
   const ViewPatientModal = () => {
     const [patientDetails, setPatientDetails] = useState(null);
@@ -1567,6 +1948,8 @@ const createPrescription = async () => {
       {showModal === 'medicalRecord' && <MedicalRecordModal />}
       {showModal === 'prescription' && <PrescriptionModal />}
       {showModal === 'viewPatient' && <ViewPatientModal />}
+      {showModal === 'viewAppointment' && <ViewAppointmentModal />}
+      {showModal === 'reschedule' && <RescheduleModal />}
     </div>
   );
 };
