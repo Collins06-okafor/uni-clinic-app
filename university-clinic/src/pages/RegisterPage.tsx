@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { register } from '../services/auth';
+import api from '../services/api';
 import PhoneInput from "react-phone-input-2";
 import "react-phone-input-2/lib/style.css";
 import LanguageSwitcher from '../components/LanguageSwitcher';
@@ -31,6 +32,15 @@ interface RegisterPageProps {
   onRegistrationSuccess?: () => Promise<void>;
 }
 
+interface Department {
+  id: string | number;
+  name: string;
+  code: string;
+  type: string;
+  description?: string;
+  is_active: boolean;
+}
+
 const RegisterPage: React.FC<RegisterPageProps> = ({ onRegistrationSuccess }) => {
   const navigate = useNavigate();
   const { t } = useTranslation();
@@ -53,6 +63,49 @@ const RegisterPage: React.FC<RegisterPageProps> = ({ onRegistrationSuccess }) =>
   const [generalError, setGeneralError] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  
+  // New state for departments
+  const [departments, setDepartments] = useState<Department[]>([]);
+  const [departmentsLoading, setDepartmentsLoading] = useState(false);
+  const [departmentsError, setDepartmentsError] = useState('');
+
+  // Fetch departments from API
+  useEffect(() => {
+    const fetchDepartments = async () => {
+      setDepartmentsLoading(true);
+      setDepartmentsError('');
+      
+      try {
+        console.log('Fetching departments...');
+        const response = await api.get<Department[]>('/departments');
+        console.log('Departments response:', response);
+        
+        // Filter only active departments
+        const activeDepartments = response.filter((dept: Department) => dept.is_active);
+        setDepartments(activeDepartments);
+        
+        console.log(`Loaded ${activeDepartments.length} active departments`);
+      } catch (error: any) {
+        console.error('Failed to fetch departments:', error);
+        setDepartmentsError(t('error.failed_to_load_departments'));
+        
+        // Fallback to hardcoded departments if API fails
+        const fallbackDepartments = [
+          { id: 'comp-eng', name: 'Computer Engineering', code: 'CE', type: 'academic', is_active: true },
+          { id: 'medicine', name: 'Medicine', code: 'MED', type: 'medical', is_active: true },
+          { id: 'nursing', name: 'Nursing', code: 'NURS', type: 'medical', is_active: true },
+          { id: 'pharmacy', name: 'Pharmacy', code: 'PHARM', type: 'medical', is_active: true },
+          { id: 'dentistry', name: 'Dentistry', code: 'DENT', type: 'medical', is_active: true },
+          { id: 'psychology', name: 'Psychology', code: 'PSY', type: 'academic', is_active: true },
+        ];
+        setDepartments(fallbackDepartments);
+      } finally {
+        setDepartmentsLoading(false);
+      }
+    };
+
+    fetchDepartments();
+  }, [t]);
 
   // Validation functions
   const validatePassword = (password: string): string | null => {
@@ -235,16 +288,21 @@ const RegisterPage: React.FC<RegisterPageProps> = ({ onRegistrationSuccess }) =>
     return icons[role] || 'fa-user';
   };
 
-  const getDepartmentOptions = () => [
-    { value: "Computer Engineering", label: t('department.software_engineering') },
-    { value: "Medicine", label: t('department.medicine') },
-    { value: "Nursing", label: t('department.nursing') },
-    { value: "Pharmacy", label: t('department.pharmacy') },
-    { value: "Dentistry", label: t('department.dentistry') },
-    { value: "Psychology", label: t('department.psychology') },
-    { value: "Biology", label: t('department.law') },
-    { value: "Chemistry", label: t('department.political_science') }
-  ];
+  // Updated function to use dynamic departments
+  const getDepartmentOptions = () => {
+    if (departmentsLoading) {
+      return [{ value: "", label: t('common.loading') }];
+    }
+    
+    if (departmentsError) {
+      return [{ value: "", label: t('error.departments_unavailable') }];
+    }
+    
+    return departments.map(dept => ({
+      value: dept.name,
+      label: dept.name
+    }));
+  };
 
   const getFacultyOptions = () => [
     { value: "Faculty of Medicine", label: t('faculty.medicine') },
@@ -290,12 +348,25 @@ const RegisterPage: React.FC<RegisterPageProps> = ({ onRegistrationSuccess }) =>
                 value={form.department}
                 onChange={handleChange}
                 required
+                disabled={departmentsLoading}
               >
-                <option value="">{t('register.select_department')}</option>
-                {getDepartmentOptions().map(dept => (
+                <option value="">
+                  {departmentsLoading 
+                    ? t('common.loading') 
+                    : departmentsError 
+                    ? t('error.departments_unavailable')
+                    : t('register.select_department')
+                  }
+                </option>
+                {!departmentsLoading && !departmentsError && getDepartmentOptions().map(dept => (
                   <option key={dept.value} value={dept.value}>{dept.label}</option>
                 ))}
               </select>
+              {departmentsError && (
+                <small className="register-form-text" style={{ color: '#dc2626' }}>
+                  {departmentsError}
+                </small>
+              )}
               {errors.department && (
                 <div className="register-invalid-feedback">
                   {Array.isArray(errors.department) ? errors.department[0] : errors.department}
@@ -347,14 +418,30 @@ const RegisterPage: React.FC<RegisterPageProps> = ({ onRegistrationSuccess }) =>
             </div>
             <div className="register-form-group">
               <label className="register-form-label">{t('register.department_optional')}</label>
-              <input
+              <select
                 name="department"
-                type="text"
-                className={`register-form-input ${errors.department ? 'is-invalid' : ''}`}
+                className={`register-form-select ${errors.department ? 'is-invalid' : ''}`}
                 value={form.department}
                 onChange={handleChange}
-                placeholder={t('register.enter_student_id')}
-              />
+                disabled={departmentsLoading}
+              >
+                <option value="">
+                  {departmentsLoading 
+                    ? t('common.loading') 
+                    : departmentsError 
+                    ? t('error.departments_unavailable')
+                    : t('register.select_department_optional')
+                  }
+                </option>
+                {!departmentsLoading && !departmentsError && getDepartmentOptions().map(dept => (
+                  <option key={dept.value} value={dept.value}>{dept.label}</option>
+                ))}
+              </select>
+              {departmentsError && (
+                <small className="register-form-text" style={{ color: '#dc2626' }}>
+                  {departmentsError}
+                </small>
+              )}
               {errors.department && (
                 <div className="register-invalid-feedback">
                   {Array.isArray(errors.department) ? errors.department[0] : errors.department}
@@ -556,7 +643,7 @@ const RegisterPage: React.FC<RegisterPageProps> = ({ onRegistrationSuccess }) =>
                 </div>
               )}
             
-              <button type="submit" disabled={loading} className="register-button">
+              <button type="submit" disabled={loading || departmentsLoading} className="register-button">
                 {loading && (
                   <span className="register-spinner"></span>
                 )}

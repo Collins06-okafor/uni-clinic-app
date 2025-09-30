@@ -97,31 +97,130 @@ class DoctorController extends Controller
      * Get weekly statistics for charts
      */
     private function getWeeklyStatistics($doctorId): array
-    {
-        $weekStart = now()->startOfWeek();
-        $weekData = [
-            'appointments' => [],
-            'patients' => [],
-            'completed' => []
-        ];
+{
+    $weekStart = now()->startOfWeek(); // Monday
+    $weekData = [
+        'appointments' => [],
+        'patients' => [],
+        'completed' => []
+    ];
+    
+    for ($i = 0; $i < 7; $i++) {
+        $date = $weekStart->copy()->addDays($i);
         
-        for ($i = 0; $i < 7; $i++) {
-            $date = $weekStart->copy()->addDays($i);
+        $dayAppointments = Appointment::where('doctor_id', $doctorId)
+            ->whereDate('date', $date->format('Y-m-d'))
+            ->get();
             
-            $dayAppointments = Appointment::where('doctor_id', $doctorId)
-                ->whereDate('date', $date->format('Y-m-d'))
-                ->get();
-                
-            $dayPatients = $dayAppointments->unique('patient_id')->count();
-            $dayCompleted = $dayAppointments->where('status', 'completed')->count();
-            
-            $weekData['appointments'][] = $dayAppointments->count();
-            $weekData['patients'][] = $dayPatients;
-            $weekData['completed'][] = $dayCompleted;
-        }
+        $dayPatients = $dayAppointments->unique('patient_id')->count();
+        $dayCompleted = $dayAppointments->where('status', 'completed')->count();
         
-        return $weekData;
+        $weekData['appointments'][] = $dayAppointments->count();
+        $weekData['patients'][] = $dayPatients;
+        $weekData['completed'][] = $dayCompleted;
     }
+    
+    // Add debugging
+    \Log::info('Weekly stats generated:', $weekData);
+    
+    return $weekData;
+}
+
+public function completeAppointment(Request $request, $id): JsonResponse
+{
+    $validated = $request->validate([
+        'status' => 'required|string|in:completed',
+        'completion_report' => 'required|array',
+        'completion_report.diagnosis' => 'required|string',
+        'completion_report.treatment_provided' => 'required|string',
+        'completion_report.medications_prescribed' => 'nullable|string',
+        'completion_report.recommendations' => 'nullable|string',
+        'completion_report.follow_up_required' => 'boolean',
+        'completion_report.follow_up_date' => 'nullable|date',
+        'completion_report.notes' => 'nullable|string',
+    ]);
+
+    try {
+        DB::beginTransaction();
+
+        $appointment = Appointment::where('doctor_id', $request->user()->id)
+            ->findOrFail($id);
+
+        // Update appointment status and completion report
+        $appointment->update([
+            'status' => 'completed',
+            'completion_report' => json_encode($validated['completion_report']),
+            'completed_at' => now()
+        ]);
+
+        // Create medical record from completion report
+        $medicalRecord = MedicalRecord::create([
+            'patient_id' => $appointment->patient_id,
+            'doctor_id' => $request->user()->id,
+            'appointment_id' => $appointment->id,
+            'created_by' => $request->user()->id,
+            'diagnosis' => $validated['completion_report']['diagnosis'],
+            'treatment' => $validated['completion_report']['treatment_provided'],
+            'notes' => $validated['completion_report']['notes'] ?? null,
+            'visit_date' => $appointment->date
+        ]);
+
+        // Create prescription if medications were prescribed
+        if (!empty($validated['completion_report']['medications_prescribed'])) {
+            $prescription = Prescription::create([
+                'patient_id' => $appointment->patient_id,
+                'doctor_id' => $request->user()->id,
+                'notes' => "Prescribed during appointment completion. Medications: " . $validated['completion_report']['medications_prescribed'],
+                'status' => 'active'
+            ]);
+
+            // Parse medications from the text (simple approach)
+            // You might want to enhance this parsing logic
+            $medicationsText = $validated['completion_report']['medications_prescribed'];
+            $medicationLines = explode("\n", $medicationsText);
+            
+            foreach ($medicationLines as $line) {
+                $line = trim($line);
+                if (empty($line)) continue;
+                
+                // Simple parsing - you can enhance this
+                // Expected format: "Medication Name - Dosage - Instructions"
+                $parts = explode(' - ', $line);
+                
+                if (count($parts) >= 2) {
+                    $prescription->medications()->create([
+                        'name' => $parts[0] ?? 'Not specified',
+                        'dosage' => $parts[1] ?? 'As directed',
+                        'instructions' => $parts[2] ?? 'As directed by doctor',
+                        'start_date' => $appointment->date,
+                        'end_date' => date('Y-m-d', strtotime($appointment->date . ' + 7 days')), // Default 7 days
+                        'frequency' => 'daily',
+                        'created_by' => $request->user()->id,
+                        'patient_id' => $appointment->patient_id,
+                        'status' => 'active'
+                    ]);
+                }
+            }
+        }
+
+        DB::commit();
+
+        return response()->json([
+            'message' => 'Appointment completed successfully',
+            'appointment' => $appointment->load(['patient', 'doctor']),
+            'medical_record' => $medicalRecord,
+            'prescription_created' => !empty($validated['completion_report']['medications_prescribed'])
+        ]);
+
+    } catch (\Exception $e) {
+        DB::rollBack();
+        Log::error('Error completing appointment: ' . $e->getMessage());
+        return response()->json([
+            'message' => 'Failed to complete appointment',
+            'error' => $e->getMessage()
+        ], 500);
+    }
+}
 
     /**
      * Get doctor's patient list
@@ -397,27 +496,152 @@ class DoctorController extends Controller
     }
 
     /**
-     * Update appointment status
-     */
-    public function updateAppointmentStatus(Request $request, $id): JsonResponse
-    {
-        $validated = $request->validate([
-            'status' => 'required|in:scheduled,confirmed,completed,cancelled,no_show'
-        ]);
+ * Update appointment status (enhanced to handle completion reports)
+ */
+public function updateAppointmentStatus(Request $request, $id): JsonResponse
+{
+    $validated = $request->validate([
+        'status' => 'required|in:scheduled,confirmed,completed,cancelled,no_show',
+        'completion_report' => 'sometimes|array',
+        'completion_report.diagnosis' => 'required_if:status,completed|string',
+        'completion_report.treatment_provided' => 'required_if:status,completed|string',
+        'completion_report.medications_prescribed' => 'nullable|string',
+        'completion_report.recommendations' => 'nullable|string',
+        'completion_report.follow_up_required' => 'boolean',
+        'completion_report.follow_up_date' => 'nullable|date',
+        'completion_report.notes' => 'nullable|string',
+    ]);
+
+    try {
+        DB::beginTransaction();
 
         $appointment = Appointment::where('doctor_id', $request->user()->id)
             ->findOrFail($id);
 
-        $appointment->update([
+        // Update appointment status
+        $updateData = [
             'status' => $validated['status'],
             'updated_at' => now()
-        ]);
+        ];
+
+        // If completing appointment, add completion report
+        if ($validated['status'] === 'completed' && isset($validated['completion_report'])) {
+            $updateData['completion_report'] = json_encode($validated['completion_report']);
+            $updateData['completed_at'] = now();
+        }
+
+        $appointment->update($updateData);
+
+        // If completing appointment with completion report, create medical record and prescription
+        if ($validated['status'] === 'completed' && isset($validated['completion_report'])) {
+            $completionReport = $validated['completion_report'];
+
+            // Create medical record
+            $medicalRecord = MedicalRecord::create([
+                'patient_id' => $appointment->patient_id,
+                'doctor_id' => $request->user()->id,
+                'appointment_id' => $appointment->id,
+                'created_by' => $request->user()->id,
+                'diagnosis' => $completionReport['diagnosis'],
+                'treatment' => $completionReport['treatment_provided'],
+                'notes' => $completionReport['notes'] ?? null,
+                'visit_date' => $appointment->date
+            ]);
+
+            // Create prescription if medications were prescribed
+            if (!empty($completionReport['medications_prescribed'])) {
+                $prescription = Prescription::create([
+                    'patient_id' => $appointment->patient_id,
+                    'doctor_id' => $request->user()->id,
+                    'notes' => "Prescribed during appointment completion on " . $appointment->date . ". Original medications text: " . $completionReport['medications_prescribed'],
+                    'status' => 'active'
+                ]);
+
+                // Parse medications from the completion report
+                $this->createMedicationsFromText($prescription, $completionReport['medications_prescribed'], $appointment);
+            }
+        }
+
+        DB::commit();
 
         return response()->json([
             'message' => 'Appointment status updated successfully',
-            'appointment' => $appointment->load(['patient', 'doctor'])
+            'appointment' => $appointment->load(['patient', 'doctor']),
+            'medical_record_created' => $validated['status'] === 'completed' && isset($validated['completion_report']),
+            'prescription_created' => $validated['status'] === 'completed' && !empty($validated['completion_report']['medications_prescribed'] ?? '')
+        ]);
+
+    } catch (\Exception $e) {
+        DB::rollBack();
+        Log::error('Error updating appointment status: ' . $e->getMessage());
+        return response()->json([
+            'message' => 'Failed to update appointment status',
+            'error' => $e->getMessage()
+        ], 500);
+    }
+}
+
+/**
+ * Helper method to create medications from text
+ */
+private function createMedicationsFromText($prescription, $medicationsText, $appointment)
+{
+    // Split medications by lines or semicolons
+    $medicationLines = preg_split('/[;\n]/', $medicationsText);
+    
+    foreach ($medicationLines as $line) {
+        $line = trim($line);
+        if (empty($line)) continue;
+        
+        // Try to parse the medication line
+        // Common formats:
+        // "Medication Name - Dosage - Instructions"
+        // "Medication Name, Dosage, Instructions"
+        // "Medication Name (Dosage) - Instructions"
+        
+        $name = 'Not specified';
+        $dosage = 'As directed';
+        $instructions = 'As directed by doctor';
+        
+        // Pattern 1: "Name - Dosage - Instructions"
+        if (strpos($line, ' - ') !== false) {
+            $parts = explode(' - ', $line);
+            $name = trim($parts[0]);
+            $dosage = trim($parts[1] ?? 'As directed');
+            $instructions = trim($parts[2] ?? 'As directed by doctor');
+        }
+        // Pattern 2: "Name, Dosage, Instructions"
+        elseif (strpos($line, ', ') !== false) {
+            $parts = explode(', ', $line);
+            $name = trim($parts[0]);
+            $dosage = trim($parts[1] ?? 'As directed');
+            $instructions = trim($parts[2] ?? 'As directed by doctor');
+        }
+        // Pattern 3: "Name (Dosage) Instructions"
+        elseif (preg_match('/^(.+?)\s*\((.+?)\)\s*(.*)$/', $line, $matches)) {
+            $name = trim($matches[1]);
+            $dosage = trim($matches[2]);
+            $instructions = trim($matches[3]) ?: 'As directed by doctor';
+        }
+        // Pattern 4: Just medication name
+        else {
+            $name = $line;
+        }
+        
+        // Create the medication entry
+        $prescription->medications()->create([
+            'name' => $name,
+            'dosage' => $dosage,
+            'instructions' => $instructions,
+            'start_date' => $appointment->date,
+            'end_date' => date('Y-m-d', strtotime($appointment->date . ' + 7 days')), // Default 7 days
+            'frequency' => 'daily',
+            'created_by' => auth()->id(),
+            'patient_id' => $appointment->patient_id,
+            'status' => 'active'
         ]);
     }
+}
 
     /**
      * Get prescriptions with medication details
@@ -514,6 +738,7 @@ class DoctorController extends Controller
             $prescription = Prescription::create([
                 'patient_id' => $validated['patient_id'],
                 'doctor_id' => auth()->id(),
+                // Remove created_by for prescriptions table - it doesn't have this field
                 'notes' => $validated['notes'] ?? null,
                 'status' => $validated['status'] ?? 'active'
             ]);
@@ -525,7 +750,10 @@ class DoctorController extends Controller
                     'instructions' => $medication['instructions'],
                     'start_date' => $medication['start_date'],
                     'end_date' => $medication['end_date'],
-                    'status' => 'active'
+                    'created_by' => auth()->id(), // ADD THIS - medications table requires it
+                    'patient_id' => $validated['patient_id'], // ADD THIS if not automatically set
+                    'status' => 'active',
+                    'frequency' => 'daily' // ADD THIS - required field with enum values
                 ]);
             }
 
@@ -538,6 +766,7 @@ class DoctorController extends Controller
 
         } catch (\Exception $e) {
             DB::rollBack();
+            Log::error('Prescription creation error: ' . $e->getMessage());
             return response()->json([
                 'message' => 'Failed to create prescription',
                 'error' => $e->getMessage()
@@ -588,31 +817,105 @@ class DoctorController extends Controller
     }
 
     /**
-     * Create a new medical record for a patient
-     */
-    public function createMedicalRecord(Request $request, $patientId)
-    {
-        $validated = $request->validate([
-            'diagnosis' => 'required|string|max:1000',
-            'treatment' => 'required|string|max:1000',
-            'notes' => 'nullable|string',
-            'visit_date' => 'required|date'
-        ]);
+ * Create a new medical record for a patient (with optional prescription)
+ */
+public function createMedicalRecord(Request $request, $patientId)
+{
+    $validated = $request->validate([
+        'diagnosis' => 'required|string|max:1000',
+        'treatment' => 'required|string|max:1000',
+        'notes' => 'nullable|string',
+        'visit_date' => 'required|date',
+        'has_prescription' => 'boolean',
+        'medications' => 'sometimes|array|min:1',
+        'medications.*.name' => 'required_if:has_prescription,true|string|max:255',
+        'medications.*.dosage' => 'required_if:has_prescription,true|string|max:100',
+        'medications.*.instructions' => 'required_if:has_prescription,true|string',
+        'medications.*.start_date' => 'required_if:has_prescription,true|date',
+        'medications.*.end_date' => 'required_if:has_prescription,true|date|after_or_equal:medications.*.start_date',
+        'medications.*.frequency' => 'sometimes|string|in:daily,twice_daily,weekly,as_needed',
+    ]);
 
+    try {
+        DB::beginTransaction();
+
+        // Create medical record
         $record = MedicalRecord::create([
             'patient_id' => $patientId,
             'doctor_id' => $request->user()->id,
+            'created_by' => $request->user()->id,
             'diagnosis' => $validated['diagnosis'],
             'treatment' => $validated['treatment'],
             'notes' => $validated['notes'] ?? null,
             'visit_date' => $validated['visit_date']
         ]);
 
-        return response()->json([
+        $prescription = null;
+
+        // Create prescription if medications are provided
+        if ($validated['has_prescription'] && !empty($validated['medications'])) {
+            $prescription = Prescription::create([
+                'patient_id' => $patientId,
+                'doctor_id' => $request->user()->id,
+                'notes' => "Created with medical record #" . $record->id,
+                'status' => 'active'
+            ]);
+
+            // Add medications to prescription
+            foreach ($validated['medications'] as $medication) {
+                $prescription->medications()->create([
+                    'name' => $medication['name'],
+                    'dosage' => $medication['dosage'],
+                    'instructions' => $medication['instructions'],
+                    'start_date' => $medication['start_date'],
+                    'end_date' => $medication['end_date'],
+                    'frequency' => $medication['frequency'] ?? 'daily',
+                    'created_by' => $request->user()->id,
+                    'patient_id' => $patientId,
+                    'status' => 'active'
+                ]);
+            }
+        }
+
+        DB::commit();
+
+        $response = [
             'message' => 'Medical record created successfully',
-            'record' => $record
-        ], 201);
+            'record' => $record->load('doctor:id,name')
+        ];
+
+        if ($prescription) {
+            $response['prescription'] = $prescription->load(['medications', 'doctor:id,name']);
+            $response['message'] = 'Medical record and prescription created successfully';
+        }
+
+        return response()->json($response, 201);
+
+    } catch (\Exception $e) {
+        DB::rollBack();
+        Log::error('Medical record creation error: ' . $e->getMessage());
+        return response()->json([
+            'message' => 'Failed to create medical record',
+            'error' => $e->getMessage()
+        ], 500);
     }
+}
+
+/**
+ * Get medical records for a specific patient
+ */
+public function getPatientMedicalRecords(Request $request, $patientId)
+{
+    $records = MedicalRecord::where('patient_id', $patientId)
+        ->where('doctor_id', $request->user()->id)
+        ->with('doctor:id,name')
+        ->orderBy('visit_date', 'desc')
+        ->get();
+
+    return response()->json([
+        'medical_records' => $records
+    ]);
+}
 
     /**
      * Get detailed statistics with period filter

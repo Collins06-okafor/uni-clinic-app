@@ -46,15 +46,20 @@ class SuperAdminController extends Controller
     }
 
     // List all privileged users
+    // In SuperAdminController::index()
     public function index()
     {
+        \Log::info('=== SuperAdmin users called ===');
         try {
-            $users = User::whereIn('role', ['doctor','admin','clinical_staff'])
-                        ->get(['id','name','email','role','status','created_at']);
+            $users = User::whereIn('role', ['doctor','admin','clinical_staff'])->get();
+            \Log::info('Raw user count: ' . User::count());
+            \Log::info('Filtered user count: ' . $users->count());
+            \Log::info('Users found: ' . $users->pluck('name', 'role')->toJson());
             
             return response()->json($users);
         } catch (\Exception $e) {
-            return response()->json(['message' => 'Failed to fetch users'], 500);
+            \Log::error('SuperAdmin error: ' . $e->getMessage());
+            return response()->json(['error' => $e->getMessage()], 500);
         }
     }
 }

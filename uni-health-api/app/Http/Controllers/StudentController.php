@@ -8,6 +8,8 @@ use App\Models\Appointment;
 use App\Models\MedicalRecord;
 use App\Models\User;
 use Carbon\Carbon;
+use App\Rules\MinimumAge;
+use Illuminate\Support\Facades\Storage;
 
 class StudentController extends Controller
 {
@@ -70,12 +72,24 @@ public function getProfile(Request $request): JsonResponse
     try {
         $user = $request->user();
         
+        // Ensure avatar_url is a full URL (same as AcademicStaffController)
+        $avatarUrl = null;
+        if ($user->avatar_url) {
+            // If it's already a full URL, use it as is
+            if (filter_var($user->avatar_url, FILTER_VALIDATE_URL)) {
+                $avatarUrl = $user->avatar_url;
+            } else {
+                // Convert relative path to full URL
+                $avatarUrl = url($user->avatar_url);
+            }
+        }
+        
         return response()->json([
             'student_id' => $user->student_id,
             'name' => $user->name,
             'email' => $user->email,
             'department' => $user->department,
-            'avatar_url' => $user->avatar_url,
+            'avatar_url' => $avatarUrl, // This should now be a full URL or null
             'allergies' => $user->allergies,
             'has_known_allergies' => $user->has_known_allergies ?? false,
             'allergies_uncertain' => $user->allergies_uncertain ?? false,
@@ -119,50 +133,190 @@ private function isProfileComplete($user): bool
 public function uploadAvatar(Request $request): JsonResponse
 {
     try {
-        $request->validate([
-            'avatar' => 'required|image|mimes:jpeg,png,jpg,gif|max:2048'
+        $validated = $request->validate([
+            'avatar' => 'required|image|mimes:jpeg,png,jpg,gif,webp|max:5120', // 5MB max
         ]);
 
         $user = $request->user();
         
-        if ($request->hasFile('avatar')) {
-            $file = $request->file('avatar');
+        // Delete old avatar if exists
+        if ($user->avatar_url) {
+            $oldPath = str_replace('/storage/', '', $user->avatar_url);
+            $oldPath = str_replace(url('/storage/'), '', $user->avatar_url); // Handle full URLs too
             
-            // Delete old avatar if exists
-            if ($user->avatar_url) {
-                $oldPath = str_replace('/storage/', '', $user->avatar_url);
-                if (Storage::disk('public')->exists($oldPath)) {
-                    Storage::disk('public')->delete($oldPath);
-                }
+            if (\Storage::disk('public')->exists($oldPath)) {
+                \Storage::disk('public')->delete($oldPath);
             }
-            
-            // Store new avatar
-            $path = $file->store('avatars', 'public');
-            $avatarUrl = '/storage/' . $path;
-            
-            // Update user record
-            $user->update(['avatar_url' => $avatarUrl]);
-            
-            return response()->json([
-                'message' => 'Avatar uploaded successfully',
-                'avatar_url' => $avatarUrl
-            ]);
         }
+
+        // Store new avatar with consistent naming like AcademicStaffController
+        $file = $request->file('avatar');
+        $filename = $user->id . '_' . time() . '.' . $file->getClientOriginalExtension();
+        $path = $file->storeAs('avatars', $filename, 'public');
         
+        // Create FULL URL for the avatar (same as AcademicStaffController)
+        $avatarUrl = url('/storage/' . $path);
+        
+        // Update user record with FULL URL
+        $user->update(['avatar_url' => $avatarUrl]);
+
+        // Log for debugging
+        \Log::info('Student avatar uploaded', [
+            'user_id' => $user->id,
+            'path' => $path,
+            'full_url' => $avatarUrl
+        ]);
+
         return response()->json([
-            'message' => 'No file uploaded'
-        ], 400);
-        
+            'message' => 'Profile image uploaded successfully',
+            'avatar_url' => $avatarUrl // Return the full URL
+        ]);
+
     } catch (\Illuminate\Validation\ValidationException $e) {
         return response()->json([
             'message' => 'Validation failed',
             'errors' => $e->errors()
         ], 422);
     } catch (\Exception $e) {
-        \Log::error('Avatar upload error: ' . $e->getMessage());
+        \Log::error('Student avatar upload error: ' . $e->getMessage());
         
         return response()->json([
             'message' => 'Failed to upload avatar',
+            'error' => 'An unexpected error occurred'
+        ], 500);
+    }
+}
+
+/**
+ * Remove profile avatar - Add this new method
+ */
+public function removeAvatar(Request $request): JsonResponse
+{
+    try {
+        $user = $request->user();
+        
+        if ($user->avatar_url) {
+            // Handle both relative and full URLs
+            $oldPath = str_replace('/storage/', '', $user->avatar_url);
+            $oldPath = str_replace(url('/storage/'), '', $user->avatar_url);
+            
+            if (\Storage::disk('public')->exists($oldPath)) {
+                \Storage::disk('public')->delete($oldPath);
+            }
+            
+            // Update user record
+            $user->update(['avatar_url' => null]);
+            
+            \Log::info('Student avatar removed', ['user_id' => $user->id]);
+        }
+
+        return response()->json([
+            'message' => 'Profile photo removed successfully'
+        ]);
+
+    } catch (\Exception $e) {
+        \Log::error('Student avatar removal error: ' . $e->getMessage());
+        
+        return response()->json([
+            'message' => 'Failed to remove avatar',
+            'error' => 'An unexpected error occurred'
+        ], 500);
+    }
+}
+
+/**
+ * Create or update user profile - Fixed version
+ */
+public function createOrUpdateProfile(Request $request): JsonResponse
+{
+    try {
+        $minBirthDate = now()->subYears(16)->toDateString();
+        
+        $validated = $request->validate([
+            'student_id' => 'required|string|max:255',
+            'name' => 'required|string|max:255',
+            'email' => 'required|email|max:255',
+            'department' => 'required|string|max:255',
+            'phone_number' => 'required|string|max:20',
+            'date_of_birth' => [
+                'required',
+                'date',
+                'before_or_equal:' . $minBirthDate
+            ],
+            'emergency_contact_name' => 'required|string|max:255',
+            'emergency_contact_phone' => 'required|string|max:20',
+            'medical_history' => 'nullable|string',
+            'allergies' => 'nullable|string',
+            'has_known_allergies' => 'boolean',
+            'allergies_uncertain' => 'boolean',
+            'addictions' => 'nullable|string'
+        ], [
+            'date_of_birth.before_or_equal' => 'Students must be at least 16 years old to register.',
+            'date_of_birth.required' => 'Date of birth is required.',
+            'date_of_birth.date' => 'Please enter a valid date of birth.'
+        ]);
+
+        // Additional age verification
+        $birthDate = \Carbon\Carbon::parse($validated['date_of_birth']);
+        $age = $birthDate->diffInYears(now());
+        
+        if ($age < 16) {
+            return response()->json([
+                'message' => 'Age requirement not met',
+                'errors' => [
+                    'date_of_birth' => ['Students must be at least 16 years old. Current age: ' . $age . ' years.']
+                ]
+            ], 422);
+        }
+        
+        $user = $request->user();
+        
+        $user->update([
+            'student_id' => $validated['student_id'],
+            'name' => $validated['name'],
+            'email' => $validated['email'],
+            'department' => $validated['department'],
+            'phone' => $validated['phone_number'],
+            'date_of_birth' => $validated['date_of_birth'],
+            'emergency_contact_name' => $validated['emergency_contact_name'],
+            'emergency_contact_phone' => $validated['emergency_contact_phone'],
+            'medical_history' => $validated['medical_history'],
+            'allergies' => $validated['allergies'],
+            'has_known_allergies' => $validated['has_known_allergies'] ?? false,
+            'allergies_uncertain' => $validated['allergies_uncertain'] ?? false,
+            'addictions' => $validated['addictions']
+        ]);
+
+        return response()->json([
+            'message' => 'Profile saved successfully',
+            'user' => [
+                'student_id' => $user->student_id,
+                'name' => $user->name,
+                'email' => $user->email,
+                'department' => $user->department,
+                'phone_number' => $user->phone,
+                'date_of_birth' => $user->date_of_birth,
+                'emergency_contact_name' => $user->emergency_contact_name,
+                'emergency_contact_phone' => $user->emergency_contact_phone,
+                'medical_history' => $user->medical_history,
+                'allergies' => $user->allergies,
+                'has_known_allergies' => $user->has_known_allergies,
+                'allergies_uncertain' => $user->allergies_uncertain,
+                'addictions' => $user->addictions,
+                'avatar_url' => $user->avatar_url
+            ]
+        ]);
+
+    } catch (\Illuminate\Validation\ValidationException $e) {
+        return response()->json([
+            'message' => 'Validation failed',
+            'errors' => $e->errors()
+        ], 422);
+    } catch (\Exception $e) {
+        \Log::error('Profile save error: ' . $e->getMessage());
+        
+        return response()->json([
+            'message' => 'Failed to save profile',
             'error' => 'An unexpected error occurred'
         ], 500);
     }
@@ -433,7 +587,7 @@ public function getDoctorAvailability(Request $request): JsonResponse
             $appointment->update([
                 'date' => $validated['date'],
                 'time' => $validated['time'],
-                'status' => 'rescheduled'
+                'status' => 'scheduled'
             ]);
 
             $appointment->load('doctor');

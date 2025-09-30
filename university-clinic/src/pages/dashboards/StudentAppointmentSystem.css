@@ -243,22 +243,22 @@ body {
 }
 
 .stat-icon-primary {
-  background-color: var(--university-light);
+  /*background-color: var(--university-light);*/
   color: var(--university-primary);
 }
 
 .stat-icon-success {
-  background-color: #e8f5e8;
+  /*background-color: #e8f5e8;*/
   color: #28a745;
 }
 
 .stat-icon-warning {
-  background-color: #fff3cd;
+  /* background-color: #e8f5e8; */
   color: #ffc107;
 }
 
 .stat-icon-info {
-  background-color: #f3e5f5;
+  /*background-color: #f3e5f5;*/
   color: #17a2b8;
 }
 
@@ -532,6 +532,7 @@ body {
   border-bottom: none;
 }
 
+
 /* Empty State Styles */
 .empty-state {
   text-align: center;
@@ -652,4 +653,92 @@ body {
 
 .rounded-custom {
   border-radius: 1rem !important;
+}
+
+.form-control.is-invalid {
+  border-color: #dc3545 !important;
+  box-shadow: 0 0 0 0.25rem rgba(220, 53, 69, 0.25) !important;
+}
+
+.invalid-feedback {
+  display: block !important;
+  color: #dc3545;
+  font-size: 0.875rem;
+  margin-top: 0.25rem;
+  font-weight: 500;
+}
+
+.photo-requirements {
+  background: #f8f9fa;
+  border: 1px solid #e9ecef;
+  border-radius: 8px;
+  padding: 16px;
+}
+
+.accordion-button:not(.collapsed) {
+  background-color: #f8f9fa !important;
+  color: #495057 !important;
+  box-shadow: none !important;
+}
+
+.accordion-button:focus {
+  box-shadow: 0 0 0 0.25rem rgba(220, 53, 69, 0.25) !important;
+  border-color: #dc3545 !important;
+}
+
+.accordion-button::after {
+  background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='%23495057'%3e%3cpath fill-rule='evenodd' d='M1.646 4.646a.5.5 0 0 1 .708 0L8 10.293l5.646-5.647a.5.5 0 0 1 .708.708l-6 6a.5.5 0 0 1-.708 0l-6-6a.5.5 0 0 1 0-.708z'/%3e%3c/svg%3e") !important;
+}
+
+/* Mobile responsiveness for recent appointments */
+@media (max-width: 768px) {
+  .recent-appointment-card {
+    margin-bottom: 0.75rem !important;
+  }
+  
+  .recent-appointment-card .card-body {
+    padding: 0.75rem !important;
+  }
+  
+  .recent-appointment-card h6 {
+    font-size: 0.9rem !important;
+  }
+  
+  .recent-appointment-card .small {
+    font-size: 0.8rem !important;
+  }
+  
+  .status-badge {
+    font-size: 0.7rem !important;
+    padding: 0.2rem 0.5rem !important;
+  }
+}
+
+/* Appointment history mobile cards */
+@media (max-width: 991px) {
+  .appointment-history-card {
+    border: 1px solid #dee2e6 !important;
+    border-radius: 0.5rem !important;
+    margin-bottom: 1rem !important;
+  }
+  
+  .appointment-history-card .card-body {
+    padding: 1rem !important;
+  }
+  
+  .appointment-history-card .btn-sm {
+    font-size: 0.8rem !important;
+    padding: 0.4rem 0.8rem !important;
+  }
+}
+
+@media (max-width: 576px) {
+  .appointment-history-card .d-flex.gap-1 {
+    flex-direction: column !important;
+    gap: 0.5rem !important;
+  }
+  
+  .appointment-history-card .flex-fill {
+    width: 100% !important;
+  }
 }

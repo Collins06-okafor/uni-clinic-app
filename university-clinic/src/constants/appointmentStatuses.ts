@@ -32,6 +32,7 @@ export const APPOINTMENT_STATUSES = {
   PENDING: 'pending',
   UNDER_REVIEW: 'under_review',
   ASSIGNED: 'assigned',
+  SCHEDULED: 'scheduled', // ADD THIS - matches backend
   REJECTED: 'rejected',
   CONFIRMED: 'confirmed',
   RESCHEDULED: 'rescheduled',
@@ -41,19 +42,19 @@ export const APPOINTMENT_STATUSES = {
 
 export type AppointmentStatus = (typeof APPOINTMENT_STATUSES)[keyof typeof APPOINTMENT_STATUSES];
 
-// Change these to accept string instead of AppointmentStatus
 export const getStatusText = (status: string): string => {
   const statusMap: Record<string, string> = {
     [APPOINTMENT_STATUSES.PENDING]: 'Pending Review',
     [APPOINTMENT_STATUSES.UNDER_REVIEW]: 'Under Review',
     [APPOINTMENT_STATUSES.ASSIGNED]: 'Assigned to Doctor',
+    [APPOINTMENT_STATUSES.SCHEDULED]: 'Scheduled', // ADD THIS
     [APPOINTMENT_STATUSES.REJECTED]: 'Rejected',
     [APPOINTMENT_STATUSES.CONFIRMED]: 'Confirmed',
     [APPOINTMENT_STATUSES.RESCHEDULED]: 'Rescheduled',
     [APPOINTMENT_STATUSES.COMPLETED]: 'Completed',
     [APPOINTMENT_STATUSES.CANCELLED]: 'Cancelled'
   };
-  return statusMap[status] || status;
+  return statusMap[status] || status.charAt(0).toUpperCase() + status.slice(1);
 };
 
 export const getStatusBadgeClass = (status: string): string => {
@@ -61,6 +62,7 @@ export const getStatusBadgeClass = (status: string): string => {
     [APPOINTMENT_STATUSES.PENDING]: 'badge bg-warning text-dark',
     [APPOINTMENT_STATUSES.UNDER_REVIEW]: 'badge bg-info',
     [APPOINTMENT_STATUSES.ASSIGNED]: 'badge bg-primary',
+    [APPOINTMENT_STATUSES.SCHEDULED]: 'badge bg-success', // ADD THIS
     [APPOINTMENT_STATUSES.REJECTED]: 'badge bg-danger',
     [APPOINTMENT_STATUSES.CONFIRMED]: 'badge bg-success',
     [APPOINTMENT_STATUSES.RESCHEDULED]: 'badge bg-secondary',
@@ -70,18 +72,43 @@ export const getStatusBadgeClass = (status: string): string => {
   return badgeMap[status] || 'badge bg-secondary';
 };
 
+// FIXED WORKFLOW - matches your actual system
 export const STATUS_WORKFLOW: Record<AppointmentStatus, AppointmentStatus[]> = {
-  [APPOINTMENT_STATUSES.PENDING]: [APPOINTMENT_STATUSES.UNDER_REVIEW],
-  [APPOINTMENT_STATUSES.UNDER_REVIEW]: [APPOINTMENT_STATUSES.ASSIGNED, APPOINTMENT_STATUSES.REJECTED],
-  [APPOINTMENT_STATUSES.ASSIGNED]: [APPOINTMENT_STATUSES.CONFIRMED, APPOINTMENT_STATUSES.RESCHEDULED, APPOINTMENT_STATUSES.REJECTED],
-  [APPOINTMENT_STATUSES.CONFIRMED]: [APPOINTMENT_STATUSES.COMPLETED, APPOINTMENT_STATUSES.CANCELLED],
+  // Student request workflow
+  [APPOINTMENT_STATUSES.PENDING]: [APPOINTMENT_STATUSES.UNDER_REVIEW, APPOINTMENT_STATUSES.ASSIGNED, APPOINTMENT_STATUSES.REJECTED],
+  [APPOINTMENT_STATUSES.UNDER_REVIEW]: [APPOINTMENT_STATUSES.ASSIGNED, APPOINTMENT_STATUSES.SCHEDULED, APPOINTMENT_STATUSES.REJECTED],
+  [APPOINTMENT_STATUSES.ASSIGNED]: [APPOINTMENT_STATUSES.SCHEDULED, APPOINTMENT_STATUSES.CONFIRMED, APPOINTMENT_STATUSES.REJECTED],
+  [APPOINTMENT_STATUSES.SCHEDULED]: [APPOINTMENT_STATUSES.CONFIRMED, APPOINTMENT_STATUSES.RESCHEDULED, APPOINTMENT_STATUSES.CANCELLED],
+  
+  // Direct booking workflow (academic staff)
+  [APPOINTMENT_STATUSES.CONFIRMED]: [APPOINTMENT_STATUSES.COMPLETED, APPOINTMENT_STATUSES.CANCELLED, APPOINTMENT_STATUSES.RESCHEDULED],
   [APPOINTMENT_STATUSES.RESCHEDULED]: [APPOINTMENT_STATUSES.CONFIRMED, APPOINTMENT_STATUSES.CANCELLED],
+  
+  // Terminal states
   [APPOINTMENT_STATUSES.REJECTED]: [],
   [APPOINTMENT_STATUSES.COMPLETED]: [],
   [APPOINTMENT_STATUSES.CANCELLED]: []
 };
 
-// Rest of your functions remain the same...
+// CORRECT WORKFLOW DEFINITIONS
+export const APPOINTMENT_WORKFLOWS = {
+  // Student requests (must be reviewed and assigned by clinical staff)
+  STUDENT_REQUESTS: [
+    APPOINTMENT_STATUSES.PENDING,
+    APPOINTMENT_STATUSES.UNDER_REVIEW,
+    APPOINTMENT_STATUSES.ASSIGNED,
+    APPOINTMENT_STATUSES.SCHEDULED,
+    APPOINTMENT_STATUSES.CONFIRMED,
+    APPOINTMENT_STATUSES.COMPLETED
+  ],
+  
+  // Direct bookings (academic staff with doctors)
+  DIRECT_BOOKINGS: [
+    APPOINTMENT_STATUSES.SCHEDULED,
+    APPOINTMENT_STATUSES.CONFIRMED,
+    APPOINTMENT_STATUSES.COMPLETED
+  ]
+};
 
 export const canTransitionTo = (currentStatus: AppointmentStatus, newStatus: AppointmentStatus): boolean => {
   const allowedTransitions = STATUS_WORKFLOW[currentStatus] || [];
@@ -94,13 +121,28 @@ export const getAvailableActions = (status: AppointmentStatus, userRole: UserRol
   if (userRole === 'clinical_staff') {
     switch (status) {
       case APPOINTMENT_STATUSES.PENDING:
-        actions.push({
-          action: 'review',
-          label: 'Start Review',
-          class: 'btn-info',
-          nextStatus: APPOINTMENT_STATUSES.UNDER_REVIEW
-        });
+        actions.push(
+          {
+            action: 'review',
+            label: 'Start Review',
+            class: 'btn-info',
+            nextStatus: APPOINTMENT_STATUSES.UNDER_REVIEW
+          },
+          {
+            action: 'assign',
+            label: 'Assign Doctor',
+            class: 'btn-primary',
+            nextStatus: APPOINTMENT_STATUSES.ASSIGNED
+          },
+          {
+            action: 'approve',
+            label: 'Approve & Schedule',
+            class: 'btn-success',
+            nextStatus: APPOINTMENT_STATUSES.SCHEDULED
+          }
+        );
         break;
+        
       case APPOINTMENT_STATUSES.UNDER_REVIEW:
         actions.push(
           {
@@ -110,6 +152,12 @@ export const getAvailableActions = (status: AppointmentStatus, userRole: UserRol
             nextStatus: APPOINTMENT_STATUSES.ASSIGNED
           },
           {
+            action: 'approve',
+            label: 'Approve & Schedule',
+            class: 'btn-success',
+            nextStatus: APPOINTMENT_STATUSES.SCHEDULED
+          },
+          {
             action: 'reject',
             label: 'Reject',
             class: 'btn-danger',
@@ -117,13 +165,22 @@ export const getAvailableActions = (status: AppointmentStatus, userRole: UserRol
           }
         );
         break;
+        
       case APPOINTMENT_STATUSES.ASSIGNED:
-        actions.push({
-          action: 'reassign',
-          label: 'Reassign',
-          class: 'btn-warning',
-          nextStatus: APPOINTMENT_STATUSES.ASSIGNED
-        });
+        actions.push(
+          {
+            action: 'schedule',
+            label: 'Schedule',
+            class: 'btn-success',
+            nextStatus: APPOINTMENT_STATUSES.SCHEDULED
+          },
+          {
+            action: 'reassign',
+            label: 'Reassign',
+            class: 'btn-warning',
+            nextStatus: APPOINTMENT_STATUSES.ASSIGNED
+          }
+        );
         break;
     }
   }
@@ -131,6 +188,7 @@ export const getAvailableActions = (status: AppointmentStatus, userRole: UserRol
   if (userRole === 'doctor') {
     switch (status) {
       case APPOINTMENT_STATUSES.ASSIGNED:
+      case APPOINTMENT_STATUSES.SCHEDULED:
         actions.push(
           {
             action: 'confirm',
@@ -146,6 +204,7 @@ export const getAvailableActions = (status: AppointmentStatus, userRole: UserRol
           }
         );
         break;
+        
       case APPOINTMENT_STATUSES.CONFIRMED:
         actions.push(
           {
@@ -192,8 +251,13 @@ export const getNotificationMessage = (status: AppointmentStatus, data: Notifica
     },
     [APPOINTMENT_STATUSES.ASSIGNED]: {
       title: 'Appointment Assigned',
-      message: `Your appointment has been assigned to Dr. ${data.doctorName}. Awaiting doctor confirmation.`,
+      message: `Your appointment has been assigned to Dr. ${data.doctorName}. Awaiting scheduling.`,
       type: 'info'
+    },
+    [APPOINTMENT_STATUSES.SCHEDULED]: {
+      title: 'Appointment Scheduled',
+      message: `Your appointment with Dr. ${data.doctorName} is scheduled for ${data.date} at ${data.time}.`,
+      type: 'success'
     },
     [APPOINTMENT_STATUSES.REJECTED]: {
       title: 'Appointment Rejected',
@@ -334,6 +398,7 @@ export const generateAppointmentRef = (): string => {
 export default {
   APPOINTMENT_STATUSES,
   STATUS_WORKFLOW,
+  APPOINTMENT_WORKFLOWS,
   getStatusText,
   getStatusBadgeClass,
   canTransitionTo,

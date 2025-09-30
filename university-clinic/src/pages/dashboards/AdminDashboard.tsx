@@ -6,6 +6,9 @@ import {
 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import i18n from '../../services/i18n';
+import PhoneInput from "react-phone-input-2";
+import "react-phone-input-2/lib/style.css";
+
 
 // API configuration
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://127.0.0.1:8000";
@@ -351,23 +354,39 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
   };
 
   const handlePhotoUpload = async (file: File | null) => {
-    if (!file) return;
-    const formData = new FormData();
-    formData.append('avatar', file);
-    try {
-      const data = await fetchJson(`${PROFILE_API_BASE}${PROFILE_ENDPOINT}/avatar`, {
-        method: 'POST',
-        body: formData,
-      });
-      setProfileAvatar(data.avatar_url);
-      addNotification('Profile photo updated successfully!', 'success');
-    } catch (error) {
-      console.error('Photo upload error:', error);
-      addNotification((error as Error).message || 'Failed to upload photo', 'error');
-    } finally {
-      if (fileInputRef.current) fileInputRef.current.value = '';
-    }
-  };
+  if (!file) return;
+  
+  // Validation
+  const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp'];
+  const maxSize = 5 * 1024 * 1024; // 5MB
+  
+  if (!allowedTypes.includes(file.type)) {
+    addNotification('Invalid file type. Please upload a JPEG, PNG, GIF, or WebP image.', 'error');
+    return;
+  }
+  
+  if (file.size > maxSize) {
+    addNotification('File size must be less than 5MB. Please choose a smaller image.', 'error');
+    return;
+  }
+  
+  const formData = new FormData();
+  formData.append('avatar', file);
+  
+  try {
+    const data = await fetchJson(`${PROFILE_API_BASE}${PROFILE_ENDPOINT}/avatar`, {
+      method: 'POST',
+      body: formData,
+    });
+    setProfileAvatar(data.avatar_url);
+    addNotification('Profile photo updated successfully!', 'success');
+  } catch (error) {
+    console.error('Photo upload error:', error);
+    addNotification((error as Error).message || 'Failed to upload photo', 'error');
+  } finally {
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  }
+};
 
   const handlePhotoRemove = async () => {
     try {
@@ -425,19 +444,20 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
     bgColor?: string;
   }
 
-  const StatCard: React.FC<StatCardProps> = ({ title, value, icon: Icon, color, subtitle, bgColor }) => (
-    <div className="bg-white rounded-4 shadow-sm p-4 h-100 border-0">
-      <div className="text-center">
-        <div className="d-inline-flex align-items-center justify-content-center mb-3"
-             style={{ width: 64, height: 64, backgroundColor: bgColor || `${color}20`, borderRadius: '50%' }}>
-          <Icon size={28} style={{ color }} />
-        </div>
-        <h2 className="fw-bold mb-2" style={{ color, fontSize: '2.5rem' }}>{value ?? '—'}</h2>
-        <p className="text-muted fw-medium mb-0">{title}</p>
-        {subtitle && <p className="text-muted small mt-1">{subtitle}</p>}
+  
+const StatCard: React.FC<StatCardProps> = ({ title, value, icon: Icon, color, subtitle, bgColor }) => (
+  <div className="bg-white rounded-4 shadow-sm p-4 h-100 border-0">
+    <div className="text-center">
+      <div className="d-inline-flex align-items-center justify-content-center mb-3"
+           style={{ width: 64, height: 64 }}>
+        <Icon size={32} style={{ color }} />
       </div>
+      <h2 className="fw-bold mb-2" style={{ color, fontSize: '2.5rem' }}>{value ?? '—'}</h2>
+      <p className="text-muted fw-medium mb-0">{title}</p>
+      {subtitle && <p className="text-muted small mt-1">{subtitle}</p>}
     </div>
-  );
+  </div>
+);
 
   // ---- Renders ----
   const renderTopBar = () => (
@@ -640,229 +660,210 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
       {/* Language Switcher and User Dropdown - Better spacing */}
       <div className="d-flex align-items-center gap-3" style={{ minWidth: '200px', justifyContent: 'flex-end' }}>
-        {/* Language Switcher */}
-        <div className="dropdown">
-          <button 
-            className="btn btn-outline-secondary dropdown-toggle" 
-            data-bs-toggle="dropdown"
-            style={{ 
-              borderRadius: '25px',
-              borderColor: '#dc3545',
-              color: '#dc3545',
-              backgroundColor: 'transparent',
-              padding: '8px 16px'
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.background = 'rgba(220, 53, 69, 0.1)';
-              e.currentTarget.style.borderColor = '#dc3545';
-              e.currentTarget.style.color = '#dc3545';
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.background = 'transparent';
-              e.currentTarget.style.borderColor = '#dc3545';
-              e.currentTarget.style.color = '#dc3545';
-            }}
-          >
-            <Globe size={16} className="me-2" />
-            {i18n.language === 'tr' ? 'TR' : 'EN'}
-          </button>
-          <ul 
-            className="dropdown-menu"
+        {/* User Profile Dropdown - Language moved inside */}
+  <div className="dropdown">
+    <button 
+      className="btn btn-light dropdown-toggle d-flex align-items-center" 
+      data-bs-toggle="dropdown"
+      style={{ 
+        borderRadius: '25px',
+        border: '2px solid #dee2e6',
+        padding: '8px 16px',
+        background: '#f8f9fa',
+        color: '#212529'
+      }}
+      onMouseEnter={(e) => {
+        e.currentTarget.style.background = '#e9ecef';
+        e.currentTarget.style.borderColor = '#ced4da';
+        e.currentTarget.style.color = '#212529';
+      }}
+      onMouseLeave={(e) => {
+        e.currentTarget.style.background = '#f8f9fa';
+        e.currentTarget.style.borderColor = '#dee2e6';
+        e.currentTarget.style.color = '#212529';
+      }}
+    >
+      <div 
+        className="rounded-circle me-2 d-flex align-items-center justify-content-center"
+        style={{
+          width: '32px',
+          height: '32px',
+          backgroundColor: '#dc3545',
+          color: 'white'
+        }}
+      >
+        {profileAvatar ? (
+          <img 
+            src={profileAvatar}
+            alt="Profile" 
             style={{
-              border: 'none',
-              boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
-              borderRadius: '12px',
-              padding: '8px 0'
+              width: '32px',
+              height: '32px',
+              borderRadius: '50%',
+              objectFit: 'cover'
             }}
-          >
-            <li>
-              <button 
-                className="dropdown-item" 
-                onClick={() => i18n.changeLanguage('en')}
-                style={{
-                  padding: '12px 20px',
-                  transition: 'background-color 0.2s ease',
-                  color: '#212529'
-                }}
-                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f8f9fa'}
-                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
-              >
-                🇺🇸 English
-              </button>
-            </li>
-            <li>
-              <button 
-                className="dropdown-item" 
-                onClick={() => i18n.changeLanguage('tr')}
-                style={{
-                  padding: '12px 20px',
-                  transition: 'background-color 0.2s ease',
-                  color: '#212529'
-                }}
-                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f8f9fa'}
-                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
-              >
-                🇹🇷 Türkçe
-              </button>
-            </li>
-          </ul>
-        </div>
-
-        {/* User Profile Dropdown */}
-        <div className="dropdown">
-          <button 
-            className="btn btn-light dropdown-toggle d-flex align-items-center" 
-            data-bs-toggle="dropdown"
-            style={{ 
-              borderRadius: '25px',
-              border: '2px solid #dee2e6',
-              padding: '8px 16px',
-              background: '#f8f9fa', // Light background for contrast
-              color: '#212529' // Dark text for visibility
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.background = '#e9ecef';
-              e.currentTarget.style.borderColor = '#ced4da';
-              e.currentTarget.style.color = '#212529';
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.background = '#f8f9fa';
-              e.currentTarget.style.borderColor = '#dee2e6';
-              e.currentTarget.style.color = '#212529';
-            }}
-          >
-            <div 
-              className="rounded-circle me-2 d-flex align-items-center justify-content-center"
-              style={{
-                width: '32px',
-                height: '32px',
-                backgroundColor: '#dc3545',
-                color: 'white'
-              }}
-            >
-              {profileAvatar ? (
-                <img 
-                  src={profileAvatar}
-                  alt="Profile" 
-                  style={{
-                    width: '32px',
-                    height: '32px',
-                    borderRadius: '50%',
-                    objectFit: 'cover'
-                  }}
-                />
-              ) : (
-                <User size={18} />
-              )}
-            </div>
-            <span className="fw-semibold d-none d-md-inline" style={{ color: '#212529' }}>
-              {profile.name || currentUser.name}
-            </span>
-          </button>
-          <ul 
-            className="dropdown-menu dropdown-menu-end" 
-            style={{ 
-              minWidth: '280px',
-              border: 'none',
-              boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
-              borderRadius: '12px',
-              padding: '8px 0'
-            }}
-          >
-            {/* User Info Header */}
-            <li 
-              className="dropdown-header"
-              style={{
-                padding: '16px 20px 16px 20px',
-                backgroundColor: '#f8f9fa',
-                borderBottom: '1px solid #e9ecef',
-                marginBottom: '8px',
-                borderTopLeftRadius: '12px',
-                borderTopRightRadius: '12px'
-              }}
-            >
-              <div className="d-flex align-items-center">
-                <div 
-                  className="rounded-circle me-3 d-flex align-items-center justify-content-center"
-                  style={{
-                    width: '40px',
-                    height: '40px',
-                    backgroundColor: '#dc3545',
-                    color: 'white'
-                  }}
-                >
-                  {profileAvatar ? (
-                    <img 
-                      src={profileAvatar}
-                      alt="Profile" 
-                      style={{
-                        width: '40px',
-                        height: '40px',
-                        borderRadius: '50%',
-                        objectFit: 'cover'
-                      }}
-                    />
-                  ) : (
-                    <User size={20} />
-                  )}
-                </div>
-                <div>
-                  <div className="fw-semibold" style={{ color: '#212529' }}>
-                    {profile.name || currentUser.name}
-                  </div>
-                  <small className="text-muted">{profile.email || currentUser.email}</small>
-                  <div>
-                    <small className="text-muted">Administrator</small>
-                  </div>
-                </div>
-              </div>
-            </li>
-            
-            {/* Profile Link */}
-            <li>
-              <button 
-                className="dropdown-item d-flex align-items-center"
-                style={{
-                  padding: '12px 20px',
-                  transition: 'background-color 0.2s ease',
-                  color: '#212529'
-                }}
-                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f8f9fa'}
-                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
-                onClick={() => setActiveTab('profile')}
-              >
-                <UserCog size={16} className="me-3" />
-                <div className="flex-grow-1">
-                  {t('admin.profile')}
-                </div>
-              </button>
-            </li>
-            
-            <li><hr className="dropdown-divider" style={{ margin: '8px 0' }} /></li>
-            
-            {/* Logout */}
-            <li>
-              <button 
-                className="dropdown-item d-flex align-items-center text-danger" 
-                onClick={() => {
-                  try { localStorage.removeItem('token'); } catch {}
-                  onLogout ? onLogout() : window.location.assign('/');
-                }}
-                style={{
-                  padding: '12px 20px',
-                  transition: 'background-color 0.2s ease',
-                  color: '#dc3545'
-                }}
-                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f8f9fa'}
-                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
-              >
-                <LogOut size={16} className="me-3" />
-                {t('admin.logout')}
-              </button>
-            </li>
-          </ul>
-        </div>
+          />
+        ) : (
+          <User size={18} />
+        )}
       </div>
+      {/* Removed name display */}
+    </button>
+    <ul 
+      className="dropdown-menu dropdown-menu-end" 
+      style={{ 
+        minWidth: '280px',
+        border: 'none',
+        boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+        borderRadius: '12px',
+        padding: '8px 0'
+      }}
+    >
+      {/* User Info Header */}
+      <li 
+        className="dropdown-header"
+        style={{
+          padding: '16px 20px 16px 20px',
+          backgroundColor: '#f8f9fa',
+          borderBottom: '1px solid #e9ecef',
+          marginBottom: '8px',
+          borderTopLeftRadius: '12px',
+          borderTopRightRadius: '12px'
+        }}
+      >
+        <div className="d-flex align-items-center">
+          <div 
+            className="rounded-circle me-3 d-flex align-items-center justify-content-center"
+            style={{
+              width: '40px',
+              height: '40px',
+              backgroundColor: '#dc3545',
+              color: 'white'
+            }}
+          >
+            {profileAvatar ? (
+              <img 
+                src={profileAvatar}
+                alt="Profile" 
+                style={{
+                  width: '40px',
+                  height: '40px',
+                  borderRadius: '50%',
+                  objectFit: 'cover'
+                }}
+              />
+            ) : (
+              <User size={20} />
+            )}
+          </div>
+          <div>
+            <div className="fw-semibold" style={{ color: '#212529' }}>
+              {profile.name || currentUser.name}
+            </div>
+            <small className="text-muted">{profile.email || currentUser.email}</small>
+            <div>
+              <small className="text-muted">Administrator</small>
+            </div>
+          </div>
+        </div>
+      </li>
+      
+      {/* Language Selection */}
+      <li>
+        <h6 className="dropdown-header" style={{ padding: '12px 20px 8px 20px', margin: 0, color: '#6c757d', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+          Language
+        </h6>
+      </li>
+      <li>
+        <button 
+          className="dropdown-item d-flex align-items-center"
+          style={{
+            padding: '12px 20px',
+            transition: 'background-color 0.2s ease',
+            color: '#212529'
+          }}
+          onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f8f9fa'}
+          onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+          onClick={() => i18n.changeLanguage('en')}
+        >
+          <Globe size={16} className="me-3" />
+          <div className="flex-grow-1 d-flex justify-content-between align-items-center">
+            <span>🇺🇸 English</span>
+            {i18n.language === 'en' && (
+              <CheckCircle size={16} className="text-success" />
+            )}
+          </div>
+        </button>
+      </li>
+      <li>
+        <button 
+          className="dropdown-item d-flex align-items-center"
+          style={{
+            padding: '12px 20px',
+            transition: 'background-color 0.2s ease',
+            color: '#212529'
+          }}
+          onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f8f9fa'}
+          onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+          onClick={() => i18n.changeLanguage('tr')}
+        >
+          <Globe size={16} className="me-3" />
+          <div className="flex-grow-1 d-flex justify-content-between align-items-center">
+            <span>🇹🇷 Türkçe</span>
+            {i18n.language === 'tr' && (
+              <CheckCircle size={16} className="text-success" />
+            )}
+          </div>
+        </button>
+      </li>
+      
+      <li><hr className="dropdown-divider" style={{ margin: '8px 0' }} /></li>
+      
+      {/* Profile Link */}
+      <li>
+        <button 
+          className="dropdown-item d-flex align-items-center"
+          style={{
+            padding: '12px 20px',
+            transition: 'background-color 0.2s ease',
+            color: '#212529'
+          }}
+          onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f8f9fa'}
+          onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+          onClick={() => setActiveTab('profile')}
+        >
+          <UserCog size={16} className="me-3" />
+          <div className="flex-grow-1">
+            {t('admin.profile')}
+          </div>
+        </button>
+      </li>
+      
+      <li><hr className="dropdown-divider" style={{ margin: '8px 0' }} /></li>
+      
+      {/* Logout */}
+      <li>
+        <button 
+          className="dropdown-item d-flex align-items-center text-danger" 
+          onClick={() => {
+            try { localStorage.removeItem('token'); } catch {}
+            onLogout ? onLogout() : window.location.assign('/');
+          }}
+          style={{
+            padding: '12px 20px',
+            transition: 'background-color 0.2s ease',
+            color: '#dc3545'
+          }}
+          onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f8f9fa'}
+          onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+        >
+          <LogOut size={16} className="me-3" />
+          {t('admin.logout')}
+        </button>
+      </li>
+    </ul>
+  </div>
+</div>
     </div>
   </div>
 );
@@ -892,8 +893,8 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   <button
                     className="btn btn-outline-light mt-3"
                     onClick={handlePhotoRemove}
-                  >
-                    <Trash2 size={16} /> Remove
+                  >{/*
+                    <Trash2 size={16} /> Remove*/}
                   </button>
                 )}
               </div>
@@ -981,12 +982,16 @@ const renderProfile = () => (
                   </div>
                   <div className="col-md-6">
                     <label className="form-label">{t('admin.phone_number')}</label>
-                    <input
-                      type="tel"
-                      className="form-control"
+                    <PhoneInput
+                      country={'tr'}
                       value={profile.phone}
-                      onChange={(e) => setProfile({ ...profile, phone: e.target.value })}
+                      onChange={(phone) => setProfile({ ...profile, phone })}
                       placeholder={t('admin.enter_phone')}
+                      inputProps={{
+                        className: 'form-control',
+                        required: false
+                      }}
+                      containerClass="mb-3"
                     />
                   </div>
                   <div className="col-md-6">
@@ -1019,7 +1024,7 @@ const renderProfile = () => (
                 </div>
 
                 <div className="mt-3 text-end">
-                  <button type="submit" className="btn btn-danger" disabled={profileSaving}>
+                  <button type="submit" className="btn btn-success" disabled={profileSaving}>
                     {profileSaving ? t('admin.saving') : t('admin.save_changes')}
                   </button>
                 </div>
@@ -1030,30 +1035,152 @@ const renderProfile = () => (
       </div>
 
       {/* Profile Picture */}
-      <div className="col-lg-4">
-        <div className="rounded-4 shadow-sm bg-white">
-          <div className="px-4 py-3 rounded-top-4 d-flex align-items-center" style={{ background: '#fee2e2' }}>
-            <ImageIcon size={18} className="me-2 text-danger" />
-            <strong className="text-danger">{t('admin.profile_picture')}</strong>
-          </div>
-          <div className="p-4 text-center">
-            <ProfileAvatar size={96} className="mx-auto mb-3" />
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="image/*"
-              style={{ display: 'none' }}
-              onChange={(e) => handlePhotoUpload(e.target.files?.[0] || null)}
-            />
-            <button className="btn btn-outline-danger w-100 mb-2" onClick={() => fileInputRef.current?.click()}>
-              <Upload size={16} className="me-1" /> {t('admin.upload_new_photo')}
+<div className="col-lg-4">
+  <div className="rounded-4 shadow-sm bg-white">
+    <div className="px-4 py-3 rounded-top-4 d-flex align-items-center" style={{ background: '#fee2e2' }}>
+      <ImageIcon size={18} className="me-2 text-danger" />
+      <strong className="text-danger">{t('admin.profile_picture')}</strong>
+    </div>
+    <div className="p-4 text-center">
+      <ProfileAvatar size={96} className="mx-auto mb-3" />
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/jpeg,image/jpg,image/png,image/gif,image/webp"
+        style={{ display: 'none' }}
+        onChange={(e) => handlePhotoUpload(e.target.files?.[0] || null)}
+      />
+      <button className="btn btn-outline-danger w-100 mb-2" onClick={() => fileInputRef.current?.click()}>
+        <Upload size={16} className="me-1" /> {t('admin.upload_new_photo')}
+      </button>
+      <button className="btn btn-outline-secondary w-100 mb-3" disabled={!profileAvatar} onClick={handlePhotoRemove}>
+        <Trash2 size={16} className="me-1" /> {t('admin.remove_photo')}
+      </button>
+      
+      {/* Photo Guidelines Dropdown */}
+      <div className="accordion" id="adminPhotoGuidelines">
+        <div className="accordion-item" style={{ border: 'none', background: 'transparent' }}>
+          <h2 className="accordion-header" id="adminPhotoGuidelinesHeading">
+            <button 
+              className="accordion-button collapsed"
+              type="button" 
+              data-bs-toggle="collapse" 
+              data-bs-target="#adminPhotoGuidelinesCollapse" 
+              aria-expanded="false" 
+              aria-controls="adminPhotoGuidelinesCollapse"
+              style={{
+                background: 'transparent',
+                border: '1px solid #dee2e6',
+                borderRadius: '8px',
+                padding: '8px 16px',
+                fontSize: '0.875rem',
+                color: '#6c757d',
+                boxShadow: 'none'
+              }}
+              onFocus={(e) => {
+                e.currentTarget.style.boxShadow = '0 0 0 0.25rem rgba(220, 53, 69, 0.25)';
+                e.currentTarget.style.borderColor = '#dc3545';
+              }}
+              onBlur={(e) => {
+                e.currentTarget.style.boxShadow = 'none';
+                e.currentTarget.style.borderColor = '#dee2e6';
+              }}
+            >
+              <ImageIcon size={16} className="me-2" />
+              Photo Upload Guidelines
             </button>
-            <button className="btn btn-outline-secondary w-100" disabled={!profileAvatar} onClick={handlePhotoRemove}>
-              <Trash2 size={16} className="me-1" /> {t('admin.remove_photo')}
-            </button>
+          </h2>
+          <div 
+            id="adminPhotoGuidelinesCollapse" 
+            className="accordion-collapse collapse" 
+            aria-labelledby="adminPhotoGuidelinesHeading" 
+            data-bs-parent="#adminPhotoGuidelines"
+          >
+            <div className="accordion-body" style={{ padding: '16px 0' }}>
+              <div 
+                className="photo-requirements text-start"
+                style={{
+                  background: '#f8f9fa',
+                  border: '1px solid #e9ecef',
+                  borderRadius: '8px',
+                  padding: '16px'
+                }}
+              >
+                <div className="row g-2">
+                  <div className="col-12">
+                    <div className="d-flex align-items-start">
+                      <CheckCircle size={16} className="text-success me-2 mt-1 flex-shrink-0" />
+                      <div>
+                        <strong className="text-dark">File Types:</strong>
+                        <br />
+                        <small className="text-muted">JPEG, PNG, GIF, or WebP formats</small>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <div className="col-12">
+                    <div className="d-flex align-items-start">
+                      <CheckCircle size={16} className="text-success me-2 mt-1 flex-shrink-0" />
+                      <div>
+                        <strong className="text-dark">File Size:</strong>
+                        <br />
+                        <small className="text-muted">Maximum 5MB per file</small>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <div className="col-12">
+                    <div className="d-flex align-items-start">
+                      <CheckCircle size={16} className="text-success me-2 mt-1 flex-shrink-0" />
+                      <div>
+                        <strong className="text-dark">Dimensions:</strong>
+                        <br />
+                        <small className="text-muted">Square format (1:1 ratio) recommended</small>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <div className="col-12">
+                    <div className="d-flex align-items-start">
+                      <CheckCircle size={16} className="text-success me-2 mt-1 flex-shrink-0" />
+                      <div>
+                        <strong className="text-dark">Professional Quality:</strong>
+                        <br />
+                        <small className="text-muted">Clear, well-lit, high-resolution image</small>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <div className="col-12">
+                    <div className="d-flex align-items-start">
+                      <CheckCircle size={16} className="text-success me-2 mt-1 flex-shrink-0" />
+                      <div>
+                        <strong className="text-dark">Administrative Standards:</strong>
+                        <br />
+                        <small className="text-muted">Professional appearance suitable for administrative role</small>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <div className="col-12">
+                    <div className="d-flex align-items-start">
+                      <CheckCircle size={16} className="text-success me-2 mt-1 flex-shrink-0" />
+                      <div>
+                        <strong className="text-dark">System Usage:</strong>
+                        <br />
+                        <small className="text-muted">Appropriate for staff directory and system interface</small>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </div>
+    </div>
+  </div>
+</div>
     </div>
   </div>
 );

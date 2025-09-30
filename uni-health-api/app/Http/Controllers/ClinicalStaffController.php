@@ -8,6 +8,7 @@ use App\Models\Appointment;
 use App\Models\User;
 use App\Models\MedicalRecord;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Carbon\Carbon;
 use App\Models\Medication;
 
@@ -21,6 +22,10 @@ public function dashboard(Request $request): JsonResponse
 {
     $user = $request->user();
     $today = now()->format('Y-m-d');
+
+    // ADD THESE MISSING LINES:
+    $weekStart = now()->startOfWeek()->format('Y-m-d');
+    $monthStart = now()->startOfMonth()->format('Y-m-d');
 
     // Get today's appointments count by status
     $appointmentStats = Appointment::whereDate('date', $today)
@@ -58,6 +63,35 @@ public function dashboard(Request $request): JsonResponse
         ->limit(5)
         ->get();
 
+    // IMPROVED: Calculate urgent cases more comprehensively
+    // 1. Count urgent appointments scheduled for today (active cases)
+    $urgentAppointmentsToday = Appointment::whereDate('date', $today)
+        ->where('priority', 'urgent')
+        ->whereIn('status', ['scheduled', 'confirmed', 'in_progress', 'assigned'])
+        ->count();
+
+    // 2. Count urgent student requests that are pending/under review (regardless of date)
+    $urgentStudentRequests = Appointment::whereIn('status', ['pending', 'under_review'])
+        ->where('priority', 'urgent')
+        ->count();
+
+    // 3. Total urgent cases = today's urgent appointments + urgent pending requests
+    $totalUrgentCases = $urgentAppointmentsToday + $urgentStudentRequests;
+
+    // DEBUG: Add logging to troubleshoot
+    \Log::info('Dashboard Urgent Cases Calculation', [
+        'date' => $today,
+        'urgent_appointments_today' => $urgentAppointmentsToday,
+        'urgent_student_requests' => $urgentStudentRequests,
+        'total_urgent_cases' => $totalUrgentCases,
+        'raw_urgent_query' => Appointment::where('priority', 'urgent')
+            ->whereIn('status', ['scheduled', 'confirmed', 'in_progress', 'assigned', 'pending', 'under_review'])
+            ->get(['id', 'date', 'priority', 'status', 'created_at'])
+            ->toArray()
+    ]);
+
+     $kpiData = $this->getKPIData($today, $weekStart, $monthStart);
+
     return response()->json([
         'message' => 'Welcome to Clinical Staff Dashboard',
         'staff_member' => [
@@ -76,13 +110,12 @@ public function dashboard(Request $request): JsonResponse
             'completed_tasks' => $appointmentStats->get('completed', 0),
             'pending_tasks' => ($appointmentStats->get('pending', 0) + $appointmentStats->get('confirmed', 0)),
             'patients_seen' => $appointmentStats->get('completed', 0),
-            'urgent_cases' => Appointment::whereDate('date', $today)
-                ->where('priority', 'urgent')
-                ->count(),
+            'urgent_cases' => $totalUrgentCases,
             'pending_student_requests' => $studentRequestsCount,
         ],
         'patient_queue' => $patientQueue,
         'student_requests' => $studentRequests,
+        'kpi_data' => $kpiData, // NEW: Add KPI data
     ]);
 }
 
@@ -99,21 +132,26 @@ public function assignStudentRequest(Request $request, $id): JsonResponse
 
     $appointment = Appointment::findOrFail($id);
     
-    // FIX: Preserve original reason
-    $updateData = [
-        'status' => 'assigned',
-        'doctor_id' => $validated['doctor_id'],
-        'assigned_at' => now()
-    ];
+    // Only allow assignment for pending/under_review requests
+    if (!in_array($appointment->status, ['pending', 'under_review'])) {
+        return response()->json([
+            'message' => 'This request cannot be assigned at this time'
+        ], 400);
+    }
+
+    // Update status and assign doctor
+    $appointment->status = 'assigned';
+    $appointment->doctor_id = $validated['doctor_id'];
+    $appointment->assigned_at = now();
     
-    // Only add notes if provided
-    if (!empty($validated['notes'])) {
-        $updateData['notes'] = $validated['notes'];
+    // Only add notes if provided and column exists
+    if (!empty($validated['notes']) && Schema::hasColumn('appointments', 'notes')) {
+        $appointment->notes = $validated['notes'];
     }
     
-    $appointment->update($updateData);
+    $appointment->save();
 
-    // Broadcast the status change
+    // Broadcast the assignment
     try {
         broadcast(new \App\Events\AppointmentStatusUpdated($appointment));
     } catch (\Exception $e) {
@@ -138,19 +176,28 @@ public function approveStudentRequest(Request $request, $id): JsonResponse
 
     $appointment = Appointment::findOrFail($id);
     
-    // Fix: Don't overwrite reason, only update what we need
-    $appointment->status = 'scheduled';
+    // Update the appointment
+    $appointment->status = 'scheduled'; // or 'confirmed' depending on your flow
     $appointment->doctor_id = $validated['doctor_id'];
     $appointment->approved_at = now();
     
-    if (!empty($validated['notes'])) {
+    // Only add notes if provided and column exists
+    if (!empty($validated['notes']) && Schema::hasColumn('appointments', 'notes')) {
         $appointment->notes = $validated['notes'];
     }
     
     $appointment->save();
 
+    // Notify the student about approval
+    try {
+        // You can add notification logic here
+        broadcast(new \App\Events\AppointmentStatusUpdated($appointment));
+    } catch (\Exception $e) {
+        \Log::warning('Failed to broadcast appointment approval: ' . $e->getMessage());
+    }
+
     return response()->json([
-        'message' => 'Student request approved successfully',
+        'message' => 'Student request approved and assigned successfully',
         'appointment' => $appointment->load(['patient', 'doctor'])
     ]);
 }
@@ -169,7 +216,7 @@ public function rejectStudentRequest(Request $request, $id): JsonResponse
     $appointment = Appointment::findOrFail($id);
     
     $appointment->update([
-        'status' => 'rejected',
+        'status' => 'rejected', // KEEP AS REJECTED, don't change to scheduled
         'rejection_reason' => $validated['rejection_reason'],
         'rejected_at' => now(),
         'notes' => $validated['notes']
@@ -181,6 +228,110 @@ public function rejectStudentRequest(Request $request, $id): JsonResponse
     ]);
 }
 
+// Add this to your ClinicalStaffController dashboard method
+
+private function getKPIData($today, $weekStart, $monthStart): array
+{
+    // Appointments trend (last 7 days)
+    $appointmentsTrend = [];
+    for ($i = 6; $i >= 0; $i--) {
+        $date = now()->subDays($i)->format('Y-m-d');
+        $count = Appointment::whereDate('date', $date)->count();
+        $appointmentsTrend[] = [
+            'date' => $date,
+            'count' => $count,
+            'day' => now()->subDays($i)->format('D')
+        ];
+    }
+
+    // Patient status distribution
+    $patientStatusData = Appointment::whereDate('date', $today)
+        ->select('status', DB::raw('count(*) as count'))
+        ->groupBy('status')
+        ->get()
+        ->map(function($item) {
+            return [
+                'status' => ucfirst($item->status),
+                'count' => $item->count
+            ];
+        });
+
+    // Priority distribution
+    $priorityData = Appointment::whereDate('date', $today)
+        ->select('priority', DB::raw('count(*) as count'))
+        ->groupBy('priority')
+        ->get()
+        ->map(function($item) {
+            return [
+                'priority' => ucfirst($item->priority ?: 'normal'),
+                'count' => $item->count
+            ];
+        });
+
+    // Weekly performance metrics
+    $weeklyMetrics = [
+        'appointments_completed' => Appointment::whereDate('date', '>=', $weekStart)
+            ->where('status', 'completed')->count(),
+        'medications_administered' => MedicalRecord::where('type', 'medication')
+            ->whereDate('created_at', '>=', $weekStart)->count(),
+        'vital_signs_recorded' => MedicalRecord::where('type', 'vital_signs')
+            ->whereDate('created_at', '>=', $weekStart)->count(),
+        'student_requests_processed' => Appointment::whereIn('status', ['approved', 'assigned', 'scheduled'])
+            ->whereDate('updated_at', '>=', $weekStart)->count(),
+    ];
+
+    // Department workload (if multiple departments)
+    $departmentWorkload = User::where('role', 'doctor')
+        ->with(['appointments' => function($query) use ($today) {
+            $query->whereDate('date', $today);
+        }])
+        ->get()
+        ->groupBy('department')
+        ->map(function($doctors, $department) {
+            $totalAppointments = $doctors->sum(function($doctor) {
+                return $doctor->appointments->count();
+            });
+            return [
+                'department' => $department ?: 'General',
+                'appointments' => $totalAppointments,
+                'doctors' => $doctors->count()
+            ];
+        })
+        ->values();
+
+    return [
+        'appointments_trend' => $appointmentsTrend,
+        'patient_status_distribution' => $patientStatusData,
+        'priority_distribution' => $priorityData,
+        'weekly_metrics' => $weeklyMetrics,
+        'department_workload' => $departmentWorkload,
+        'response_times' => $this->getResponseTimeMetrics($today),
+    ];
+}
+
+private function getResponseTimeMetrics($today): array
+{
+    // Average time from student request to assignment
+    $avgResponseTime = Appointment::whereDate('created_at', $today)
+        ->whereNotNull('assigned_at')
+        ->selectRaw('AVG(TIMESTAMPDIFF(MINUTE, created_at, assigned_at)) as avg_minutes')
+        ->first();
+
+    return [
+        'avg_response_time_minutes' => round($avgResponseTime->avg_minutes ?? 0),
+        'target_response_time' => 30, // 30 minutes target
+        'performance_score' => $this->calculateResponseScore($avgResponseTime->avg_minutes ?? 0)
+    ];
+}
+
+private function calculateResponseScore($avgMinutes): int
+{
+    if ($avgMinutes <= 15) return 100;
+    if ($avgMinutes <= 30) return 80;
+    if ($avgMinutes <= 60) return 60;
+    if ($avgMinutes <= 120) return 40;
+    return 20;
+}
 
 /**
  * Assign appointment to doctor
@@ -689,6 +840,22 @@ public function createWalkInPatient(Request $request): JsonResponse
             'estimated_wait_time' => 15,
             'status' => $appointment->status
         ]
+    ]);
+}
+
+// Add this method to get urgent requests
+public function getUrgentQueue(Request $request): JsonResponse
+{
+    $urgentRequests = Appointment::with(['patient', 'doctor'])
+        ->where('priority', 'urgent')
+        ->whereIn('status', ['pending', 'under_review', 'confirmed'])
+        ->whereDate('date', now()->format('Y-m-d'))
+        ->orderBy('created_at', 'asc')
+        ->get();
+
+    return response()->json([
+        'urgent_requests' => $urgentRequests,
+        'total_urgent' => $urgentRequests->count()
     ]);
 }
 

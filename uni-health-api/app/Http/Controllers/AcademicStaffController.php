@@ -65,7 +65,7 @@ class AcademicStaffController extends Controller
     public function getAppointments(Request $request): JsonResponse
     {
         $appointments = $request->user()->appointments()
-            ->with('doctor')
+            ->with('doctor') // Make sure doctor relationship is loaded
             ->orderBy('date', 'desc')
             ->orderBy('time', 'desc')
             ->get()
@@ -75,6 +75,7 @@ class AcademicStaffController extends Controller
                     'date' => $appointment->date,
                     'time' => $appointment->time,
                     'doctor' => $appointment->doctor->name ?? 'N/A',
+                    'specialization' => $appointment->doctor->specialization ?? 'General Practice', // Add this line
                     'status' => $appointment->status,
                     'reason' => $appointment->reason
                 ];
@@ -241,7 +242,7 @@ public function scheduleAppointment(Request $request): JsonResponse
             $appointment->update([
                 'date' => $validated['date'],
                 'time' => $validated['time'],
-                'status' => 'rescheduled'
+                'status' => 'scheduled'
             ]);
 
             $appointment->load('doctor');
@@ -450,39 +451,191 @@ public function scheduleAppointment(Request $request): JsonResponse
         }
     }
 
-    /**
-     * Update own profile
-     */
-    public function updateProfile(Request $request): JsonResponse
-    {
-        try {
-            $validated = $request->validate([
-                'phone' => 'sometimes|string|max:20',
-                'emergency_contact' => 'sometimes|string|max:255',
-                'emergency_phone' => 'sometimes|string|max:20'
-            ]);
-
-            $request->user()->update($validated);
-
-            return response()->json([
-                'message' => 'Profile updated successfully',
-                'user' => $request->user()->only(['name', 'email', 'phone', 'emergency_contact', 'emergency_phone'])
-            ]);
-
-        } catch (\Illuminate\Validation\ValidationException $e) {
-            return response()->json([
-                'message' => 'Validation failed',
-                'errors' => $e->errors()
-            ], 422);
-        } catch (\Exception $e) {
-            \Log::error('Profile update error: ' . $e->getMessage());
-            
-            return response()->json([
-                'message' => 'Failed to update profile',
-                'error' => 'An unexpected error occurred'
-            ], 500);
+   /**
+ * Get user profile
+ */
+public function getProfile(Request $request): JsonResponse
+{
+    try {
+        $user = $request->user();
+        
+        // Ensure avatar_url is a full URL
+        $avatarUrl = null;
+        if ($user->avatar_url) {
+            // If it's already a full URL, use it as is
+            if (filter_var($user->avatar_url, FILTER_VALIDATE_URL)) {
+                $avatarUrl = $user->avatar_url;
+            } else {
+                // Convert relative path to full URL
+                $avatarUrl = url($user->avatar_url);
+            }
         }
+        
+        return response()->json([
+            'name' => $user->name,
+            'email' => $user->email,
+            'staff_no' => $user->staff_no,
+            'phone' => $user->phone,
+            'department' => $user->department,
+            'bio' => $user->bio,
+            'avatar_url' => $avatarUrl, // This should now be a full URL or null
+            'emergency_contact' => $user->emergency_contact,
+            'emergency_phone' => $user->emergency_phone,
+        ]);
+        
+    } catch (\Exception $e) {
+        \Log::error('Profile fetch error: ' . $e->getMessage());
+        
+        return response()->json([
+            'message' => 'Failed to fetch profile',
+            'error' => 'An unexpected error occurred'
+        ], 500);
     }
+}
+
+/**
+ * Update own profile - Enhanced version
+ */
+public function updateProfile(Request $request): JsonResponse
+{
+    try {
+        $validated = $request->validate([
+            'name' => 'sometimes|string|max:255',
+            'phone' => 'sometimes|string|max:20',
+            'department' => 'sometimes|string|max:255',
+            'bio' => 'sometimes|string|max:500',
+            'emergency_contact' => 'sometimes|string|max:255',
+            'emergency_phone' => 'sometimes|string|max:20'
+        ]);
+
+        $user = $request->user();
+        $user->update($validated);
+
+        return response()->json([
+            'message' => 'Profile updated successfully',
+            'user' => [
+                'name' => $user->name,
+                'email' => $user->email,
+                'staff_no' => $user->staff_no,
+                'phone' => $user->phone,
+                'department' => $user->department,
+                'bio' => $user->bio,
+                'avatar_url' => $user->avatar_url,
+                'emergency_contact' => $user->emergency_contact,
+                'emergency_phone' => $user->emergency_phone,
+            ]
+        ]);
+
+    } catch (\Illuminate\Validation\ValidationException $e) {
+        return response()->json([
+            'message' => 'Validation failed',
+            'errors' => $e->errors()
+        ], 422);
+    } catch (\Exception $e) {
+        \Log::error('Profile update error: ' . $e->getMessage());
+        
+        return response()->json([
+            'message' => 'Failed to update profile',
+            'error' => 'An unexpected error occurred'
+        ], 500);
+    }
+}
+
+/**
+ * Upload profile avatar
+ */
+public function uploadAvatar(Request $request): JsonResponse
+{
+    try {
+        $validated = $request->validate([
+            'avatar' => 'required|image|mimes:jpeg,png,jpg,gif,webp|max:5120', // 5MB max
+        ]);
+
+        $user = $request->user();
+        
+        // Delete old avatar if exists
+        if ($user->avatar_url) {
+            $oldPath = str_replace('/storage/', '', $user->avatar_url);
+            $oldPath = str_replace(url('/storage/'), '', $user->avatar_url); // Handle full URLs too
+            
+            if (\Storage::disk('public')->exists($oldPath)) {
+                \Storage::disk('public')->delete($oldPath);
+            }
+        }
+
+        // Store new avatar
+        $file = $request->file('avatar');
+        $filename = $user->id . '_' . time() . '.' . $file->getClientOriginalExtension();
+        $path = $file->storeAs('avatars', $filename, 'public');
+        
+        // Create FULL URL for the avatar
+        $avatarUrl = url('/storage/' . $path);
+        
+        // Update user record with FULL URL
+        $user->update(['avatar_url' => $avatarUrl]);
+
+        // Log for debugging
+        \Log::info('Avatar uploaded', [
+            'user_id' => $user->id,
+            'path' => $path,
+            'full_url' => $avatarUrl
+        ]);
+
+        return response()->json([
+            'message' => 'Avatar uploaded successfully',
+            'avatar_url' => $avatarUrl // Return the full URL
+        ]);
+
+    } catch (\Illuminate\Validation\ValidationException $e) {
+        return response()->json([
+            'message' => 'Validation failed',
+            'errors' => $e->errors()
+        ], 422);
+    } catch (\Exception $e) {
+        \Log::error('Avatar upload error: ' . $e->getMessage());
+        
+        return response()->json([
+            'message' => 'Failed to upload avatar',
+            'error' => 'An unexpected error occurred'
+        ], 500);
+    }
+}
+/**
+ * Remove profile avatar
+ */
+public function removeAvatar(Request $request): JsonResponse
+{
+    try {
+        $user = $request->user();
+        
+        if ($user->avatar_url) {
+            // Handle both relative and full URLs
+            $oldPath = str_replace('/storage/', '', $user->avatar_url);
+            $oldPath = str_replace(url('/storage/'), '', $user->avatar_url);
+            
+            if (\Storage::disk('public')->exists($oldPath)) {
+                \Storage::disk('public')->delete($oldPath);
+            }
+            
+            // Update user record
+            $user->update(['avatar_url' => null]);
+            
+            \Log::info('Avatar removed', ['user_id' => $user->id]);
+        }
+
+        return response()->json([
+            'message' => 'Avatar removed successfully'
+        ]);
+
+    } catch (\Exception $e) {
+        \Log::error('Avatar removal error: ' . $e->getMessage());
+        
+        return response()->json([
+            'message' => 'Failed to remove avatar',
+            'error' => 'An unexpected error occurred'
+        ], 500);
+    }
+}
 
     /**
      * Helper method to format working hours

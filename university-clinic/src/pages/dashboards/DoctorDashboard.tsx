@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Calendar, Clock, Users, FileText, Pill, User, Plus, Search, Eye, Edit, CheckCircle, XCircle, Stethoscope, Heart, Brain, Thermometer, BarChart3, Activity, TrendingUp, Check, Globe, X, Archive, Settings, Save, Camera } from 'lucide-react';
+import { Calendar, Clock, Users, FileText, Pill, User, Plus, Search, Eye, Edit, CheckCircle, XCircle, Stethoscope, Heart, Brain, Thermometer, BarChart3, Activity, TrendingUp, Check, Globe, X, Archive, Settings, Save, Camera, AlertTriangle, LogOut } from 'lucide-react';
 import RealTimeDashboard from '../../components/RealTimeDashboard';
 import { useTranslation } from 'react-i18next';
 import LanguageSwitcher from '../../components/LanguageSwitcher';
@@ -40,6 +40,7 @@ interface Medication {
   instructions: string;
   start_date: string;
   end_date: string;
+  frequency?: string; // Add this
 }
 
 interface Prescription {
@@ -78,6 +79,23 @@ interface MedicalRecordForm {
   treatment: string;
   notes: string;
   visit_date: string;
+  has_prescription: boolean;  // Add this
+  medications: Medication[]; 
+}
+
+interface MedicalRecord {
+  id: number;
+  patient_id: number;
+  doctor_id: number;
+  diagnosis: string;
+  treatment: string;
+  notes?: string;
+  visit_date: string;
+  created_at: string;
+  doctor?: {
+    id: number;
+    name: string;
+  };
 }
 
 interface PrescriptionForm {
@@ -150,6 +168,32 @@ interface DoctorProfile {
   languages_spoken?: string;
 }
 
+interface Holiday {
+  id: string | number;
+  name: string;
+  start_date: string;
+  end_date: string;
+  type: string;
+  blocks_appointments: boolean;
+}
+
+// Add this new interface for the completion report
+interface CompletionReport {
+  diagnosis: string;
+  treatment_provided: string;
+  medications_prescribed: string;
+  recommendations: string;
+  follow_up_required: boolean;
+  follow_up_date?: string;
+  notes: string;
+}
+
+interface RescheduleForm {
+  new_date: string;
+  new_time: string;
+  reschedule_reason: string;
+}
+
 interface EnhancedDoctorDashboardProps {
   user: User;
   onLogout?: () => void;
@@ -204,6 +248,10 @@ const EnhancedDoctorDashboard: React.FC<EnhancedDoctorDashboardProps> = ({ user,
   const [selectedAppointment, setSelectedAppointment] = useState<Appointment | null>(null);
   const [selectedPatients, setSelectedPatients] = useState<Set<number>>(new Set());
   const [appointmentFilter, setAppointmentFilter] = useState<string>('all');
+  const [patientMedicalRecords, setPatientMedicalRecords] = useState<MedicalRecord[]>([]);
+const [patientPrescriptions, setPatientPrescriptions] = useState<Prescription[]>([]);
+const [showPatientHistory, setShowPatientHistory] = useState<boolean>(false);
+const [selectedPrescription, setSelectedPrescription] = useState<Prescription | null>(null);
   const [doctorProfile, setDoctorProfile] = useState<DoctorProfile>({
     name: user?.name || '',
     email: user?.email || '',
@@ -256,7 +304,16 @@ const [kpiData, setKpiData] = useState({
     diagnosis: '',
     treatment: '',
     notes: '',
-    visit_date: new Date().toISOString().split('T')[0]
+    visit_date: new Date().toISOString().split('T')[0],
+    has_prescription: false,
+  medications: [{
+    name: '',
+    dosage: '',
+    instructions: '',
+    start_date: '',
+    end_date: '',
+    frequency: 'daily'
+  }]
   });
   
   const [prescriptionForm, setPrescriptionForm] = useState<PrescriptionForm>({
@@ -266,10 +323,31 @@ const [kpiData, setKpiData] = useState({
       dosage: '',
       instructions: '',
       start_date: '',
-      end_date: ''
+      end_date: '',
+      frequency: 'daily'
     }],
     notes: ''
   });
+
+  // Add this state for the completion report
+const [completionReport, setCompletionReport] = useState<CompletionReport>({
+  diagnosis: '',
+  treatment_provided: '',
+  medications_prescribed: '',
+  recommendations: '',
+  follow_up_required: false,
+  follow_up_date: '',
+  notes: ''
+});
+
+const [rescheduleForm, setRescheduleForm] = useState<RescheduleForm>({
+  new_date: '',
+  new_time: '',
+  reschedule_reason: ''
+});
+
+  const [blockedDates, setBlockedDates] = useState<string[]>([]);
+  const [holidays, setHolidays] = useState<Holiday[]>([]);
 
   // Time slots for appointments
   
@@ -337,6 +415,7 @@ const getErrorMessage = (error: unknown): string => {
       
       const data = await response.json();
       console.log('Dashboard data received:', data);
+      console.log('Weekly stats from API:', data.weekly_stats);
       
       // Update KPI data safely
       if (data.today_statistics) {
@@ -350,12 +429,19 @@ const getErrorMessage = (error: unknown): string => {
         });
       }
       
+      // PRIORITY: Use API weekly stats if available
       if (data.weekly_stats) {
+        console.log('Setting weekly stats from API:', data.weekly_stats);
         setWeeklyStats({
           appointments: data.weekly_stats.appointments || [0, 0, 0, 0, 0, 0, 0],
           patients: data.weekly_stats.patients || [0, 0, 0, 0, 0, 0, 0],
           completed: data.weekly_stats.completed || [0, 0, 0, 0, 0, 0, 0]
         });
+        // Mark that we have API data to prevent local overwrite
+        localStorage.setItem('hasApiWeeklyStats', 'true');
+      } else {
+        // Only fetch separately if no API data
+        await fetchWeeklyStats();
       }
       
     } catch (error) {
@@ -365,6 +451,13 @@ const getErrorMessage = (error: unknown): string => {
         text: getErrorMessage(error) || 'Failed to load dashboard statistics' 
       });
       setTimeout(() => setMessage({ type: '', text: '' }), 5000);
+      
+      // Try to fetch weekly stats separately if dashboard fails
+      try {
+        await fetchWeeklyStats();
+      } catch (weeklyError) {
+        console.error('Error fetching weekly stats as fallback:', weeklyError);
+      }
     }
     setLoading(false);
   };
@@ -398,6 +491,83 @@ const fetchWeeklyStats = async (): Promise<void> => {
     console.error('Error fetching weekly statistics:', error);
     // Keep the current mock data as fallback
   }
+};
+
+// Add holiday checking function
+const checkDateAvailability = async (date: string): Promise<boolean> => {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/holidays/check-availability?date=${date}&staff_type=clinical`, {
+      headers: { 
+        'Authorization': `Bearer ${localStorage.getItem('token')}`,
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
+      }
+    });
+    
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+    
+    const data = await response.json();
+    
+    if (!data.is_available) {
+      const blockingHoliday = data.blocking_holidays?.[0];
+      setMessage({
+        type: 'error',
+        text: `Cannot schedule appointments on ${date}. ${blockingHoliday?.name ? `Reason: ${blockingHoliday.name}` : 'University holiday period'}`
+      });
+      
+      return false;
+    }
+    
+    return true;
+  } catch (error) {
+    console.error('Error checking date availability:', error);
+    return true; // Allow booking if check fails
+  }
+};
+
+// Add function to fetch holidays and generate blocked dates
+const fetchHolidays = async (): Promise<void> => {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/holidays`, {
+      headers: { 
+        'Authorization': `Bearer ${localStorage.getItem('token')}`,
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
+      }
+    });
+    
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+    
+    const data = await response.json();
+    const holidaysList = data.holidays || [];
+    setHolidays(holidaysList);
+    
+    // Generate list of blocked dates
+    const blocked: string[] = [];
+    holidaysList.forEach((holiday: Holiday) => {
+      if (holiday.blocks_appointments) {
+        const startDate = new Date(holiday.start_date);
+        const endDate = new Date(holiday.end_date);
+        
+        for (let d = new Date(startDate); d <= endDate; d.setDate(d.getDate() + 1)) {
+          blocked.push(d.toISOString().split('T')[0]);
+        }
+      }
+    });
+    
+    setBlockedDates(blocked);
+  } catch (error) {
+    console.error('Error fetching holidays:', error);
+  }
+};
+
+// Add helper function to check if a date is blocked
+const isDateBlocked = (dateString: string): boolean => {
+  return blockedDates.includes(dateString);
 };
 
   const fetchAppointments = async (): Promise<void> => {
@@ -482,7 +652,7 @@ const fetchWeeklyStats = async (): Promise<void> => {
       setTimeout(() => setMessage({ type: '', text: '' }), 5000);
       return;
     }
-    
+
     // Validate file size (5MB limit)
     const maxSize = 5 * 1024 * 1024; // 5MB in bytes
     if (file.size > maxSize) {
@@ -703,6 +873,60 @@ const togglePatientSelection = (patientId: number): void => {
   });
 };
 
+const rescheduleAppointment = async (): Promise<void> => {
+  if (!selectedAppointment) return;
+  
+  try {
+    // Validation
+    if (!rescheduleForm.new_date || !rescheduleForm.new_time || !rescheduleForm.reschedule_reason.trim()) {
+      setMessage({ type: 'error', text: 'Please fill in all fields for rescheduling' });
+      setTimeout(() => setMessage({ type: '', text: '' }), 5000);
+      return;
+    }
+
+    // Check if new date is blocked
+    if (isDateBlocked(rescheduleForm.new_date)) {
+      setMessage({ type: 'error', text: 'Selected date is not available due to holidays' });
+      setTimeout(() => setMessage({ type: '', text: '' }), 5000);
+      return;
+    }
+
+    setLoading(true);
+    
+    // Use the existing status endpoint
+    const response = await fetch(`${DOCTOR_API_BASE}/appointments/${selectedAppointment.id}/status`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+        'Authorization': `Bearer ${localStorage.getItem('token')}`
+      },
+      body: JSON.stringify({
+        date: rescheduleForm.new_date,
+        time: rescheduleForm.new_time,
+        reschedule_reason: rescheduleForm.reschedule_reason,
+        status: 'scheduled' // Reset to scheduled after reschedule
+      })
+    });
+    
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.message || 'Failed to reschedule appointment');
+    }
+    
+    setMessage({ type: 'success', text: 'Appointment rescheduled successfully!' });
+    setShowModal('');
+    setRescheduleForm({ new_date: '', new_time: '', reschedule_reason: '' });
+    fetchAppointments();
+  } catch (error: any) {
+    console.error('Error rescheduling appointment:', error);
+    setMessage({ type: 'error', text: error.message || 'Failed to reschedule appointment' });
+  } finally {
+    setLoading(false);
+    setTimeout(() => setMessage({ type: '', text: '' }), 5000);
+  }
+};
+
 const toggleSelectAllPatients = (): void => {
   if (selectedPatients.size === filteredPatients.length) {
     setSelectedPatients(new Set());
@@ -787,9 +1011,47 @@ const archiveSelectedPatients = async (): Promise<void> => {
 };
 
   const fetchPrescriptions = async (): Promise<void> => {
-  setLoading(true);
+    setLoading(true);
+    try {
+      console.log('Fetching prescriptions...');
+      const response = await fetch(`${DOCTOR_API_BASE}/prescriptions`, {
+        headers: { 
+          'Authorization': `Bearer ${localStorage.getItem('token')}`,
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        }
+      });
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      
+      const data = await response.json();
+      console.log('Prescriptions data:', data); // Add this debug line
+      
+      setPrescriptions(data.prescriptions || []);
+    } catch (error) {
+      console.error('Error fetching prescriptions:', error);
+      setMessage({ type: 'error', text: 'Failed to load prescriptions' });
+      setTimeout(() => setMessage({ type: '', text: '' }), 5000);
+    }
+    setLoading(false);
+  };
+
+  const getStatusColor = (status: string): string => {
+  const statusColors = {
+    active: '#28a745',
+    completed: '#6c757d', 
+    cancelled: '#dc3545'
+  };
+  return statusColors[status as keyof typeof statusColors] || '#6c757d';
+};
+
+// Fetch medical records for a specific patient
+const fetchPatientMedicalRecords = async (patientId: number): Promise<void> => {
   try {
-    const response = await fetch(`${DOCTOR_API_BASE}/prescriptions`, {
+    setLoading(true);
+    const response = await fetch(`${DOCTOR_API_BASE}/patients/${patientId}/medical-records`, {
       headers: { 
         'Authorization': `Bearer ${localStorage.getItem('token')}`,
         'Content-Type': 'application/json',
@@ -802,13 +1064,35 @@ const archiveSelectedPatients = async (): Promise<void> => {
     }
     
     const data = await response.json();
-    setPrescriptions(data.prescriptions?.data || []);
+    setPatientMedicalRecords(data.medical_records || []);
   } catch (error) {
-    console.error('Error fetching prescriptions:', error);
-    setMessage({ type: 'error', text: 'Failed to load prescriptions' });
+    console.error('Error fetching patient medical records:', error);
+    setMessage({ type: 'error', text: 'Failed to load medical records' });
     setTimeout(() => setMessage({ type: '', text: '' }), 5000);
   }
   setLoading(false);
+};
+
+// Fetch prescriptions for a specific patient
+const fetchPatientPrescriptions = async (patientId: number): Promise<void> => {
+  try {
+    const response = await fetch(`${DOCTOR_API_BASE}/prescriptions?patient_id=${patientId}`, {
+      headers: { 
+        'Authorization': `Bearer ${localStorage.getItem('token')}`,
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
+      }
+    });
+    
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+    
+    const data = await response.json();
+    setPatientPrescriptions(data.prescriptions?.data || []);
+  } catch (error) {
+    console.error('Error fetching patient prescriptions:', error);
+  }
 };
 
   // Fixed prescription medication handler
@@ -885,6 +1169,11 @@ const updateAvailability = async (): Promise<void> => {
 const getAvailableTimeSlots = (selectedDate: string): string[] => {
   if (!selectedDate) return timeSlots;
   
+  // If date is blocked by holidays, return empty array
+  if (isDateBlocked(selectedDate)) {
+    return [];
+  }
+  
   // Filter out booked time slots for the selected date
   const bookedSlots = appointments
     .filter(apt => 
@@ -899,6 +1188,13 @@ const getAvailableTimeSlots = (selectedDate: string): string[] => {
 
   const handleAppointmentAction = async (appointment: Appointment, action: string): Promise<void> => {
   try {
+    if (action === 'complete') {
+      // Show completion report modal instead of directly completing
+      setSelectedAppointment(appointment);
+      setShowModal('completionReport');
+      return;
+    }
+    
     let updateData: { status?: string } = {};
     let successMessage = '';
     
@@ -906,10 +1202,6 @@ const getAvailableTimeSlots = (selectedDate: string): string[] => {
       case 'confirm':
         updateData = { status: 'confirmed' };
         successMessage = 'Appointment confirmed successfully!';
-        break;
-      case 'complete':
-        updateData = { status: 'completed' };
-        successMessage = 'Appointment marked as completed!';
         break;
       case 'cancel':
         updateData = { status: 'cancelled' };
@@ -923,7 +1215,7 @@ const getAvailableTimeSlots = (selectedDate: string): string[] => {
         throw new Error('Invalid action');
     }
     
-    const response = await fetch(`${API_BASE_URL}/doctor/appointments/${appointment.id}/status`, {
+    const response = await fetch(`${DOCTOR_API_BASE}/appointments/${appointment.id}/status`, {
       method: 'PUT',
       headers: {
         'Content-Type': 'application/json',
@@ -939,12 +1231,68 @@ const getAvailableTimeSlots = (selectedDate: string): string[] => {
     }
     
     setMessage({ type: 'success', text: successMessage });
-    fetchAppointments(); // Refresh the appointments list
+    fetchAppointments();
   } catch (error: any) {
     console.error(`Error ${action}ing appointment:`, error);
     setMessage({ type: 'error', text: error.message || `Failed to ${action} appointment` });
   }
   setTimeout(() => setMessage({ type: '', text: '' }), 5000);
+};
+
+const completeAppointmentWithReport = async (): Promise<void> => {
+  if (!selectedAppointment) return;
+  
+  try {
+    // Validate required fields
+    if (!completionReport.diagnosis.trim() || !completionReport.treatment_provided.trim()) {
+      setMessage({ type: 'error', text: 'Diagnosis and treatment provided are required' });
+      setTimeout(() => setMessage({ type: '', text: '' }), 5000);
+      return;
+    }
+    
+    setLoading(true);
+    
+    // Use the existing status update endpoint
+    const response = await fetch(`${DOCTOR_API_BASE}/appointments/${selectedAppointment.id}/status`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+        'Authorization': `Bearer ${localStorage.getItem('token')}`
+      },
+      body: JSON.stringify({
+        status: 'completed',
+        completion_report: completionReport  // Include the report data
+      })
+    });
+    
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.message || 'Failed to complete appointment');
+    }
+    
+    setMessage({ type: 'success', text: 'Appointment completed with report!' });
+    setShowModal('');
+    
+    // Reset the completion report
+    setCompletionReport({
+      diagnosis: '',
+      treatment_provided: '',
+      medications_prescribed: '',
+      recommendations: '',
+      follow_up_required: false,
+      follow_up_date: '',
+      notes: ''
+    });
+    
+    fetchAppointments();
+  } catch (error: any) {
+    console.error('Error completing appointment:', error);
+    setMessage({ type: 'error', text: error.message || 'Failed to complete appointment' });
+  } finally {
+    setLoading(false);
+    setTimeout(() => setMessage({ type: '', text: '' }), 5000);
+  }
 };
 
 // Add this function to handle modal cleanup
@@ -958,7 +1306,16 @@ const closeModal = (): void => {
     diagnosis: '', 
     treatment: '', 
     notes: '', 
-    visit_date: new Date().toISOString().split('T')[0] 
+    visit_date: new Date().toISOString().split('T')[0],
+  has_prescription: false,
+  medications: [{
+    name: '',
+    dosage: '',
+    instructions: '',
+    start_date: '',
+    end_date: '',
+    frequency: 'daily'
+  }]
   });
 };
 
@@ -1053,7 +1410,14 @@ const validateAppointmentTime = (date: string, time: string, patientId: string):
     setShowModal('viewAppointment');
   };
 
-  const createAppointment = async (): Promise<void> => {
+  // Add this function with your other functions like viewAppointmentDetails
+const viewPrescriptionDetails = (prescription: Prescription): void => {
+  setSelectedPrescription(prescription);
+  setShowModal('viewPrescription');
+};
+
+  // Enhanced createAppointment function (replace your existing one)
+const createAppointment = async (): Promise<void> => {
   try {
     // Validation
     if (!appointmentForm.patient_id || !appointmentForm.date || 
@@ -1074,7 +1438,29 @@ const validateAppointmentTime = (date: string, time: string, patientId: string):
       return;
     }
 
-    // Check for duplicate appointments (same patient, same date/time)
+    // NEW: Check if date is blocked by holidays
+    if (isDateBlocked(appointmentForm.date)) {
+      const blockingHoliday = holidays.find(h => 
+        h.blocks_appointments && 
+        appointmentForm.date >= h.start_date && 
+        appointmentForm.date <= h.end_date
+      );
+      
+      setMessage({
+        type: 'error',
+        text: `Selected date is not available. ${blockingHoliday ? `Reason: ${blockingHoliday.name}` : 'University holiday period'}`
+      });
+      setTimeout(() => setMessage({ type: '', text: '' }), 5000);
+      return;
+    }
+
+    // Double-check with server
+    const isAvailable = await checkDateAvailability(appointmentForm.date);
+    if (!isAvailable) {
+      return; // Stop if date is blocked
+    }
+
+    // Check for duplicate appointments (keep your existing logic)
     const duplicateAppointment = appointments.find(apt => 
       apt.patient_id.toString() === appointmentForm.patient_id &&
       apt.date === appointmentForm.date &&
@@ -1121,34 +1507,91 @@ const validateAppointmentTime = (date: string, time: string, patientId: string):
 };
 
   const createMedicalRecord = async (): Promise<void> => {
-    if (!selectedPatient) return;
-    
-    try {
-      const response = await fetch(`${API_BASE_URL}/doctor/patients/${selectedPatient.id}/records`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        },
-        body: JSON.stringify(medicalRecordForm)
-      });
-      
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-      
-      const data = await response.json();
-      setMessage({ type: 'success', text: 'Medical record created successfully!' });
-      setShowModal('');
-      setMedicalRecordForm({ diagnosis: '', treatment: '', notes: '', visit_date: new Date().toISOString().split('T')[0] });
+  if (!selectedPatient) return;
+  
+  try {
+    // Validation
+    if (!medicalRecordForm.diagnosis.trim() || !medicalRecordForm.treatment.trim()) {
+      setMessage({ type: 'error', text: 'Diagnosis and treatment are required' });
       setTimeout(() => setMessage({ type: '', text: '' }), 5000);
-    } catch (error) {
-      console.error('Error creating medical record:', error);
-      setMessage({ type: 'error', text: 'Failed to create medical record' });
-      setTimeout(() => setMessage({ type: '', text: '' }), 5000);
+      return;
     }
-  };
+
+    // If medications are prescribed, validate them
+    if (medicalRecordForm.has_prescription) {
+      const invalidMeds = medicalRecordForm.medications.filter(med => 
+        !med.name || !med.dosage || !med.instructions || !med.start_date || !med.end_date
+      );
+      
+      if (invalidMeds.length > 0) {
+        setMessage({ type: 'error', text: 'Please fill all medication fields' });
+        setTimeout(() => setMessage({ type: '', text: '' }), 5000);
+        return;
+      }
+    }
+
+    const response = await fetch(`${DOCTOR_API_BASE}/patients/${selectedPatient.id}/medical-records`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+        'Authorization': `Bearer ${localStorage.getItem('token')}`
+      },
+      body: JSON.stringify({
+        diagnosis: medicalRecordForm.diagnosis,
+        treatment: medicalRecordForm.treatment,
+        notes: medicalRecordForm.notes,
+        visit_date: medicalRecordForm.visit_date,
+        // Include prescription data if medications are prescribed
+        has_prescription: medicalRecordForm.has_prescription,
+        medications: medicalRecordForm.has_prescription ? medicalRecordForm.medications : []
+      })
+    });
+    
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.message || `HTTP error! status: ${response.status}`);
+    }
+    
+    setMessage({ 
+      type: 'success', 
+      text: medicalRecordForm.has_prescription 
+        ? 'Medical record and prescription created successfully!' 
+        : 'Medical record created successfully!' 
+    });
+    
+    setShowModal('viewPatient');
+    
+    // Reset form
+    setMedicalRecordForm({ 
+      diagnosis: '', 
+      treatment: '', 
+      notes: '', 
+      visit_date: new Date().toISOString().split('T')[0],
+      has_prescription: false,
+      medications: [{
+        name: '',
+        dosage: '',
+        instructions: '',
+        start_date: '',
+        end_date: '',
+        frequency: 'daily'
+      }]
+    });
+    
+    // Refresh data
+    if (showPatientHistory) {
+      fetchPatientMedicalRecords(selectedPatient.id);
+      fetchPatientPrescriptions(selectedPatient.id);
+    }
+    
+    setTimeout(() => setMessage({ type: '', text: '' }), 5000);
+  } catch (error) {
+    console.error('Error creating medical record:', error);
+    setMessage({ type: 'error', text: getErrorMessage(error) || 'Failed to create medical record' });
+    setTimeout(() => setMessage({ type: '', text: '' }), 5000);
+  }
+};
 
   const createPrescription = async (): Promise<void> => {
     try {
@@ -1174,13 +1617,15 @@ const validateAppointmentTime = (date: string, time: string, patientId: string):
           dosage: med.dosage,
           instructions: med.instructions,
           start_date: formatDateForAPI(med.start_date),
-          end_date: formatDateForAPI(med.end_date)
+          end_date: formatDateForAPI(med.end_date),
+          frequency: med.frequency || 'daily'
         }))
       };
 
       console.log('Sending prescription data:', formattedPrescription);
 
-      const response = await fetch(`${API_BASE_URL}/doctor/prescriptions`, {
+      // FIX: Use DOCTOR_API_BASE instead of API_BASE_URL
+      const response = await fetch(`${DOCTOR_API_BASE}/prescriptions`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -1218,10 +1663,12 @@ const validateAppointmentTime = (date: string, time: string, patientId: string):
       setShowModal('');
       setPrescriptionForm({
         patient_id: '',
-        medications: [{ name: '', dosage: '', instructions: '', start_date: '', end_date: '' }],
+        medications: [{ name: '', dosage: '', instructions: '', start_date: '', end_date: '', frequency: 'daily' }],
         notes: ''
       });
+
       fetchPrescriptions();
+
       setTimeout(() => setMessage({ type: '', text: '' }), 5000);
     } catch (error: any) {
       console.error('Error creating prescription:', error);
@@ -1249,7 +1696,7 @@ const validateAppointmentTime = (date: string, time: string, patientId: string):
   const addMedication = (): void => {
     setPrescriptionForm(prev => ({
       ...prev,
-      medications: [...prev.medications, { name: '', dosage: '', instructions: '', start_date: '', end_date: '' }]
+      medications: [...prev.medications, { name: '', dosage: '', instructions: '', start_date: '', end_date: '', frequency: 'daily' }]
     }));
   };
 
@@ -1269,6 +1716,7 @@ const validateAppointmentTime = (date: string, time: string, patientId: string):
     // Load data based on active tab
   if (activeTab === 'dashboard') {
     fetchKPIData();
+    fetchHolidays();
   }
   if (activeTab === 'profile') {
     fetchDoctorProfile();
@@ -1293,18 +1741,22 @@ const validateAppointmentTime = (date: string, time: string, patientId: string):
 }, []);
 
 useEffect(() => {
+  // Clear any previous API data flags
+  localStorage.removeItem('hasApiWeeklyStats');
+  
   // Fetch initial data when component mounts
   fetchKPIData();
-  fetchWeeklyStats();
+  fetchHolidays();
   
   // Set up interval to refresh data every 5 minutes
   const interval = setInterval(() => {
-    fetchKPIData();
-    fetchWeeklyStats();
-  }, 5 * 60 * 1000); // 5 minutes
+    localStorage.removeItem('hasApiWeeklyStats');
+    fetchKPIData(); // Only call this - it handles weekly stats
+  }, 5 * 60 * 1000);
   
   return () => clearInterval(interval);
 }, []);
+
 
 
   const filteredPatients = (Array.isArray(patients) ? patients : (patients as any).data || []).filter((patient: Patient) => 
@@ -1361,163 +1813,270 @@ useEffect(() => {
   );
 };
   
+// Add these components inside the EnhancedDoctorDashboard component
+const EnhancedDateInput = ({ value, onChange, disabled = false, required = false }: { 
+  value: string; 
+  onChange: (date: string) => void; 
+  disabled?: boolean; 
+  required?: boolean; 
+}) => (
+  <div>
+    <input
+      type="date"
+      className="form-control"
+      value={value}
+      onChange={(e) => {
+        const selectedDate = e.target.value;
+        
+        // Check if date is blocked
+        if (isDateBlocked(selectedDate)) {
+          const blockingHoliday = holidays.find(h => 
+            h.blocks_appointments && 
+            selectedDate >= h.start_date && 
+            selectedDate <= h.end_date
+          );
+          setMessage({
+            type: 'error',
+            text: `Selected date is not available. ${
+              blockingHoliday ? `Reason: ${blockingHoliday.name}` : 'University holiday period'
+            }`
+          });
+          setTimeout(() => setMessage({ type: '', text: '' }), 3000);
+          return;
+        }
+        
+        onChange(selectedDate);
+      }}
+      min={getMinDate()}
+      disabled={disabled}
+      required={required}
+      style={{
+        backgroundColor: value && isDateBlocked(value) ? '#ffe6e6' : undefined
+      }}
+    />
+    {value && isDateBlocked(value) && (
+      <small className="text-danger">
+        This date is not available due to university holidays
+      </small>
+    )}
+  </div>
+);
+
+const HolidayWarning = ({ selectedDate }: { selectedDate: string }) => {
+  if (!selectedDate || !isDateBlocked(selectedDate)) return null;
+  
+  const blockingHoliday = holidays.find(h => 
+    h.blocks_appointments && 
+    selectedDate >= h.start_date && 
+    selectedDate <= h.end_date
+  );
+  
+  return (
+    <div className="alert alert-warning mt-2" role="alert">
+      <div className="d-flex align-items-center">
+        <AlertTriangle size={20} className="me-2" />
+        <div>
+          <strong>Date Not Available:</strong> {blockingHoliday ? ` ${blockingHoliday.name}` : ' University holiday period'}
+          <br />
+          <small>
+            Holiday period: {blockingHoliday?.start_date} to {blockingHoliday?.end_date}
+          </small>
+        </div>
+      </div>
+    </div>
+  );
+};
 
   const DashboardOverview = () => (
-    <div className="row g-4">
-      {/* Welcome Card */}
-      <div className="col-12">
-        <div className="card shadow-sm border-0" style={{ borderRadius: '1rem', background: universityTheme.gradient }}>
-          <div className="card-body p-4 text-white">
-            <div className="row align-items-center">
-              <div className="col-md-8">
-                <h3 className="mb-2">{t('dashboard.welcome_doctor', { name: user.name })}</h3>
-                <p className="mb-1 opacity-90">{user.email}</p>
-                <p className="mb-0 opacity-75">{t('dashboard.specialization')}: {user.specialization}</p>
-              </div>
-              <div className="col-md-4 text-end">
-                {doctorProfile.avatar_url ? (
-                  <img 
-                    src={doctorProfile.avatar_url}
-                    alt="Profile" 
-                    style={{
-                      width: '80px',
-                      height: '80px',
-                      borderRadius: '50%',
-                      objectFit: 'cover',
-                      border: '3px solid rgba(255,255,255,0.3)'
-                    }}
-                  />
-                ) : (
-                  <User size={80} className="opacity-75" />
-                )}
-              </div>
+  <div className="row g-3 g-md-4">
+    {/* Welcome Card - Mobile responsive */}
+    <div className="col-12">
+      <div className="card shadow-sm border-0" style={{ borderRadius: '1rem', background: universityTheme.gradient }}>
+        <div className="card-body p-3 p-md-4 text-white">
+          <div className="row align-items-center">
+            <div className="col-12 col-md-8 text-center text-md-start">
+              <h3 className="mb-2" style={{ fontSize: 'clamp(1.2rem, 4vw, 1.5rem)' }}>
+                {t('dashboard.welcome_doctor', { name: user.name })}
+              </h3>
+              <p className="mb-1 opacity-90 small">{user.email}</p>
+              <p className="mb-0 opacity-75 small">{t('dashboard.specialization')}: {user.specialization}</p>
+            </div>
+            <div className="col-12 col-md-4 text-center text-md-end mt-3 mt-md-0">
+              {doctorProfile.avatar_url ? (
+                <img 
+                  src={doctorProfile.avatar_url}
+                  alt="Profile" 
+                  style={{
+                    width: 'clamp(60px, 15vw, 80px)', // Responsive avatar size
+                    height: 'clamp(60px, 15vw, 80px)',
+                    borderRadius: '50%',
+                    objectFit: 'cover',
+                    border: '3px solid rgba(255,255,255,0.3)'
+                  }}
+                />
+              ) : (
+                <User size={60} className="opacity-75" />
+              )}
             </div>
           </div>
         </div>
       </div>
+    </div>
 
-      {/* Statistics Cards with real data */}
-      <div className="col-md-3 col-sm-6">
+      {/* Statistics Cards - Better mobile layout */}
+    {[
+      { icon: Calendar, color: universityTheme.primary, value: stats.total, label: t('dashboard.total_appointments'), extra: `Today: ${stats.today}` },
+      { icon: Users, color: universityTheme.secondary, value: stats.patients, label: t('dashboard.total_patients') },
+      { icon: Pill, color: '#ffc107', value: stats.prescriptions, label: t('dashboard.prescriptions') },
+      { icon: CheckCircle, color: universityTheme.accent, value: stats.completed, label: t('dashboard.completed') }
+    ].map((stat, index) => (
+      <div key={index} className="col-6 col-lg-3">
         <div className="card border-0 shadow-sm h-100" style={{ borderRadius: '1rem' }}>
-          <div className="card-body p-4 text-center">
+          <div className="card-body p-3 p-md-4 text-center">
             <div className="d-inline-flex align-items-center justify-content-center mb-3" 
-                style={{ width: '60px', height: '60px', backgroundColor: universityTheme.light, borderRadius: '50%' }}>
-              <Calendar size={30} style={{ color: universityTheme.primary }} />
+                style={{ 
+                  width: 'clamp(50px, 12vw, 60px)', 
+                  height: 'clamp(50px, 12vw, 60px)',  
+                  borderRadius: '50%' 
+                }}>
+              <stat.icon size={24} style={{ color: stat.color }} />
             </div>
-            <h4 className="fw-bold mb-1" style={{ color: universityTheme.primary }}>
-              {loading ? '...' : stats.total}
+            <h4 className="fw-bold mb-1" style={{ 
+              color: stat.color,
+              fontSize: 'clamp(1.2rem, 5vw, 1.5rem)'
+            }}>
+              {loading ? '...' : stat.value}
             </h4>
-            <p className="text-muted mb-0">{t('dashboard.total_appointments')}</p>
-            <small className="text-muted">Today: {stats.today}</small>
+            <p className="text-muted mb-0 small">{stat.label}</p>
+            {stat.extra && <small className="text-muted d-block">{stat.extra}</small>}
           </div>
         </div>
       </div>
+    ))}
 
-      <div className="col-md-3 col-sm-6">
-        <div className="card border-0 shadow-sm h-100" style={{ borderRadius: '1rem' }}>
-          <div className="card-body p-4 text-center">
-            <div className="d-inline-flex align-items-center justify-content-center mb-3" 
-                style={{ width: '60px', height: '60px', backgroundColor: '#dcfdf7', borderRadius: '50%' }}>
-              <Users size={30} style={{ color: universityTheme.secondary }} />
-            </div>
-            <h4 className="fw-bold mb-1" style={{ color: universityTheme.secondary }}>
-              {loading ? '...' : stats.patients}
-            </h4>
-            <p className="text-muted mb-0">{t('dashboard.total_patients')}</p>
+      {/* Charts - Mobile responsive stacking */}
+    <div className="col-12">
+      <div className="row g-3 g-md-4">
+        {[
+          { title: "Weekly Appointments", data: weeklyStats.appointments, color: universityTheme.primary },
+          { title: "Patients Seen", data: weeklyStats.patients, color: universityTheme.secondary },
+          { title: "Completed Sessions", data: weeklyStats.completed, color: universityTheme.accent }
+        ].map((chart, index) => (
+          <div key={index} className="col-12 col-md-6 col-lg-4">
+            <ChartCard 
+              title={chart.title} 
+              data={chart.data}
+              color={chart.color}
+            />
           </div>
-        </div>
+        ))}
       </div>
-
-      <div className="col-md-3 col-sm-6">
-        <div className="card border-0 shadow-sm h-100" style={{ borderRadius: '1rem' }}>
-          <div className="card-body p-4 text-center">
-            <div className="d-inline-flex align-items-center justify-content-center mb-3" 
-                style={{ width: '60px', height: '60px', backgroundColor: '#fef3c7', borderRadius: '50%' }}>
-              <Pill size={30} className="text-warning" />
-            </div>
-            <h4 className="fw-bold text-warning mb-1">
-              {loading ? '...' : stats.prescriptions}
-            </h4>
-            <p className="text-muted mb-0">{t('dashboard.prescriptions')}</p>
-          </div>
-        </div>
-      </div>
-
-      <div className="col-md-3 col-sm-6">
-        <div className="card border-0 shadow-sm h-100" style={{ borderRadius: '1rem' }}>
-          <div className="card-body p-4 text-center">
-            <div className="d-inline-flex align-items-center justify-content-center mb-3" 
-                style={{ width: '60px', height: '60px', backgroundColor: '#fee2e2', borderRadius: '50%' }}>
-              <CheckCircle size={30} style={{ color: universityTheme.accent }} />
-            </div>
-            <h4 className="fw-bold mb-1" style={{ color: universityTheme.accent }}>
-              {loading ? '...' : stats.completed}
-            </h4>
-            <p className="text-muted mb-0">{t('dashboard.completed')}</p>
-          </div>
-        </div>
-      </div>
+    </div>
 
       {/* Quick Actions with translations */}
       <div className="col-12">
-        <div className="card shadow-sm border-0" style={{ borderRadius: '1rem' }}>
-          <div className="card-header bg-white border-0 pb-0">
-            <h5 className="fw-bold mb-0">{t('dashboard.quick_actions')}</h5>
-          </div>
-          <div className="card-body p-4">
-            <div className="row g-3">
-              <div className="col-md-4">
-                <button 
-                  className="btn btn-primary w-100 py-3 border-0" 
-                  style={{ borderRadius: '0.75rem', background: universityTheme.gradient }}
-                  onClick={() => setShowModal('appointment')}
-                >
-                  <Plus size={24} className="mb-2" />
-                  <div className="fw-semibold">{t('dashboard.new_appointment')}</div>
-                  <small className="opacity-75">{t('dashboard.schedule_new_appointment')}</small>
-                </button>
-              </div>
-              
-              <div className="col-md-4">
-                <button 
-                  className="btn btn-outline-primary w-100 py-3" 
-                  style={{ 
-                    borderRadius: '0.75rem',
-                    borderColor: universityTheme.primary,
-                    color: universityTheme.primary
-                  }}
-                  onClick={() => setActiveTab('patients')}
-                >
-                  <Users size={24} className="mb-2" />
-                  <div className="fw-semibold">{t('dashboard.manage_patients')}</div>
-                  <small className="text-muted">{t('dashboard.view_manage_patient_records')}</small>
-                </button>
-              </div>
-              
-              <div className="col-md-4">
-                <button 
-                  className="btn btn-outline-success w-100 py-3" 
-                  style={{ 
-                    borderRadius: '0.75rem',
-                    borderColor: universityTheme.secondary,
-                    color: universityTheme.secondary
-                  }}
-                  onClick={() => {
-                    if (patients.length === 0) {
-                      fetchPatients();
-                    }
-                    setShowModal('prescription');
-                  }}
-                >
-                  <Pill size={24} className="mb-2" />
-                  <div className="fw-semibold">{t('dashboard.create_prescription')}</div>
-                  <small className="text-muted">{t('dashboard.issue_new_medication')}</small>
-                </button>
-              </div>
-            </div>
-          </div>
+  <div className="card shadow-sm border-0" style={{ borderRadius: '1rem' }}>
+    <div className="card-header bg-white border-0 pb-0">
+      <h5 className="fw-bold mb-0">{t('dashboard.quick_actions')}</h5>
+    </div>
+    <div className="card-body p-4">
+      <div className="row g-3">
+        <div className="col-md-4">
+          <button 
+            className="btn btn-primary w-100 py-3 border-0" 
+            style={{ borderRadius: '0.75rem', background: universityTheme.gradient }}
+            onClick={() => setShowModal('appointment')}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.background = '#c52e3dff';
+              e.currentTarget.style.color = 'white';
+              e.currentTarget.style.border = '2px solid #c52e3dff';
+              e.currentTarget.style.transform = 'translateY(-2px)';
+              e.currentTarget.style.boxShadow = '0 4px 12px rgba(220, 53, 69, 0.3)';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.background = universityTheme.gradient;
+              e.currentTarget.style.color = 'white';
+              e.currentTarget.style.border = 'none';
+              e.currentTarget.style.transform = 'translateY(0)';
+              e.currentTarget.style.boxShadow = 'none';
+            }}
+          >
+            <Plus size={24} className="mb-2" />
+            <div className="fw-semibold">{t('dashboard.new_appointment')}</div>
+            <small className="opacity-75">{t('dashboard.schedule_new_appointment')}</small>
+          </button>
+        </div>
+        
+        <div className="col-md-4">
+          <button 
+            className="btn btn-outline-primary w-100 py-3" 
+            style={{ 
+              borderRadius: '0.75rem',
+              borderColor: universityTheme.accent,
+              color: universityTheme.accent,
+              transition: 'all 0.3s ease'
+            }}
+            onClick={() => setActiveTab('patients')}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.background = '#c52e3dff';
+              e.currentTarget.style.color = 'white';
+              e.currentTarget.style.borderColor = '#c52e3dff';
+              e.currentTarget.style.transform = 'translateY(-2px)';
+              e.currentTarget.style.boxShadow = '0 4px 12px rgba(220, 53, 69, 0.3)';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.background = 'transparent';
+              e.currentTarget.style.color = universityTheme.accent;
+              e.currentTarget.style.borderColor = universityTheme.accent;
+              e.currentTarget.style.transform = 'translateY(0)';
+              e.currentTarget.style.boxShadow = 'none';
+            }}
+          >
+            <Users size={24} className="mb-2" />
+            <div className="fw-semibold">{t('dashboard.manage_patients')}</div>
+            <small className="text-muted">{t('dashboard.view_manage_patient_records')}</small>
+          </button>
+        </div>
+        
+        <div className="col-md-4">
+          <button 
+            className="btn btn-outline-success w-100 py-3" 
+            style={{ 
+              borderRadius: '0.75rem',
+              borderColor: universityTheme.accent,
+              color: universityTheme.accent,
+              transition: 'all 0.3s ease'
+            }}
+            onClick={() => {
+              if (patients.length === 0) {
+                fetchPatients();
+              }
+              setShowModal('prescription');
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.background = '#c92c3cff';
+              e.currentTarget.style.color = 'white';
+              e.currentTarget.style.borderColor = '#c52e3dff';
+              e.currentTarget.style.transform = 'translateY(-2px)';
+              e.currentTarget.style.boxShadow = '0 4px 12px rgba(220, 53, 69, 0.3)';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.background = 'transparent';
+              e.currentTarget.style.color = universityTheme.accent;
+              e.currentTarget.style.borderColor = universityTheme.accent;
+              e.currentTarget.style.transform = 'translateY(0)';
+              e.currentTarget.style.boxShadow = 'none';
+            }}
+          >
+            <Pill size={24} className="mb-2" />
+            <div className="fw-semibold">{t('dashboard.create_prescription')}</div>
+            <small className="text-muted">{t('dashboard.issue_new_medication')}</small>
+          </button>
         </div>
       </div>
+    </div>
+  </div>
+</div>
 
       {/* Recent Appointments with translations */}
       {appointments.length > 0 && (
@@ -1564,194 +2123,384 @@ useEffect(() => {
           </div>
         </div>
       )}
-      {/* Charts Row */}
-    <div className="col-12">
-      <div className="row g-4">
-        <div className="col-md-4">
-          <ChartCard 
-            title="Weekly Appointments" 
-            data={weeklyStats.appointments}
-            color={universityTheme.primary}
-          />
-        </div>
-        <div className="col-md-4">
-          <ChartCard 
-            title="Patients Seen" 
-            data={weeklyStats.patients}
-            color={universityTheme.secondary}
-          />
-        </div>
-        <div className="col-md-4">
-          <ChartCard 
-            title="Completed Sessions" 
-            data={weeklyStats.completed}
-            color={universityTheme.accent}
-          />
-        </div>
-      </div>
-    </div>
     </div>
   );
 
 
   const AppointmentsTab = () => (
-    <div className="card shadow-sm">
-      <div className="card-header" style={{ background: universityTheme.gradient }}>
-        <div className="d-flex justify-content-between align-items-center">
-          <h3 className="card-title text-white mb-0 d-flex align-items-center">
-            <Calendar size={24} className="me-2" />
-            {t('nav.appointments')} ({filteredAppointments.length})
-          </h3>
-          <div className="d-flex gap-2">
-            <button
-              onClick={() => {
-                setSelectedDate('');
+  <div className="card shadow-sm">
+    <div className="card-header" style={{ background: universityTheme.gradient }}>
+      <div className="d-flex flex-column flex-lg-row justify-content-between align-items-start align-items-lg-center gap-3">
+        <h3 className="card-title text-white mb-0 d-flex align-items-center">
+          <Calendar size={24} className="me-2" />
+          {t('nav.appointments')} ({filteredAppointments.length})
+        </h3>
+        <div className="d-flex flex-column flex-sm-row gap-2 w-100 w-lg-auto">
+          <button
+            onClick={() => {
+              setSelectedDate('');
+              setFilteredAppointments(appointments);
+            }}
+            className="btn btn-sm btn-light order-2 order-sm-1"
+          >
+            {t('appointments.all_appointments')}
+          </button>
+          <input
+            type="date"
+            value={selectedDate}
+            onChange={(e) => handleDateChange(e.target.value)}
+            className="form-control form-control-sm order-1 order-sm-2"
+          />
+          <button
+            onClick={() => setShowModal('availability')}
+            className="btn btn-warning btn-sm order-3"
+          >
+            <Settings size={16} className="me-1 d-none d-sm-inline" />
+            {t('appointments.set_availability')}
+          </button>
+          <button
+            onClick={() => setShowModal('appointment')}
+            className="btn btn-light btn-sm order-4"
+          >
+            <Plus size={16} className="me-1" />
+            {t('appointments.new_appointment')}
+          </button>
+        </div>
+      </div>
+    </div>
+    
+    <div className="card-body p-2 p-md-4">
+      {/* Mobile responsive filters */}
+      <div className="d-flex flex-wrap gap-1 mb-3">
+        {[
+          { value: 'all', label: 'All', count: appointments.length },
+          { value: 'scheduled', label: 'Scheduled', count: appointments.filter(a => a.status === 'scheduled').length },
+          { value: 'confirmed', label: 'Confirmed', count: appointments.filter(a => a.status === 'confirmed').length },
+          { value: 'completed', label: 'Completed', count: appointments.filter(a => a.status === 'completed').length }
+        ].map(filter => (
+          <button
+            key={filter.value}
+            className={`btn ${appointmentFilter === filter.value ? 'btn-primary' : 'btn-outline-primary'} btn-sm flex-fill flex-sm-grow-0`}
+            onClick={() => {
+              setAppointmentFilter(filter.value);
+              if (filter.value === 'all') {
                 setFilteredAppointments(appointments);
-              }}
-              className="btn btn-sm btn-light"
-            >
-              {t('appointments.all_appointments')}
-            </button>
-            <input
-              type="date"
-              value={selectedDate}
-              onChange={(e) => handleDateChange(e.target.value)}
-              className="form-control form-control-sm"
-              style={{ maxWidth: '150px' }}
-            />
+              } else {
+                setFilteredAppointments(appointments.filter(apt => apt.status === filter.value));
+              }
+            }}
+            style={{ fontSize: '0.75rem' }}
+          >
+            {filter.label} ({filter.count})
+          </button>
+        ))}
+      </div>
+
+      {/* Mobile: Card layout, Desktop: Table layout */}
+      <div className="d-block d-lg-none">
+        {/* Mobile card layout */}
+        {filteredAppointments.map(appointment => (
+          <div key={appointment.id} className="card mb-2 border">
+            <div className="card-body p-3">
+              <div className="d-flex justify-content-between align-items-start mb-2">
+                <div className="flex-grow-1">
+                  <h6 className="mb-1 fw-semibold">{appointment.patient?.name}</h6>
+                  <small className="text-muted">{appointment.patient?.student_id}</small>
+                </div>
+                <span className={`${getStatusBadgeClass(appointment.status)} small`}>
+                  {t(`status.${appointment.status}`)}
+                </span>
+              </div>
+              
+              <div className="mb-2">
+                <div className="d-flex align-items-center text-muted small mb-1">
+                  <Calendar size={12} className="me-1" />
+                  {new Date(appointment.date).toLocaleDateString()}
+                  <Clock size={12} className="ms-3 me-1" />
+                  {appointment.time}
+                </div>
+                <small className="text-muted">{appointment.reason}</small>
+              </div>
+              
+              <div className="d-flex gap-1 flex-wrap">
+                <button 
+                  className="btn btn-sm btn-outline-primary flex-fill" 
+                  onClick={() => viewAppointmentDetails(appointment)}
+                >
+                  <Eye size={14} className="me-1" />
+                  View
+                </button>
+                {appointment.status === 'scheduled' && (
+                  <button 
+                    className="btn btn-sm btn-outline-success flex-fill" 
+                    onClick={() => handleAppointmentAction(appointment, 'confirm')}
+                  >
+                    <Check size={14} className="me-1" />
+                    Confirm
+                  </button>
+                )}
+                {appointment.status === 'confirmed' && (
+                  <button 
+                    className="btn btn-sm btn-outline-info flex-fill" 
+                    onClick={() => handleAppointmentAction(appointment, 'complete')}
+                  >
+                    <CheckCircle size={14} className="me-1" />
+                    Complete
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Desktop table layout */}
+      <div className="d-none d-lg-block">
+        <div className="table-responsive">
+          <table className="table table-hover">
+            <thead>
+              <tr>
+                <th>{t('common.patient')}</th>
+                <th>{t('appointments.date_time')}</th>
+                <th>{t('appointments.reason')}</th>
+                <th>{t('common.status')}</th>
+                <th>{t('common.actions')}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filteredAppointments.map(appointment => (
+                <tr key={appointment.id}>
+                  <td>
+                    <div className="d-flex align-items-center">
+                      <div className="me-2">
+                        <User size={20} className="text-primary" />
+                      </div>
+                      <div>
+                        <div className="fw-semibold">{appointment.patient?.name}</div>
+                        <small className="text-muted">{appointment.patient?.student_id}</small>
+                      </div>
+                    </div>
+                  </td>
+                  <td>
+                    <div className="d-flex align-items-center">
+                      <Calendar size={14} className="me-1 text-muted" />
+                      {new Date(appointment.date).toLocaleDateString()}
+                      <Clock size={14} className="ms-3 me-1 text-muted" />
+                      {appointment.time}
+                    </div>
+                  </td>
+                  <td>{appointment.reason}</td>
+                  <td>
+                    <span className={`${getStatusBadgeClass(appointment.status)}`}>
+                      {t(`status.${appointment.status}`)}
+                    </span>
+                  </td>
+                  <td>
+                    <div className="d-flex gap-1">
+                      <button 
+                        className="btn btn-sm btn-outline-primary" 
+                        onClick={() => viewAppointmentDetails(appointment)}
+                        title={t('common.view_details')}
+                      >
+                        <Eye size={16} />
+                      </button>
+                      {appointment.status === 'scheduled' && (
+                        <button 
+                          className="btn btn-sm btn-outline-success" 
+                          onClick={() => handleAppointmentAction(appointment, 'confirm')}
+                          title={t('appointments.confirm')}
+                        >
+                          <Check size={16} />
+                        </button>
+                      )}
+                      {appointment.status === 'confirmed' && (
+                        <button 
+                          className="btn btn-sm btn-outline-info" 
+                          onClick={() => handleAppointmentAction(appointment, 'complete')}
+                          title={t('appointments.mark_complete')}
+                        >
+                          <CheckCircle size={16} />
+                        </button>
+                      )}
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+);
+
+  const PatientsTab = () => (
+  <div className="card shadow-sm">
+    <div className="card-header" style={{ background: universityTheme.gradient }}>
+      <div className="d-flex justify-content-between align-items-center">
+        <h3 className="card-title text-white mb-0 d-flex align-items-center">
+          <Users size={24} className="me-2" />
+          Patients ({filteredPatients.length} total, {selectedPatients.size} selected)
+        </h3>
+        <div className="d-flex gap-2 align-items-center">
+          {selectedPatients.size > 0 && (
             <button
-              onClick={() => setShowModal('availability')}
+              onClick={archiveSelectedPatients}
               className="btn btn-warning btn-sm"
             >
-              {t('appointments.set_availability')}
+              <Archive size={16} className="me-1" />
+              Archive ({selectedPatients.size})
             </button>
-            <button
-              onClick={() => setShowModal('appointment')}
-              className="btn btn-light btn-sm"
-            >
-              <Plus size={16} className="me-1" />
-              {t('appointments.new_appointment')}
-            </button>
+          )}
+          <div className="input-group" style={{ maxWidth: '280px' }}>
+            <span className="input-group-text bg-white border-end-0">
+              <Search size={16} />
+            </span>
+            <input
+              type="text"
+              placeholder="Search by name or ID..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="form-control form-control-sm border-start-0"
+            />
           </div>
         </div>
       </div>
-      <div className="card-body p-4">
-  <div className="d-flex gap-2 mb-3">
-    <div className="btn-group" role="group">
-      {[
-        { value: 'all', label: 'All', count: appointments.length },
-        { value: 'scheduled', label: 'Scheduled', count: appointments.filter(a => a.status === 'scheduled').length },
-        { value: 'confirmed', label: 'Confirmed', count: appointments.filter(a => a.status === 'confirmed').length },
-        { value: 'completed', label: 'Completed', count: appointments.filter(a => a.status === 'completed').length },
-        { value: 'cancelled', label: 'Cancelled', count: appointments.filter(a => a.status === 'cancelled').length }
-      ].map(filter => (
-        <button
-          key={filter.value}
-          className={`btn ${appointmentFilter === filter.value ? 'btn-primary' : 'btn-outline-primary'} btn-sm`}
-          onClick={() => {
-            setAppointmentFilter(filter.value);
-            if (filter.value === 'all') {
-              setFilteredAppointments(appointments);
-            } else {
-              setFilteredAppointments(appointments.filter(apt => apt.status === filter.value));
-            }
-          }}
-        >
-          {filter.label} ({filter.count})
-        </button>
-      ))}
     </div>
-  </div>
-        {loading ? (
-          <div className="text-center py-5">
-            <div className="spinner-border text-primary mb-3" role="status">
-              <span className="visually-hidden">{t('common.loading')}</span>
+    
+    <div className="card-body p-0">
+      {loading ? (
+        <div className="text-center py-5">
+          <div className="spinner-border text-primary mb-3" role="status">
+            <span className="visually-hidden">Loading...</span>
+          </div>
+          <p className="text-muted">Loading patients...</p>
+        </div>
+      ) : filteredPatients.length === 0 ? (
+        <div className="text-center py-5">
+          <Users size={48} className="text-muted mb-3" />
+          <p className="text-muted">
+            {searchTerm ? `No patients found matching "${searchTerm}"` : 'No patients found'}
+          </p>
+        </div>
+      ) : (
+        <>
+          {/* Table Header with select all */}
+          <div className="p-3 bg-light border-bottom">
+            <div className="form-check d-flex align-items-center">
+              <input
+                className="form-check-input me-2"
+                type="checkbox"
+                checked={selectedPatients.size === filteredPatients.length && filteredPatients.length > 0}
+                onChange={toggleSelectAllPatients}
+              />
+              <label className="form-check-label fw-semibold">
+                Select All ({filteredPatients.length} patients)
+              </label>
             </div>
-            <p className="text-muted">{t('appointments.loading_appointments')}</p>
           </div>
-        ) : filteredAppointments.length === 0 ? (
-          <div className="text-center py-5">
-            <Calendar size={48} className="text-muted mb-3" />
-            <p className="text-muted">
-              {selectedDate 
-                ? t('appointments.no_appointments_for_date', { date: selectedDate })
-                : t('appointments.no_appointments')
-              }
-            </p>
-          </div>
-        ) : (
+
+          {/* Patients Table */}
           <div className="table-responsive">
-            <table className="table table-hover">
-              <thead>
+            <table className="table table-hover mb-0">
+              <thead className="table-light">
                 <tr>
-                  <th>{t('common.patient')}</th>
-                  <th>{t('appointments.date_time')}</th>
-                  <th>{t('appointments.reason')}</th>
-                  <th>{t('common.status')}</th>
-                  <th>{t('common.actions')}</th>
+                  <th style={{ width: "50px" }} className="border-0">
+                    <span className="visually-hidden">Select</span>
+                  </th>
+                  <th className="border-0 fw-semibold">Patient</th>
+                  <th className="border-0 fw-semibold">ID</th>
+                  <th className="border-0 fw-semibold">Contact</th>
+                  <th className="border-0 fw-semibold">Department</th>
+                  <th className="border-0 fw-semibold">Role</th>
+                  <th className="border-0 fw-semibold text-center">Actions</th>
                 </tr>
               </thead>
               <tbody>
-                {filteredAppointments.map(appointment => (
-                  <tr key={appointment.id}>
-                    <td>
+                {filteredPatients.map((patient: Patient) => (
+                  <tr 
+                    key={patient.id} 
+                    className={`${selectedPatients.has(patient.id) ? 'table-primary' : ''}`}
+                    style={{ 
+                      backgroundColor: selectedPatients.has(patient.id) ? 'rgba(13, 110, 253, 0.1)' : 'transparent',
+                      transition: 'all 0.2s ease'
+                    }}
+                  >
+                    <td className="align-middle">
+                      <div className="form-check">
+                        <input
+                          className="form-check-input"
+                          type="checkbox"
+                          checked={selectedPatients.has(patient.id)}
+                          onChange={() => togglePatientSelection(patient.id)}
+                        />
+                      </div>
+                    </td>
+                    
+                    <td className="align-middle">
                       <div className="d-flex align-items-center">
-                        <div className="me-2">
-                          <User size={20} className="text-primary" />
+                        <div 
+                          className="rounded-circle me-3 d-flex align-items-center justify-content-center"
+                          style={{
+                            width: '40px',
+                            height: '40px',
+                            backgroundColor: universityTheme.primary + '20',
+                            color: universityTheme.primary
+                          }}
+                        >
+                          <User size={20} />
                         </div>
                         <div>
-                          <div className="fw-semibold">{appointment.patient?.name}</div>
-                          <small className="text-muted">{appointment.patient?.student_id}</small>
+                          <div className="fw-semibold text-dark">{patient.name}</div>
+                          <small className="text-muted">Patient #{patient.id}</small>
                         </div>
                       </div>
                     </td>
-                    <td>
-                      <div className="d-flex align-items-center">
-                        <Calendar size={14} className="me-1 text-muted" />
-                        {new Date(appointment.date).toLocaleDateString()}
-                        <Clock size={14} className="ms-3 me-1 text-muted" />
-                        {appointment.time}
-                      </div>
-                    </td>
-                    <td>{appointment.reason}</td>
-                    <td>
-                      <span className={`${getStatusBadgeClass(appointment.status)}`}>
-                        {t(`status.${appointment.status}`)}
+                    
+                    <td className="align-middle">
+                      <span className="badge bg-light text-dark border">
+                        {patient.student_id || patient.staff_id || 'N/A'}
                       </span>
                     </td>
-                    <td>
-                      <div className="d-flex gap-1">
+                    
+                    <td className="align-middle">
+                      <div>
+                        <div className="fw-medium">{patient.email}</div>
+                        <small className="text-muted">Email</small>
+                      </div>
+                    </td>
+                    
+                    <td className="align-middle">
+                      <span className="text-dark">{patient.department}</span>
+                    </td>
+                    
+                    <td className="align-middle">
+                      <span 
+                        className="badge"
+                        style={{
+                          backgroundColor: patient.role === 'student' ? '#e3f2fd' : '#f3e5f5',
+                          color: patient.role === 'student' ? '#1976d2' : '#7b1fa2'
+                        }}
+                      >
+                        {patient.role}
+                      </span>
+                    </td>
+                    
+                    <td className="align-middle text-center">
+                      <div className="btn-group" role="group">
                         <button 
-                          className="btn btn-sm btn-outline-primary" 
-                          onClick={() => viewAppointmentDetails(appointment)}
-                          title={t('common.view_details')}
+                          onClick={() => {setSelectedPatient(patient); setShowModal('viewPatient');}}
+                          className="btn btn-sm btn-outline-primary"
+                          title="View Details"
                         >
                           <Eye size={16} />
                         </button>
-                        {appointment.status === 'scheduled' && (
-                          <button 
-                            className="btn btn-sm btn-outline-success" 
-                            onClick={() => handleAppointmentAction(appointment, 'confirm')}
-                            title={t('appointments.confirm')}
-                          >
-                            <Check size={16} />
-                          </button>
-                        )}
-                        {appointment.status === 'confirmed' && (
-                          <button 
-                            className="btn btn-sm btn-outline-info" 
-                            onClick={() => handleAppointmentAction(appointment, 'complete')}
-                            title={t('appointments.mark_complete')}
-                          >
-                            <CheckCircle size={16} />
-                          </button>
-                        )}
                         <button 
-                          className="btn btn-sm btn-outline-secondary" 
-                          onClick={() => handleAppointmentAction(appointment, 'reschedule')}
-                          title={t('appointments.reschedule')}
+                          onClick={() => {setSelectedPatient(patient); setShowModal('medicalRecord');}}
+                          className="btn btn-sm btn-outline-success"
+                          title="Add Medical Record"
                         >
-                          <Edit size={16} />
+                          <FileText size={16} />
                         </button>
                       </div>
                     </td>
@@ -1760,212 +2509,129 @@ useEffect(() => {
               </tbody>
             </table>
           </div>
-        )}
-      </div>
-    </div>
-  );
 
-  const PatientsTab = () => (
-    <div className="card shadow-sm">
-      <div className="card-header" style={{ background: universityTheme.gradient }}>
-  <div className="d-flex justify-content-between align-items-center">
-    <h3 className="card-title text-white mb-0 d-flex align-items-center">
-      <Users size={24} className="me-2" />
-      Patients ({selectedPatients.size} selected)
-    </h3>
-    <div className="d-flex gap-2">
-      {selectedPatients.size > 0 && (
-        <button
-          onClick={archiveSelectedPatients}
-          className="btn btn-warning btn-sm"
-        >
-          <Archive size={16} className="me-1" />
-          Archive Selected ({selectedPatients.size})
-        </button>
-      )}
-      <div className="form-check text-white">
-        <input
-          className="form-check-input"
-          type="checkbox"
-          checked={selectedPatients.size === filteredPatients.length && filteredPatients.length > 0}
-          onChange={toggleSelectAllPatients}
-        />
-        <label className="form-check-label">
-          Select All
-        </label>
-      </div>
-      <div className="input-group" style={{ maxWidth: '250px' }}>
-        <span className="input-group-text bg-white border-end-0">
-          <Search size={16} />
-        </span>
-        <input
-          type="text"
-          placeholder="Search patients..."
-          value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
-          className="form-control form-control-sm border-start-0"
-        />
-      </div>
-    </div>
-  </div>
-</div>
-      <div className="card-body p-4">
-        {loading ? (
-          <div className="text-center py-5">
-            <div className="spinner-border text-primary mb-3" role="status">
-              <span className="visually-hidden">Loading...</span>
+          {/* Footer with pagination info */}
+          <div className="p-3 bg-light border-top">
+            <div className="d-flex justify-content-between align-items-center">
+              <small className="text-muted">
+                Showing {filteredPatients.length} of {patients.length} patients
+                {searchTerm && ` (filtered by "${searchTerm}")`}
+              </small>
+              {selectedPatients.size > 0 && (
+                <small className="text-primary fw-semibold">
+                  {selectedPatients.size} patient{selectedPatients.size !== 1 ? 's' : ''} selected
+                </small>
+              )}
             </div>
-            <p className="text-muted">Loading patients...</p>
           </div>
-        ) : filteredPatients.length === 0 ? (
-          <div className="text-center py-5">
-            <Users size={48} className="text-muted mb-3" />
-            <p className="text-muted">No patients found</p>
-          </div>
-        ) : (
-          <div className="row g-4">
-            {filteredPatients.map((patient: Patient) => (
-              <div key={patient.id} className="col-md-6 col-lg-4">
-  <div className={`card h-100 shadow-sm border-0 ${selectedPatients.has(patient.id) ? 'border-primary' : ''}`} style={{ borderRadius: '1rem' }}>
-    <div className="card-body">
-      <div className="d-flex align-items-start mb-3">
-        <div className="form-check me-3">
-          <input
-            className="form-check-input"
-            type="checkbox"
-            checked={selectedPatients.has(patient.id)}
-            onChange={() => togglePatientSelection(patient.id)}
-          />
-        </div>
-        <div className="me-3">
-          <div className="bg-primary bg-opacity-10 p-3 rounded-circle">
-            <User size={24} className="text-primary" />
-          </div>
-        </div>
-        <div>
-          <h5 className="mb-0 fw-semibold">{patient.name}</h5>
-          <small className="text-muted">{patient.student_id || patient.staff_id}</small>
-        </div>
-      </div>
-      
-      <div className="mb-3">
-        <div className="d-flex align-items-center mb-2">
-          <small className="text-muted">Email:</small>
-          <small className="ms-2">{patient.email}</small>
-        </div>
-        <div className="d-flex align-items-center mb-2">
-          <small className="text-muted">Department:</small>
-          <small className="ms-2">{patient.department}</small>
-        </div>
-        <div className="d-flex align-items-center">
-          <small className="text-muted">Role:</small>
-          <small className="ms-2">{patient.role}</small>
-        </div>
-      </div>
-      
-      <div className="d-flex gap-2">
-        <button 
-          onClick={() => {setSelectedPatient(patient); setShowModal('medicalRecord');}}
-          className="btn btn-sm btn-success flex-grow-1"
-          style={{ borderRadius: '0.5rem' }}
-        >
-          <FileText size={16} className="me-1" />
-          Add Record
-        </button>
-        <button 
-          onClick={() => {setSelectedPatient(patient); setShowModal('viewPatient');}}
-          className="btn btn-sm btn-outline-primary flex-grow-1"
-          style={{ borderRadius: '0.5rem' }}
-        >
-          <Eye size={16} className="me-1" />
-          Details
-        </button>
-      </div>
+        </>
+      )}
     </div>
   </div>
-</div>
-            ))}
-          </div>
-        )}
-      </div>
-    </div>
-  );
+);
 
   const PrescriptionsTab = () => (
-    <div className="card shadow-sm">
-      <div className="card-header" style={{ background: universityTheme.gradient }}>
-        <div className="d-flex justify-content-between align-items-center">
-          <h3 className="card-title text-white mb-0 d-flex align-items-center">
-            <Pill size={24} className="me-2" />
-            Prescriptions
-          </h3>
-          <button
-            onClick={() => setShowModal('prescription')}
-            className="btn btn-light btn-sm"
-            style={{ borderRadius: '0.5rem' }}
-          >
-            <Plus size={16} className="me-1" />
-            New Prescription
-          </button>
-        </div>
-      </div>
-      <div className="card-body p-4">
-        {loading ? (
-          <div className="text-center py-5">
-            <div className="spinner-border text-primary mb-3" role="status">
-              <span className="visually-hidden">Loading...</span>
-            </div>
-            <p className="text-muted">Loading prescriptions...</p>
-          </div>
-        ) : prescriptions.length === 0 ? (
-          <div className="text-center py-5">
-            <Pill size={48} className="text-muted mb-3" />
-            <p className="text-muted">No prescriptions found</p>
-          </div>
-        ) : (
-          <div className="row g-4">
-            {prescriptions.map(prescription => (
-              <div key={prescription.id} className="col-12">
-                <div className="card border-0 shadow-sm" style={{ borderRadius: '1rem' }}>
-                  <div className="card-body p-4">
-                    <div className="d-flex justify-content-between align-items-start mb-3">
-                      <div>
-                        <h5 className="mb-1 fw-bold">{prescription.patient?.name}</h5>
-                        <p className="text-muted small">Issued: {new Date(prescription.created_at).toLocaleDateString()}</p>
-                      </div>
-                      <span className={`${getStatusBadge(prescription.status)}`}>
-                        {prescription.status.charAt(0).toUpperCase() + prescription.status.slice(1)}
-                      </span>
-                    </div>
-                    
-                    <div className="mb-3">
-                      <h6 className="fw-semibold mb-2">Medications:</h6>
-                      {prescription.medications?.map((med: Medication, index: number) => (
-                        <div key={index} className="bg-light p-3 rounded mb-2">
-                          <div className="d-flex justify-content-between">
-                            <div className="fw-semibold">{med.name}</div>
-                            <small className="text-muted">{med.dosage}</small>
-                          </div>
-                          <small className="text-muted d-block mb-1">Instructions: {med.instructions}</small>
-                          <small className="text-muted">Duration: {med.start_date} to {med.end_date}</small>
-                        </div>
-                      ))}
-                    </div>
-                    
-                    {prescription.notes && (
-                      <div className="alert alert-light border-0 mb-0" style={{ backgroundColor: '#f8f9fa', borderRadius: '0.75rem' }}>
-                        <small><strong>Notes:</strong> {prescription.notes}</small>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
+  <div className="card shadow-sm">
+    <div className="card-header" style={{ background: universityTheme.gradient }}>
+      <div className="d-flex justify-content-between align-items-center">
+        <h3 className="card-title text-white mb-0 d-flex align-items-center">
+          <Pill size={24} className="me-2" />
+          Prescriptions ({prescriptions.length})
+        </h3>
+        <button
+          onClick={() => setShowModal('prescription')}
+          className="btn btn-light btn-sm"
+          style={{ borderRadius: '0.5rem' }}
+        >
+          <Plus size={16} className="me-1" />
+          New Prescription
+        </button>
       </div>
     </div>
-  );
+    
+    <div className="card-body p-4">
+      {loading ? (
+        <div className="text-center py-5">
+          <div className="spinner-border text-primary mb-3" role="status">
+            <span className="visually-hidden">Loading...</span>
+          </div>
+          <p className="text-muted">Loading prescriptions...</p>
+        </div>
+      ) : prescriptions.length === 0 ? (
+        <div className="text-center py-5">
+          <Pill size={48} className="text-muted mb-3" />
+          <p className="text-muted">No prescriptions found</p>
+        </div>
+      ) : (
+        <div className="table-responsive">
+          <table className="table table-hover">
+            <thead>
+              <tr>
+                <th>Patient</th>
+                <th>Date</th>
+                <th>Medications</th>
+                <th>Status</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {prescriptions.map(prescription => (
+                <tr key={prescription.id}>
+                  <td>
+                    <div className="d-flex align-items-center">
+                      <div className="me-2">
+                        <User size={20} className="text-primary" />
+                      </div>
+                      <div>
+                        <div className="fw-semibold">{prescription.patient?.name}</div>
+                        <small className="text-muted">{prescription.patient?.student_id}</small>
+                      </div>
+                    </div>
+                  </td>
+                  <td>
+                    <div>
+                      <div>{new Date(prescription.created_at).toLocaleDateString()}</div>
+                      <small className="text-muted">{new Date(prescription.created_at).toLocaleTimeString()}</small>
+                    </div>
+                  </td>
+                  <td>
+                    <div>
+                      <div className="fw-semibold">{prescription.medications?.length || 0} medications</div>
+                      {prescription.medications?.slice(0, 2).map((med, index) => (
+                        <div key={index} className="small text-muted">
+                          {med.name} - {med.dosage}
+                        </div>
+                      ))}
+                      {(prescription.medications?.length || 0) > 2 && (
+                        <small className="text-muted">
+                          +{(prescription.medications?.length || 0) - 2} more
+                        </small>
+                      )}
+                    </div>
+                  </td>
+                  <td>
+                    <span className={getStatusBadge(prescription.status)}>
+                      {prescription.status.charAt(0).toUpperCase() + prescription.status.slice(1)}
+                    </span>
+                  </td>
+                  <td>
+                    <button 
+                      className="btn btn-sm btn-outline-primary" 
+                      onClick={() => viewPrescriptionDetails(prescription)}
+                      title="View Details"
+                    >
+                      <Eye size={16} />
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  </div>
+);
 
   const ProfileTab = () => (
     <div className="card shadow-sm">
@@ -1978,55 +2644,182 @@ useEffect(() => {
       <div className="card-body p-4">
         <div className="row g-4">
           {/* Profile Image */}
-          <div className="col-12 text-center">
-            <div className="position-relative d-inline-block">
-              {doctorProfile.avatar_url ? (
-                <img 
-                  src={doctorProfile.avatar_url}
-                  alt="Profile" 
-                  className="rounded-circle"
-                  style={{ width: '120px', height: '120px', objectFit: 'cover' }}
-                />
-              ) : (
-                <div 
-                  className="rounded-circle d-flex align-items-center justify-content-center"
-                  style={{ 
-                    width: '120px', 
-                    height: '120px', 
-                    backgroundColor: universityTheme.light,
-                    border: `3px solid ${universityTheme.primary}`
-                  }}
-                >
-                  <User size={40} style={{ color: universityTheme.primary }} />
+<div className="col-12 text-center">
+  <div className="position-relative d-inline-block">
+    {doctorProfile.avatar_url ? (
+      <img 
+        src={doctorProfile.avatar_url}
+        alt="Profile" 
+        className="rounded-circle"
+        style={{ width: '120px', height: '120px', objectFit: 'cover' }}
+      />
+    ) : (
+      <div 
+        className="rounded-circle d-flex align-items-center justify-content-center"
+        style={{ 
+          width: '120px', 
+          height: '120px', 
+          backgroundColor: universityTheme.light,
+          border: `3px solid ${universityTheme.primary}`
+        }}
+      >
+        <User size={40} style={{ color: universityTheme.primary }} />
+      </div>
+    )}
+    <label 
+      htmlFor="avatarInput" 
+      className="btn btn-sm btn-primary position-absolute bottom-0 end-0 rounded-circle p-2"
+      style={{ cursor: 'pointer' }}
+    >
+      <Camera size={16} />
+    </label>
+    <input 
+      id="avatarInput"
+      type="file" 
+      accept="image/jpeg,image/jpg,image/png,image/gif,image/webp" 
+      onChange={handleImageUpload}
+      style={{ display: 'none' }}
+    />
+  </div>
+  
+  {/* Remove button */}
+  {doctorProfile.avatar_url && (
+    <div className="mt-2">
+      <button
+        className="btn btn-sm btn-outline-danger"
+        onClick={handlePhotoRemove}
+      >
+        Remove Photo
+      </button>
+    </div>
+  )}
+  
+  {/* Photo Guidelines Dropdown */}
+  <div className="mt-3">
+    <div className="accordion" id="doctorPhotoGuidelines">
+      <div className="accordion-item" style={{ border: 'none', background: 'transparent' }}>
+        <h2 className="accordion-header" id="doctorPhotoGuidelinesHeading">
+          <button 
+            className="accordion-button collapsed"
+            type="button" 
+            data-bs-toggle="collapse" 
+            data-bs-target="#doctorPhotoGuidelinesCollapse" 
+            aria-expanded="false" 
+            aria-controls="doctorPhotoGuidelinesCollapse"
+            style={{
+              background: 'transparent',
+              border: '1px solid #dee2e6',
+              borderRadius: '8px',
+              padding: '8px 16px',
+              fontSize: '0.875rem',
+              color: '#6c757d',
+              boxShadow: 'none'
+            }}
+            onFocus={(e) => {
+              e.currentTarget.style.boxShadow = '0 0 0 0.25rem rgba(220, 53, 69, 0.25)';
+              e.currentTarget.style.borderColor = '#dc3545';
+            }}
+            onBlur={(e) => {
+              e.currentTarget.style.boxShadow = 'none';
+              e.currentTarget.style.borderColor = '#dee2e6';
+            }}
+          >
+            <Camera size={16} className="me-2" />
+            Professional Photo Guidelines
+          </button>
+        </h2>
+        <div 
+          id="doctorPhotoGuidelinesCollapse" 
+          className="accordion-collapse collapse" 
+          aria-labelledby="doctorPhotoGuidelinesHeading" 
+          data-bs-parent="#doctorPhotoGuidelines"
+        >
+          <div className="accordion-body" style={{ padding: '16px 0' }}>
+            <div 
+              className="photo-requirements text-start"
+              style={{
+                background: '#f8f9fa',
+                border: '1px solid #e9ecef',
+                borderRadius: '8px',
+                padding: '16px',
+                maxWidth: '400px',
+                margin: '0 auto'
+              }}
+            >
+              <div className="row g-2">
+                <div className="col-12">
+                  <div className="d-flex align-items-start">
+                    <CheckCircle size={16} className="text-success me-2 mt-1 flex-shrink-0" />
+                    <div>
+                      <strong className="text-dark">File Types:</strong>
+                      <br />
+                      <small className="text-muted">JPEG, PNG, GIF, or WebP formats</small>
+                    </div>
+                  </div>
                 </div>
-              )}
-              <label 
-                htmlFor="avatarInput" 
-                className="btn btn-sm btn-primary position-absolute bottom-0 end-0 rounded-circle p-2"
-                style={{ cursor: 'pointer' }}
-              >
-                <Camera size={16} />
-              </label>
-              <input 
-                id="avatarInput"
-                type="file" 
-                accept="image/*" 
-                onChange={handleImageUpload}
-                style={{ display: 'none' }}
-              />
-            </div>
-            {/* Add remove button */}
-            {doctorProfile.avatar_url && (
-              <div className="mt-2">
-                <button
-                  className="btn btn-sm btn-outline-danger"
-                  onClick={handlePhotoRemove}
-                >
-                  Remove Photo
-                </button>
+                
+                <div className="col-12">
+                  <div className="d-flex align-items-start">
+                    <CheckCircle size={16} className="text-success me-2 mt-1 flex-shrink-0" />
+                    <div>
+                      <strong className="text-dark">File Size:</strong>
+                      <br />
+                      <small className="text-muted">Maximum 5MB per file</small>
+                    </div>
+                  </div>
+                </div>
+                
+                <div className="col-12">
+                  <div className="d-flex align-items-start">
+                    <CheckCircle size={16} className="text-success me-2 mt-1 flex-shrink-0" />
+                    <div>
+                      <strong className="text-dark">Dimensions:</strong>
+                      <br />
+                      <small className="text-muted">Square format (1:1 ratio) recommended</small>
+                    </div>
+                  </div>
+                </div>
+                
+                <div className="col-12">
+                  <div className="d-flex align-items-start">
+                    <CheckCircle size={16} className="text-success me-2 mt-1 flex-shrink-0" />
+                    <div>
+                      <strong className="text-dark">Professional Quality:</strong>
+                      <br />
+                      <small className="text-muted">High-resolution, well-lit, clear image</small>
+                    </div>
+                  </div>
+                </div>
+                
+                <div className="col-12">
+                  <div className="d-flex align-items-start">
+                    <CheckCircle size={16} className="text-success me-2 mt-1 flex-shrink-0" />
+                    <div>
+                      <strong className="text-dark">Medical Professional:</strong>
+                      <br />
+                      <small className="text-muted">Professional attire, appropriate for patient interaction</small>
+                    </div>
+                  </div>
+                </div>
+                
+                <div className="col-12">
+                  <div className="d-flex align-items-start">
+                    <CheckCircle size={16} className="text-success me-2 mt-1 flex-shrink-0" />
+                    <div>
+                      <strong className="text-dark">Patient Trust:</strong>
+                      <br />
+                      <small className="text-muted">Friendly, approachable appearance for patient directory</small>
+                    </div>
+                  </div>
+                </div>
               </div>
-            )}
+            </div>
           </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
 
           {/* Rest of your form fields... */}
           <div className="col-md-6">
@@ -2125,29 +2918,32 @@ const Navigation = () => (
       left: 0,
       right: 0,
       zIndex: 1030,
-      height: '85px'
+      minHeight: '70px', // Reduced height for mobile
+      padding: '0.5rem 1rem' // Better mobile padding
     }}
   >
-    <div className="container-fluid">
-      {/* Logo */}
+    <div className="container-fluid px-2 px-md-3">
+      {/* Logo - Mobile optimized */}
       <div 
-        className="navbar-brand"
+        className="navbar-brand me-2"
         style={{
           display: 'flex',
           alignItems: 'center',
-          color: '#333'
+          color: '#333',
+          fontSize: '0.9rem' // Smaller on mobile
         }}
       >
         <img
           src="/logo6.png"
           alt="Final International University"
           style={{
-            width: '50px',
-            height: '50px',
-            borderRadius: '8px',
+            width: '35px', // Smaller logo on mobile
+            height: '35px',
+            borderRadius: '6px',
             objectFit: 'cover',
-            marginRight: '15px'
+            marginRight: '8px'
           }}
+          className="d-none d-sm-block" // Hide on very small screens
         />
         <div>
           <h5 
@@ -2155,17 +2951,19 @@ const Navigation = () => (
               color: '#333',
               fontWeight: 600,
               margin: 0,
-              fontSize: '1.25rem',
+              fontSize: 'clamp(0.9rem, 2.5vw, 1.25rem)', // Responsive font size
               lineHeight: 1.2
             }}
+            className="d-none d-md-block" // Hide brand text on mobile
           >
             {t('login.brand_name')}
           </h5>
           <small 
             style={{
               color: '#666',
-              fontSize: '0.85rem'
+              fontSize: 'clamp(0.7rem, 2vw, 0.85rem)'
             }}
+            className="d-none d-lg-block" // Hide subtitle on tablet and below
           >
             {t('nav.medical_portal')}
           </small>
@@ -2174,13 +2972,17 @@ const Navigation = () => (
 
       {/* Mobile menu toggle */}
       <button 
-        className="navbar-toggler" 
+        className="navbar-toggler border-0 p-1" 
         type="button" 
         data-bs-toggle="collapse" 
         data-bs-target="#navbarContent"
         aria-controls="navbarContent" 
         aria-expanded="false" 
         aria-label="Toggle navigation"
+        style={{
+          boxShadow: 'none',
+          outline: 'none'
+        }}
       >
         <span className="navbar-toggler-icon"></span>
       </button>
@@ -2365,201 +3167,184 @@ const Navigation = () => (
 </li>
         </ul>
         
-        {/* Right side: Language and User Dropdown */}
-        <div className="d-flex align-items-center ms-auto">
-          {/* Language Switcher */}
-          <div className="dropdown me-3">
-            <button 
-              className="btn btn-outline-secondary dropdown-toggle" 
-              data-bs-toggle="dropdown"
-              style={{ 
-                borderRadius: '25px',
-                borderColor: '#dc3545',
-                color: '#dc3545'
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.background = 'rgba(220, 53, 69, 0.1)';
-                e.currentTarget.style.borderColor = '#dc3545';
-                e.currentTarget.style.color = '#dc3545';
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.background = 'transparent';
-                e.currentTarget.style.borderColor = '#dc3545';
-                e.currentTarget.style.color = '#dc3545';
-              }}
-            >
-              <Globe size={16} className="me-1" />
-              {i18n.language === 'tr' ? 'TR' : 'EN'}
-            </button>
-            <ul 
-              className="dropdown-menu"
-              style={{
-                border: 'none',
-                boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
-                borderRadius: '12px',
-                padding: '8px 0'
-              }}
-            >
-              <li>
-                <button 
-                  className="dropdown-item" 
-                  onClick={() => i18n.changeLanguage('en')}
-                  style={{
-                    padding: '12px 20px',
-                    transition: 'background-color 0.2s ease'
-                  }}
-                  onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f8f9fa'}
-                  onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
-                >
-                  🇺🇸 English
-                </button>
-              </li>
-              <li>
-                <button 
-                  className="dropdown-item" 
-                  onClick={() => i18n.changeLanguage('tr')}
-                  style={{
-                    padding: '12px 20px',
-                    transition: 'background-color 0.2s ease'
-                  }}
-                  onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f8f9fa'}
-                  onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
-                >
-                  🇹🇷 Türkçe
-                </button>
-              </li>
-            </ul>
+        {/* Right side: User Dropdown with Language inside */}
+<div className="d-flex align-items-center ms-auto">
+  {/* User Profile Dropdown */}
+  <div className="dropdown">
+    <button 
+      className="btn btn-light dropdown-toggle d-flex align-items-center" 
+      data-bs-toggle="dropdown"
+      style={{ 
+        borderRadius: '25px',
+        border: '2px solid #e0e0e0',
+        padding: '8px 16px',
+        background: 'white',
+        color: '#333'
+      }}
+      onMouseEnter={(e) => {
+        e.currentTarget.style.background = '#f8f9fa';
+        e.currentTarget.style.borderColor = '#d0d0d0';
+      }}
+      onMouseLeave={(e) => {
+        e.currentTarget.style.background = 'white';
+        e.currentTarget.style.borderColor = '#e0e0e0';
+      }}
+    >
+      <div 
+        className="rounded-circle me-2 d-flex align-items-center justify-content-center"
+        style={{
+          width: '32px',
+          height: '32px',
+          backgroundColor: doctorProfile.avatar_url ? 'transparent' : '#dc3545',
+          color: 'white',
+          overflow: 'hidden'
+        }}
+      >
+        {doctorProfile.avatar_url ? (
+          <img 
+            src={doctorProfile.avatar_url}
+            alt="Profile" 
+            style={{
+              width: '32px',
+              height: '32px',
+              borderRadius: '50%',
+              objectFit: 'cover'
+            }}
+          />
+        ) : (
+          <User size={18} />
+        )}
+      </div>
+      {/* Removed name display */}
+    </button>
+    <ul 
+      className="dropdown-menu dropdown-menu-end" 
+      style={{ 
+        minWidth: '280px',
+        border: 'none',
+        boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+        borderRadius: '12px',
+        padding: '8px 0'
+      }}
+    >
+      {/* User Info Header */}
+      <li 
+        className="dropdown-header"
+        style={{
+          padding: '16px 20px 16px 20px',
+          backgroundColor: '#f8f9fa',
+          borderBottom: '1px solid #e9ecef',
+          marginBottom: '8px',
+          borderTopLeftRadius: '12px',
+          borderTopRightRadius: '12px'
+        }}
+      >
+        <div className="d-flex align-items-center">
+          <div 
+            className="rounded-circle me-3 d-flex align-items-center justify-content-center"
+            style={{
+              width: '40px',
+              height: '40px',
+              backgroundColor: doctorProfile.avatar_url ? 'transparent' : '#dc3545',
+              color: 'white',
+              overflow: 'hidden'
+            }}
+          >
+            {doctorProfile.avatar_url ? (
+              <img 
+                src={doctorProfile.avatar_url}
+                alt="Profile" 
+                style={{
+                  width: '40px',
+                  height: '40px',
+                  borderRadius: '50%',
+                  objectFit: 'cover'
+                }}
+              />
+            ) : (
+              <User size={20} />
+            )}
           </div>
-
-          {/* User Profile Dropdown */}
-          <div className="dropdown">
-            <button 
-              className="btn btn-light dropdown-toggle d-flex align-items-center" 
-              data-bs-toggle="dropdown"
-              style={{ 
-                borderRadius: '25px',
-                border: '2px solid #e0e0e0',
-                padding: '8px 16px',
-                background: 'white',
-                color: '#333'
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.background = '#f8f9fa';
-                e.currentTarget.style.borderColor = '#d0d0d0';
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.background = 'white';
-                e.currentTarget.style.borderColor = '#e0e0e0';
-              }}
-            >
-              <div 
-                className="rounded-circle me-2 d-flex align-items-center justify-content-center"
-                style={{
-                  width: '32px',
-                  height: '32px',
-                  backgroundColor: doctorProfile.avatar_url ? 'transparent' : '#dc3545',
-                  color: 'white',
-                  overflow: 'hidden'
-                }}
-              >
-                {doctorProfile.avatar_url ? (
-                  <img 
-                    src={doctorProfile.avatar_url}
-                    alt="Profile" 
-                    style={{
-                      width: '32px',
-                      height: '32px',
-                      borderRadius: '50%',
-                      objectFit: 'cover'
-                    }}
-                  />
-                ) : (
-                  <User size={18} />
-                )}
-              </div>
-              <span className="fw-semibold">Dr. {user.name}</span>
-            </button>
-            <ul 
-              className="dropdown-menu dropdown-menu-end" 
-              style={{ 
-                minWidth: '280px',
-                border: 'none',
-                boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
-                borderRadius: '12px',
-                padding: '8px 0'
-              }}
-            >
-              {/* User Info Header */}
-              <li 
-                className="dropdown-header"
-                style={{
-                  padding: '16px 20px 16px 20px',
-                  backgroundColor: '#f8f9fa',
-                  borderBottom: '1px solid #e9ecef',
-                  marginBottom: '8px',
-                  borderTopLeftRadius: '12px',
-                  borderTopRightRadius: '12px'
-                }}
-              >
-                <div className="d-flex align-items-center">
-                  <div 
-                    className="rounded-circle me-3 d-flex align-items-center justify-content-center"
-                    style={{
-                      width: '40px',
-                      height: '40px',
-                      backgroundColor: doctorProfile.avatar_url ? 'transparent' : '#dc3545',
-                      color: 'white',
-                      overflow: 'hidden'
-                    }}
-                  >
-                    {doctorProfile.avatar_url ? (
-                      <img 
-                        src={doctorProfile.avatar_url}
-                        alt="Profile" 
-                        style={{
-                          width: '40px',
-                          height: '40px',
-                          borderRadius: '50%',
-                          objectFit: 'cover'
-                        }}
-                      />
-                    ) : (
-                      <User size={20} />
-                    )}
-                  </div>
-                  <div>
-                    <div className="fw-semibold">Dr. {user.name}</div>
-                    <small className="text-muted">{user.email}</small>
-                    <div>
-                      <small className="text-muted">{t('dashboard.specialization')}: {user.specialization}</small>
-                    </div>
-                  </div>
-                </div>
-              </li>
-              
-              <li><hr className="dropdown-divider" style={{ margin: '8px 0' }} /></li>
-              
-              {/* Logout */}
-              <li>
-                {onLogout && (
-                  <button 
-                    className="dropdown-item d-flex align-items-center text-danger" 
-                    onClick={onLogout}
-                    style={{
-                      padding: '12px 20px',
-                      transition: 'background-color 0.2s ease'
-                    }}
-                    onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f8f9fa'}
-                    onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
-                  >
-                    <User size={16} className="me-3" />
-                    {t('nav.logout')}
-                  </button>
-                )}
-              </li>
-            </ul>
+          <div>
+            <div className="fw-semibold">Dr. {user.name}</div>
+            <small className="text-muted">{user.email}</small>
+            <div>
+              <small className="text-muted">{t('dashboard.specialization')}: {user.specialization}</small>
+            </div>
           </div>
         </div>
+      </li>
+      
+      {/* Language Selection */}
+      <li>
+        <h6 className="dropdown-header" style={{ padding: '12px 20px 8px 20px', margin: 0, color: '#6c757d', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+          Language
+        </h6>
+      </li>
+      <li>
+        <button 
+          className="dropdown-item d-flex align-items-center"
+          style={{
+            padding: '12px 20px',
+            transition: 'background-color 0.2s ease'
+          }}
+          onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f8f9fa'}
+          onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+          onClick={() => i18n.changeLanguage('en')}
+        >
+          <Globe size={16} className="me-3" />
+          <div className="flex-grow-1 d-flex justify-content-between align-items-center">
+            <span>🇺🇸 English</span>
+            {i18n.language === 'en' && (
+              <CheckCircle size={16} className="text-success" />
+            )}
+          </div>
+        </button>
+      </li>
+      <li>
+        <button 
+          className="dropdown-item d-flex align-items-center"
+          style={{
+            padding: '12px 20px',
+            transition: 'background-color 0.2s ease'
+          }}
+          onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f8f9fa'}
+          onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+          onClick={() => i18n.changeLanguage('tr')}
+        >
+          <Globe size={16} className="me-3" />
+          <div className="flex-grow-1 d-flex justify-content-between align-items-center">
+            <span>🇹🇷 Türkçe</span>
+            {i18n.language === 'tr' && (
+              <CheckCircle size={16} className="text-success" />
+            )}
+          </div>
+        </button>
+      </li>
+      
+      <li><hr className="dropdown-divider" style={{ margin: '8px 0' }} /></li>
+      
+      {/* Logout */}
+      <li>
+        {onLogout && (
+          <button 
+            className="dropdown-item d-flex align-items-center text-danger" 
+            onClick={onLogout}
+            style={{
+              padding: '12px 20px',
+              transition: 'background-color 0.2s ease'
+            }}
+            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f8f9fa'}
+            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+          >
+            <LogOut size={16} className="me-3" />
+            {t('nav.logout')}
+          </button>
+        )}
+      </li>
+    </ul>
+  </div>
+</div>
       </div>
     </div>
   </nav>
@@ -2773,37 +3558,38 @@ const Navigation = () => (
               <div className="row">
                 <div className="col-md-6 mb-3">
                   <label className="form-label fw-semibold">Date *</label>
-                  <input
-                    type="date"
-                    className="form-control"
+                  <EnhancedDateInput
                     value={appointmentForm.date}
-                    min={getMinDate()}
-                    onChange={(e) => setAppointmentForm(prev => ({
+                    onChange={(date) => setAppointmentForm(prev => ({
                       ...prev,
-                      date: e.target.value
+                      date: date
                     }))}
                     required
                   />
-                  {!appointmentForm.date && (
+                  <HolidayWarning selectedDate={appointmentForm.date} />
+                  {!appointmentForm.date && !isDateBlocked(appointmentForm.date) && (
                     <div className="form-text text-danger">Please select a date</div>
                   )}
                 </div>
+                
+                {/* ADD THE TIME SELECTION HERE */}
                 <div className="col-md-6 mb-3">
                   <label className="form-label fw-semibold">Time *</label>
                   <select
-                  className="form-select"
-                  value={appointmentForm.time}
-                  onChange={(e) => setAppointmentForm(prev => ({
-                    ...prev,
-                    time: e.target.value
-                  }))}
-                  required
-                >
-                  <option value="">Select time</option>
-                  {getAvailableTimeSlots(appointmentForm.date).map(time => (
-                    <option key={time} value={time}>{time}</option>
-                  ))}
-                </select>
+                    className="form-select"
+                    value={appointmentForm.time}
+                    onChange={(e) => setAppointmentForm(prev => ({
+                      ...prev,
+                      time: e.target.value
+                    }))}
+                    required
+                    disabled={!appointmentForm.date || isDateBlocked(appointmentForm.date)}
+                  >
+                    <option value="">Select time</option>
+                    {getAvailableTimeSlots(appointmentForm.date).map(slot => (
+                      <option key={slot} value={slot}>{slot}</option>
+                    ))}
+                  </select>
                   {!appointmentForm.time && (
                     <div className="form-text text-danger">Please select a time</div>
                   )}
@@ -3057,68 +3843,215 @@ const Navigation = () => (
         )}
 
         {/* ADD THE VIEW PATIENT DETAILS MODAL HERE */}
-        {showModal === 'viewPatient' && selectedPatient && (
-          <>
-            <div className="modal-header" style={{ background: universityTheme.gradient }}>
-              <h5 className="modal-title text-white">
-                <User size={20} className="me-2" />
-                Patient Details - {selectedPatient.name}
-              </h5>
-              <button
-                type="button"
-                className="btn-close btn-close-white"
-                onClick={() => setShowModal('')}
-              ></button>
-            </div>
-            <div className="modal-body p-4">
+        {/* Enhanced View Patient Details Modal */}
+{showModal === 'viewPatient' && selectedPatient && (
+  <>
+    <div className="modal-header" style={{ background: universityTheme.gradient }}>
+      <h5 className="modal-title text-white">
+        <User size={20} className="me-2" />
+        Patient Details - {selectedPatient.name}
+      </h5>
+      <button
+        type="button"
+        className="btn-close btn-close-white"
+        onClick={() => {
+          setShowModal('');
+          setShowPatientHistory(false);
+          setPatientMedicalRecords([]);
+          setPatientPrescriptions([]);
+        }}
+      ></button>
+    </div>
+    <div className="modal-body p-4" style={{ maxHeight: '80vh', overflowY: 'auto' }}>
+      {/* Basic Patient Information */}
+      <div className="row mb-4">
+        <div className="col-md-6 mb-3">
+          <label className="form-label fw-semibold text-muted small">NAME</label>
+          <div className="fw-semibold">{selectedPatient.name}</div>
+        </div>
+        <div className="col-md-6 mb-3">
+          <label className="form-label fw-semibold text-muted small">ID</label>
+          <div className="fw-semibold">{selectedPatient.student_id || selectedPatient.staff_id}</div>
+        </div>
+      </div>
+      
+      <div className="row mb-4">
+        <div className="col-md-6 mb-3">
+          <label className="form-label fw-semibold text-muted small">EMAIL</label>
+          <div className="fw-semibold">{selectedPatient.email}</div>
+        </div>
+        <div className="col-md-6 mb-3">
+          <label className="form-label fw-semibold text-muted small">ROLE</label>
+          <div className="fw-semibold">{selectedPatient.role}</div>
+        </div>
+      </div>
+      
+      <div className="mb-4">
+        <label className="form-label fw-semibold text-muted small">DEPARTMENT</label>
+        <div className="fw-semibold">{selectedPatient.department}</div>
+      </div>
+
+      <hr />
+
+      {/* Medical History Section */}
+      <div className="mb-4">
+        <div className="d-flex justify-content-between align-items-center mb-3">
+          <h6 className="fw-bold mb-0">
+            <FileText size={18} className="me-2" />
+            Medical History & Records
+          </h6>
+          {!showPatientHistory ? (
+            <button
+              className="btn btn-outline-info btn-sm"
+              onClick={() => {
+                setShowPatientHistory(true);
+                fetchPatientMedicalRecords(selectedPatient.id);
+                fetchPatientPrescriptions(selectedPatient.id);
+              }}
+            >
+              <Eye size={16} className="me-1" />
+              View Full History
+            </button>
+          ) : (
+            <button
+              className="btn btn-outline-secondary btn-sm"
+              onClick={() => {
+                setShowPatientHistory(false);
+                setPatientMedicalRecords([]);
+                setPatientPrescriptions([]);
+              }}
+            >
+              Hide History
+            </button>
+          )}
+        </div>
+
+        {showPatientHistory && (
+          <div>
+            {loading ? (
+              <div className="text-center py-3">
+                <div className="spinner-border spinner-border-sm text-primary" />
+                <p className="mt-2 text-muted">Loading medical history...</p>
+              </div>
+            ) : (
               <div className="row">
-                <div className="col-md-6 mb-3">
-                  <label className="form-label fw-semibold text-muted small">NAME</label>
-                  <div className="fw-semibold">{selectedPatient.name}</div>
+                {/* Medical Records Column */}
+                <div className="col-md-6">
+                  <h6 className="text-primary mb-3">
+                    <Stethoscope size={16} className="me-1" />
+                    Visit Records ({patientMedicalRecords.length})
+                  </h6>
+                  {patientMedicalRecords.length === 0 ? (
+                    <div className="text-center py-3 bg-light rounded">
+                      <FileText size={24} className="text-muted mb-2" />
+                      <p className="text-muted mb-0">No medical records found</p>
+                    </div>
+                  ) : (
+                    <div style={{ maxHeight: '300px', overflowY: 'auto' }}>
+                      {patientMedicalRecords.map((record) => (
+                        <div key={record.id} className="card mb-2">
+                          <div className="card-body p-3">
+                            <div className="d-flex justify-content-between align-items-start mb-2">
+                              <small className="text-muted">
+                                {new Date(record.visit_date).toLocaleDateString()}
+                              </small>
+                              <small className="text-muted">
+                                Dr. {record.doctor?.name}
+                              </small>
+                            </div>
+                            <div className="mb-2">
+                              <strong className="text-primary">Diagnosis:</strong>
+                              <div className="small">{record.diagnosis}</div>
+                            </div>
+                            <div className="mb-2">
+                              <strong className="text-success">Treatment:</strong>
+                              <div className="small">{record.treatment}</div>
+                            </div>
+                            {record.notes && (
+                              <div>
+                                <strong className="text-warning">Notes:</strong>
+                                <div className="small text-muted">{record.notes}</div>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
-                <div className="col-md-6 mb-3">
-                  <label className="form-label fw-semibold text-muted small">ID</label>
-                  <div className="fw-semibold">{selectedPatient.student_id || selectedPatient.staff_id}</div>
+
+                {/* Prescriptions Column */}
+                <div className="col-md-6">
+                  <h6 className="text-success mb-3">
+                    <Pill size={16} className="me-1" />
+                    Prescriptions ({patientPrescriptions.length})
+                  </h6>
+                  {patientPrescriptions.length === 0 ? (
+                    <div className="text-center py-3 bg-light rounded">
+                      <Pill size={24} className="text-muted mb-2" />
+                      <p className="text-muted mb-0">No prescriptions found</p>
+                    </div>
+                  ) : (
+                    <div style={{ maxHeight: '300px', overflowY: 'auto' }}>
+                      {patientPrescriptions.map((prescription) => (
+                        <div key={prescription.id} className="card mb-2">
+                          <div className="card-body p-3">
+                            <div className="d-flex justify-content-between align-items-start mb-2">
+                              <small className="text-muted">
+                                {new Date(prescription.created_at).toLocaleDateString()}
+                              </small>
+                              <span className={`badge ${getStatusBadge(prescription.status)} badge-sm`}>
+                                {prescription.status}
+                              </span>
+                            </div>
+                            {prescription.medications?.map((med, index) => (
+                              <div key={index} className="mb-2 p-2 bg-light rounded">
+                                <div className="fw-semibold small">{med.name}</div>
+                                <div className="small text-muted">{med.dosage} - {med.instructions}</div>
+                                <div className="small text-muted">
+                                  {med.start_date} to {med.end_date}
+                                </div>
+                              </div>
+                            ))}
+                            {prescription.notes && (
+                              <div className="small text-muted mt-2">
+                                <strong>Notes:</strong> {prescription.notes}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               </div>
-              
-              <div className="row">
-                <div className="col-md-6 mb-3">
-                  <label className="form-label fw-semibold text-muted small">EMAIL</label>
-                  <div className="fw-semibold">{selectedPatient.email}</div>
-                </div>
-                <div className="col-md-6 mb-3">
-                  <label className="form-label fw-semibold text-muted small">ROLE</label>
-                  <div className="fw-semibold">{selectedPatient.role}</div>
-                </div>
-              </div>
-              
-              <div className="mb-3">
-                <label className="form-label fw-semibold text-muted small">DEPARTMENT</label>
-                <div className="fw-semibold">{selectedPatient.department}</div>
-              </div>
-            </div>
-            <div className="modal-footer">
-              <button
-                type="button"
-                className="btn btn-secondary"
-                onClick={() => setShowModal('')}
-              >
-                Close
-              </button>
-              <button
-                type="button"
-                className="btn btn-primary"
-                onClick={() => {
-                  setShowModal('medicalRecord');
-                }}
-                style={{ background: universityTheme.gradient, border: 'none' }}
-              >
-                Add Medical Record
-              </button>
-            </div>
-          </>
+            )}
+          </div>
         )}
+      </div>
+    </div>
+    <div className="modal-footer">
+      <button
+        type="button"
+        className="btn btn-secondary"
+        onClick={() => setShowModal('')}
+      >
+        Close
+      </button>
+      <button
+        type="button"
+        className="btn btn-primary"
+        onClick={() => {
+          setShowModal('medicalRecord');
+        }}
+        style={{ background: universityTheme.gradient, border: 'none' }}
+      >
+        <Plus size={16} className="me-1" />
+        Add Medical Record
+      </button>
+    </div>
+  </>
+)}
         
         {/* Prescription Modal */}
         {showModal === 'prescription' && (
@@ -3267,6 +4200,25 @@ const Navigation = () => (
                             }}
                           />
                         </div>
+                         <div className="col-md-4 mb-2">
+    <select
+      className="form-control form-control-sm"
+      value={medication.frequency || 'daily'}
+      onChange={(e) => {
+        const newMedications = [...prescriptionForm.medications];
+        newMedications[index].frequency = e.target.value;
+        setPrescriptionForm(prev => ({
+          ...prev,
+          medications: newMedications
+        }));
+      }}
+    >
+      <option value="daily">Daily</option>
+      <option value="twice_daily">Twice Daily</option>
+      <option value="weekly">Weekly</option>
+      <option value="as_needed">As Needed</option>
+    </select>
+  </div>
                       </div>
                     </div>
                   </div>
@@ -3306,6 +4258,346 @@ const Navigation = () => (
             </div>
           </>
         )}
+
+        {/* View Prescription Details Modal */}
+{showModal === 'viewPrescription' && selectedPrescription && (
+  <>
+    <div className="modal-header" style={{ background: universityTheme.gradient }}>
+      <h5 className="modal-title text-white">
+        <Pill size={20} className="me-2" />
+        Prescription Details - {selectedPrescription.patient?.name}
+      </h5>
+      <button
+        type="button"
+        className="btn-close btn-close-white"
+        onClick={() => setShowModal('')}
+      ></button>
+    </div>
+    <div className="modal-body p-4">
+      <div className="row mb-3">
+        <div className="col-md-6">
+          <label className="form-label fw-semibold text-muted small">PATIENT</label>
+          <div className="fw-semibold">{selectedPrescription.patient?.name}</div>
+          <div className="text-muted small">{selectedPrescription.patient?.student_id}</div>
+        </div>
+        <div className="col-md-6">
+          <label className="form-label fw-semibold text-muted small">STATUS</label>
+          <div>
+            <span className={getStatusBadge(selectedPrescription.status)}>
+              {selectedPrescription.status.charAt(0).toUpperCase() + selectedPrescription.status.slice(1)}
+            </span>
+          </div>
+        </div>
+      </div>
+
+      <div className="mb-3">
+        <label className="form-label fw-semibold text-muted small">ISSUED DATE</label>
+        <div className="fw-semibold">
+          <Calendar size={16} className="me-2" />
+          {new Date(selectedPrescription.created_at).toLocaleDateString()}
+        </div>
+      </div>
+
+      <div className="mb-3">
+        <label className="form-label fw-semibold text-muted small">MEDICATIONS</label>
+        {selectedPrescription.medications?.map((med, index) => (
+          <div key={index} className="card mb-2">
+            <div className="card-body p-3">
+              <div className="d-flex justify-content-between align-items-start mb-2">
+                <h6 className="mb-0 fw-bold">{med.name}</h6>
+                <span className="badge bg-secondary">{med.frequency || 'daily'}</span>
+              </div>
+              <div className="row">
+                <div className="col-md-6">
+                  <small className="text-muted">Dosage:</small>
+                  <div>{med.dosage}</div>
+                </div>
+                <div className="col-md-6">
+                  <small className="text-muted">Duration:</small>
+                  <div>{med.start_date} to {med.end_date}</div>
+                </div>
+              </div>
+              <div className="mt-2">
+                <small className="text-muted">Instructions:</small>
+                <div>{med.instructions}</div>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {selectedPrescription.notes && (
+        <div className="mb-3">
+          <label className="form-label fw-semibold text-muted small">NOTES</label>
+          <div className="p-3 bg-light rounded">
+            {selectedPrescription.notes}
+          </div>
+        </div>
+      )}
+    </div>
+    <div className="modal-footer">
+      <button
+        type="button"
+        className="btn btn-secondary"
+        onClick={() => setShowModal('')}
+      >
+        Close
+      </button>
+    </div>
+  </>
+)}
+
+        {/* Completion Report Modal */}
+{showModal === 'completionReport' && selectedAppointment && (
+  <>
+    <div className="modal-header" style={{ background: universityTheme.gradient }}>
+      <h5 className="modal-title text-white">
+        <FileText size={20} className="me-2" />
+        Complete Appointment - {selectedAppointment.patient?.name}
+      </h5>
+      <button
+        type="button"
+        className="btn-close btn-close-white"
+        onClick={() => setShowModal('')}
+      ></button>
+    </div>
+    <div className="modal-body p-4" style={{ maxHeight: '70vh', overflowY: 'auto' }}>
+      <div className="alert alert-info">
+        <strong>Appointment Details:</strong><br />
+        Date: {new Date(selectedAppointment.date).toLocaleDateString()}<br />
+        Time: {selectedAppointment.time}<br />
+        Reason: {selectedAppointment.reason}
+      </div>
+
+      <div className="mb-3">
+        <label className="form-label fw-semibold">Diagnosis *</label>
+        <textarea
+          className="form-control"
+          rows={3}
+          value={completionReport.diagnosis}
+          onChange={(e) => setCompletionReport(prev => ({
+            ...prev,
+            diagnosis: e.target.value
+          }))}
+          placeholder="Enter the diagnosis for this visit..."
+          required
+        />
+      </div>
+
+      <div className="mb-3">
+        <label className="form-label fw-semibold">Treatment Provided *</label>
+        <textarea
+          className="form-control"
+          rows={3}
+          value={completionReport.treatment_provided}
+          onChange={(e) => setCompletionReport(prev => ({
+            ...prev,
+            treatment_provided: e.target.value
+          }))}
+          placeholder="Describe the treatment provided during this visit..."
+          required
+        />
+      </div>
+
+      <div className="mb-3">
+        <label className="form-label fw-semibold">Medications Prescribed</label>
+        <textarea
+          className="form-control"
+          rows={3}
+          value={completionReport.medications_prescribed}
+          onChange={(e) => setCompletionReport(prev => ({
+            ...prev,
+            medications_prescribed: e.target.value
+          }))}
+          placeholder="List any medications prescribed (name, dosage, instructions)..."
+        />
+      </div>
+
+      <div className="mb-3">
+        <label className="form-label fw-semibold">Recommendations</label>
+        <textarea
+          className="form-control"
+          rows={3}
+          value={completionReport.recommendations}
+          onChange={(e) => setCompletionReport(prev => ({
+            ...prev,
+            recommendations: e.target.value
+          }))}
+          placeholder="Any recommendations for the patient (lifestyle, diet, exercise, etc.)..."
+        />
+      </div>
+
+      <div className="mb-3">
+        <div className="form-check">
+          <input
+            className="form-check-input"
+            type="checkbox"
+            checked={completionReport.follow_up_required}
+            onChange={(e) => setCompletionReport(prev => ({
+              ...prev,
+              follow_up_required: e.target.checked,
+              follow_up_date: e.target.checked ? prev.follow_up_date : ''
+            }))}
+          />
+          <label className="form-check-label fw-semibold">
+            Follow-up appointment required
+          </label>
+        </div>
+      </div>
+
+      {completionReport.follow_up_required && (
+        <div className="mb-3">
+          <label className="form-label fw-semibold">Recommended Follow-up Date</label>
+          <input
+            type="date"
+            className="form-control"
+            value={completionReport.follow_up_date}
+            onChange={(e) => setCompletionReport(prev => ({
+              ...prev,
+              follow_up_date: e.target.value
+            }))}
+            min={new Date().toISOString().split('T')[0]}
+          />
+        </div>
+      )}
+
+      <div className="mb-3">
+        <label className="form-label fw-semibold">Additional Notes</label>
+        <textarea
+          className="form-control"
+          rows={3}
+          value={completionReport.notes}
+          onChange={(e) => setCompletionReport(prev => ({
+            ...prev,
+            notes: e.target.value
+          }))}
+          placeholder="Any additional notes or observations..."
+        />
+      </div>
+    </div>
+    <div className="modal-footer">
+      <button
+        type="button"
+        className="btn btn-secondary"
+        onClick={() => setShowModal('')}
+      >
+        Cancel
+      </button>
+      <button
+        type="button"
+        className="btn btn-success"
+        onClick={completeAppointmentWithReport}
+        disabled={loading || !completionReport.diagnosis.trim() || !completionReport.treatment_provided.trim()}
+      >
+        {loading ? (
+          <span className="spinner-border spinner-border-sm me-2" />
+        ) : (
+          <CheckCircle size={16} className="me-2" />
+        )}
+        Complete Appointment
+      </button>
+    </div>
+  </>
+)}
+
+{/* Reschedule Appointment Modal */}
+{showModal === 'reschedule' && selectedAppointment && (
+  <>
+    <div className="modal-header" style={{ background: universityTheme.gradient }}>
+      <h5 className="modal-title text-white">
+        <Edit size={20} className="me-2" />
+        Reschedule Appointment - {selectedAppointment.patient?.name}
+      </h5>
+      <button
+        type="button"
+        className="btn-close btn-close-white"
+        onClick={() => setShowModal('')}
+      ></button>
+    </div>
+    <div className="modal-body p-4">
+      <div className="alert alert-info">
+        <strong>Current Appointment:</strong><br />
+        Date: {new Date(selectedAppointment.date).toLocaleDateString()}<br />
+        Time: {selectedAppointment.time}<br />
+        Reason: {selectedAppointment.reason}
+      </div>
+
+      <div className="row">
+        <div className="col-md-6 mb-3">
+          <label className="form-label fw-semibold">New Date *</label>
+          <EnhancedDateInput
+            value={rescheduleForm.new_date}
+            onChange={(date) => setRescheduleForm(prev => ({
+              ...prev,
+              new_date: date
+            }))}
+            required
+          />
+          <HolidayWarning selectedDate={rescheduleForm.new_date} />
+        </div>
+        
+        <div className="col-md-6 mb-3">
+          <label className="form-label fw-semibold">New Time *</label>
+          <select
+            className="form-select"
+            value={rescheduleForm.new_time}
+            onChange={(e) => setRescheduleForm(prev => ({
+              ...prev,
+              new_time: e.target.value
+            }))}
+            required
+            disabled={!rescheduleForm.new_date || isDateBlocked(rescheduleForm.new_date)}
+          >
+            <option value="">Select time</option>
+            {getAvailableTimeSlots(rescheduleForm.new_date).map(slot => (
+              <option key={slot} value={slot}>{slot}</option>
+            ))}
+          </select>
+        </div>
+      </div>
+      
+      <div className="mb-3">
+        <label className="form-label fw-semibold">Reason for Rescheduling *</label>
+        <textarea
+          className="form-control"
+          rows={3}
+          value={rescheduleForm.reschedule_reason}
+          onChange={(e) => setRescheduleForm(prev => ({
+            ...prev,
+            reschedule_reason: e.target.value
+          }))}
+          placeholder="Please explain why this appointment needs to be rescheduled..."
+          required
+        />
+      </div>
+    </div>
+    <div className="modal-footer">
+      <button
+        type="button"
+        className="btn btn-secondary"
+        onClick={() => {
+          setShowModal('');
+          setRescheduleForm({ new_date: '', new_time: '', reschedule_reason: '' });
+        }}
+      >
+        Cancel
+      </button>
+      <button
+        type="button"
+        className="btn btn-warning"
+        onClick={rescheduleAppointment}
+        disabled={loading || !rescheduleForm.new_date || !rescheduleForm.new_time || !rescheduleForm.reschedule_reason.trim()}
+      >
+        {loading ? (
+          <span className="spinner-border spinner-border-sm me-2" />
+        ) : (
+          <Edit size={16} className="me-2" />
+        )}
+        Reschedule Appointment
+      </button>
+    </div>
+  </>
+)}
         
       </div>
     </div>

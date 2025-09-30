@@ -1,17 +1,42 @@
 
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { 
   Calendar, Clock, Users, FileText, Heart, Pill, AlertTriangle, Plus, 
   Edit, Trash2, Check, X, Search, Filter, Bell, Stethoscope, 
   Activity, BarChart3, History, User, CheckCircle, Thermometer, 
-  TrendingUp, Clipboard, ClipboardCheck, ClipboardList, UserPlus, Globe, LogOut
+  TrendingUp, Clipboard, ClipboardCheck, ClipboardList, UserPlus, Globe, LogOut, RotateCcw
 } from 'lucide-react';
+import {
+  Chart as ChartJS,
+  CategoryScale,
+  LinearScale,
+  BarElement,
+  Title,
+  Tooltip,
+  Legend,
+  LineElement,
+  PointElement,
+  ArcElement,
+} from 'chart.js';
+import { Bar, Line, Doughnut } from 'react-chartjs-2';
 import { APPOINTMENT_STATUSES, getStatusText, getStatusBadgeClass } from '../../constants/appointmentStatuses';
 // Add imports at the top
 import RealTimeDashboard from '../../components/RealTimeDashboard';
 import WalkInPatientManagement from '../../components/WalkInPatientManagement';
 import { useTranslation } from 'react-i18next';
 import websocketService from '../../services/websocket';
+
+ChartJS.register(
+  CategoryScale,
+  LinearScale,
+  BarElement,
+  Title,
+  Tooltip,
+  Legend,
+  LineElement,
+  PointElement,
+  ArcElement,
+);
 
 // API Configuration - Environment-based with fallback
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://127.0.0.1:8000";
@@ -65,11 +90,7 @@ interface Doctor {
 
 interface Appointment {
   id: string | number;
-  patient?: {
-    name: string;
-    student_id: string;
-    department: string;
-  };
+  patient_id?: string | number;
   patient_name?: string;
   student_id?: string;
   doctor?: string | Doctor; // Can be either string (from getAppointments) or Doctor object
@@ -168,6 +189,15 @@ interface ModalProps {
   title: string;
   children: React.ReactNode;
   onClose: () => void;
+}
+
+interface Holiday {
+  id: string | number;
+  name: string;
+  start_date: string;
+  end_date: string;
+  type: string;
+  blocks_appointments: boolean;
 }
 
 interface QuickTimeSlotsProps {
@@ -350,6 +380,13 @@ const ClinicalStaffDashboard: React.FC<ClinicalStaffDashboardProps> = ({ user, o
   const [summary, setSummary] = useState<Record<string, any>>({});
   const [message, setMessage] = useState<Message>({ type: '', text: '' });
   const [selectedMedication, setSelectedMedication] = useState<Medication | null>(null);
+  const [urgentRequests, setUrgentRequests] = useState<any[]>([]); // ADD THIS LINE
+
+
+  const [blockedDates, setBlockedDates] = useState<string[]>([]);
+  const [holidays, setHolidays] = useState<Holiday[]>([]);
+
+  const [kpiData, setKpiData] = useState<Record<string, any> | null>(null);
 
   // Auth token - in production, this should come from secure storage or context
   const AUTH_TOKEN = localStorage.getItem('auth_token') || '16|iTGQGrMabQfgjprXw6xM01KTAmJc7AQ78qglIs4xd5fa9378';
@@ -494,23 +531,42 @@ const ClinicalStaffDashboard: React.FC<ClinicalStaffDashboardProps> = ({ user, o
   const loadDashboardData = async (): Promise<void> => {
     try {
       setLoading(true);
-      const data = await api.get<any>('dashboard');
+      
+      // Load both dashboard data and student requests in parallel
+      const [dashboardResponse, studentRequestsResponse] = await Promise.all([
+        api.get<any>('dashboard'),
+        api.get<any>('student-requests')
+      ]);
+
+      // Set KPI data from the response
+      setKpiData(dashboardResponse.kpi_data);
+      
+      // Calculate pending student requests count
+      const pendingStudentRequests = (studentRequestsResponse.student_requests || [])
+        .filter((request: any) => ['pending', 'under_review'].includes(request.status));
       
       // Map the response to match frontend expectations
       setDashboardData({
-        staff_member: data.staff_member || {
+        staff_member: dashboardResponse.staff_member || {
           name: user?.name || "Clinical Staff",
           staff_no: user?.staff_no || "CS001",
           department: user?.department || "General"
         },
-        today_overview: data.today_overview || {
-          scheduled_appointments: 0,
-          completed_tasks: 0,
-          pending_tasks: 0,
-          urgent_cases: 0
+        today_overview: {
+          ...dashboardResponse.today_overview,
+          scheduled_appointments: dashboardResponse.today_overview?.scheduled_appointments || 0,
+          completed_tasks: dashboardResponse.today_overview?.completed_tasks || 0,
+          pending_tasks: dashboardResponse.today_overview?.pending_tasks || 0,
+          urgent_cases: dashboardResponse.today_overview?.urgent_cases || 0,
+          // Add the calculated pending student requests count
+          pending_student_requests: pendingStudentRequests.length
         },
-        patient_queue: data.patient_queue || []
+        patient_queue: dashboardResponse.patient_queue || []
       });
+      
+      // Update student requests state as well
+      setStudentRequests(studentRequestsResponse.student_requests || []);
+      
     } catch (error) {
       console.error('Error loading dashboard:', error);
       setMessage({ type: 'error', text: `Failed to load dashboard data: ${(error as Error).message}` });
@@ -526,7 +582,8 @@ const ClinicalStaffDashboard: React.FC<ClinicalStaffDashboardProps> = ({ user, o
           scheduled_appointments: 0,
           completed_tasks: 0,
           pending_tasks: 0,
-          urgent_cases: 0
+          urgent_cases: 0,
+          pending_student_requests: 0
         },
         patient_queue: []
       });
@@ -641,6 +698,98 @@ const ClinicalStaffDashboard: React.FC<ClinicalStaffDashboardProps> = ({ user, o
     }
   };
 
+  const loadUrgentRequests = async () => {
+    try {
+      const response = await fetch(`${CLINICAL_API_BASE}/urgent-queue`, {
+        headers: { 
+          'Authorization': `Bearer ${AUTH_TOKEN}`,
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        }
+      });
+      const data = await response.json();
+      setUrgentRequests(data.urgent_requests || []);
+    } catch (error) {
+      console.error('Error loading urgent requests:', error);
+      setUrgentRequests([]);
+    }
+  };
+
+
+  // Chart configurations
+  const appointmentsTrendData = {
+    labels: kpiData?.appointments_trend?.map((item: any) => item.day) || [],
+    datasets: [
+      {
+        label: 'Daily Appointments',
+        data: kpiData?.appointments_trend?.map((item: any) => item.count) || [],
+        borderColor: 'rgb(75, 192, 192)',
+        backgroundColor: 'rgba(75, 192, 192, 0.1)',
+        tension: 0.4,
+        fill: true,
+      },
+    ],
+  };
+
+  const statusDistributionData = {
+    labels: kpiData?.patient_status_distribution?.map((item: any) => item.status) || [],
+    datasets: [
+      {
+        data: kpiData?.patient_status_distribution?.map((item: any) => item.count) || [],
+        backgroundColor: [
+          'rgba(54, 162, 235, 0.8)',
+          'rgba(255, 206, 86, 0.8)',
+          'rgba(75, 192, 192, 0.8)',
+          'rgba(153, 102, 255, 0.8)',
+          'rgba(255, 159, 64, 0.8)',
+          'rgba(255, 99, 132, 0.8)',
+        ],
+        borderColor: [
+          'rgba(54, 162, 235, 1)',
+          'rgba(255, 206, 86, 1)',
+          'rgba(75, 192, 192, 1)',
+          'rgba(153, 102, 255, 1)',
+          'rgba(255, 159, 64, 1)',
+          'rgba(255, 99, 132, 1)',
+        ],
+        borderWidth: 2,
+      },
+    ],
+  };
+
+  const priorityData = {
+    labels: kpiData?.priority_distribution?.map((item: any) => item.priority) || [],
+    datasets: [
+      {
+        data: kpiData?.priority_distribution?.map((item: any)=> item.count) || [],
+        backgroundColor: [
+          'rgba(34, 197, 94, 0.8)', // Normal - Green
+          'rgba(249, 115, 22, 0.8)', // High - Orange  
+          'rgba(239, 68, 68, 0.8)',  // Urgent - Red
+        ],
+        borderColor: [
+          'rgba(34, 197, 94, 1)',
+          'rgba(249, 115, 22, 1)',
+          'rgba(239, 68, 68, 1)',
+        ],
+        borderWidth: 2,
+      },
+    ],
+  };
+
+  const departmentWorkloadData = {
+    labels: kpiData?.department_workload?.map((item: any)=> item.department) || [],
+    datasets: [
+      {
+        label: 'Appointments',
+        data: (kpiData?.department_workload ?? []).map((item: any) => item.appointments),
+        backgroundColor: 'rgba(99, 102, 241, 0.8)',
+        borderColor: 'rgba(99, 102, 241, 1)',
+        borderWidth: 1,
+      },
+    ],
+  };
+
   const checkDoctorAvailability = async (date: string, time: string): Promise<void> => {
     try {
       const params = new URLSearchParams({ date, time });
@@ -654,34 +803,148 @@ const ClinicalStaffDashboard: React.FC<ClinicalStaffDashboardProps> = ({ user, o
     }
   };
 
-  const createAppointment = async (appointmentData: Record<string, any>): Promise<void> => {
-    try {
-      setLoading(true);
+  const checkDateAvailability = async (date: string): Promise<boolean> => {
+  try {
+    const response = await api.get(`holidays/check-availability?date=${date}&staff_type=clinical`);
+    
+    if (!response.is_available) {
+      const blockingHoliday = response.blocking_holidays?.[0];
+      setMessage({
+        type: 'error',
+        text: `Cannot schedule appointments on ${date}. ${blockingHoliday?.name ? `Reason: ${blockingHoliday.name}` : 'University holiday period'}`
+      });
       
-      // Transform the data to match what the controller expects
-      const transformedData = {
-        patient_id: appointmentData.patient_id,
-        doctor_id: appointmentData.doctor_id,
-        appointment_date: appointmentData.appointment_date || appointmentData.date,
-        appointment_time: appointmentData.appointment_time || appointmentData.time,
-        appointment_type: appointmentData.appointment_type || appointmentData.type,
-        priority: appointmentData.priority || 'normal',
-        reason: appointmentData.reason || appointmentData.notes,
-        duration: appointmentData.duration || 30
-      };
-      
-      await api.post('appointments', transformedData);
-      setMessage({ type: 'success', text: 'Appointment created successfully!' });
-      loadAppointments();
-      setShowModal('');
-      setFormData({});
-    } catch (error) {
-      console.error('Error creating appointment:', error);
-      setMessage({ type: 'error', text: `Error creating appointment: ${(error as Error).message}` });
-    } finally {
-      setLoading(false);
+      return false;
     }
-  };
+    
+    return true;
+  } catch (error) {
+    console.error('Error checking date availability:', error);
+    return true; // Allow booking if check fails
+  }
+};
+
+// Add function to fetch holidays and generate blocked dates
+const fetchHolidays = async (): Promise<void> => {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/holidays`, {
+  method: 'GET',
+  headers: { 
+    'Authorization': `Bearer ${AUTH_TOKEN}`,
+    'Content-Type': 'application/json',
+    'Accept': 'application/json',
+  }
+});
+const data = await response.json();
+    const holidaysList = data.holidays || [];
+    setHolidays(holidaysList);
+    
+    // Generate list of blocked dates
+    const blocked: string[] = [];
+    holidaysList.forEach((holiday: Holiday) => {
+      if (holiday.blocks_appointments) {
+        const startDate = new Date(holiday.start_date);
+        const endDate = new Date(holiday.end_date);
+        
+        for (let d = new Date(startDate); d <= endDate; d.setDate(d.getDate() + 1)) {
+          blocked.push(d.toISOString().split('T')[0]);
+        }
+      }
+    });
+    
+    setBlockedDates(blocked);
+  } catch (error) {
+    console.error('Error fetching holidays:', error);
+  }
+};
+
+// Add helper function to check if a date is blocked
+const isDateBlocked = (dateString: string): boolean => {
+  return blockedDates.includes(dateString);
+};
+
+  const createAppointment = async (): Promise<void> => {
+  try {
+    // Validation
+    if (!formData.patient_id || !formData.appointment_date || 
+        !formData.appointment_time || !formData.reason?.trim()) {
+      setMessage({ type: 'error', text: t('appointments.required_fields') });
+      setTimeout(() => setMessage({ type: '', text: '' }), 5000);
+      return;
+    }
+
+    // Check if appointment date is in the past
+    const appointmentDate = new Date(formData.appointment_date);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    
+    if (appointmentDate < today) {
+      setMessage({ type: 'error', text: 'Cannot schedule appointments in the past' });
+      setTimeout(() => setMessage({ type: '', text: '' }), 5000);
+      return;
+    }
+
+    // NEW: Check if date is blocked by holidays
+    if (isDateBlocked(formData.appointment_date)) {
+      const blockingHoliday = holidays.find(h => 
+        h.blocks_appointments && 
+        formData.appointment_date >= h.start_date && 
+        formData.appointment_date <= h.end_date
+      );
+      
+      setMessage({
+        type: 'error',
+        text: `Selected date is not available. ${blockingHoliday ? `Reason: ${blockingHoliday.name}` : 'University holiday period'}`
+      });
+      setTimeout(() => setMessage({ type: '', text: '' }), 5000);
+      return;
+    }
+
+    // Double-check with server
+    const isAvailable = await checkDateAvailability(formData.appointment_date);
+    if (!isAvailable) {
+      return; // Stop if date is blocked
+    }
+
+    // Check for duplicate appointments (keep your existing logic)
+    const duplicateAppointment = appointments.find(apt => 
+      apt.patient_id?.toString() === formData.patient_id &&
+      apt.date === formData.appointment_date &&
+      apt.time === formData.appointment_time &&
+      apt.status !== 'cancelled'
+    );
+
+    if (duplicateAppointment) {
+      setMessage({ type: 'error', text: 'This time slot is already booked' });
+      setTimeout(() => setMessage({ type: '', text: '' }), 5000);
+      return;
+    }
+
+    // Transform the data to match what the controller expects
+    const transformedData = {
+      patient_id: formData.patient_id,
+      doctor_id: formData.doctor_id,
+      appointment_date: formData.appointment_date,
+      appointment_time: formData.appointment_time,
+      appointment_type: formData.appointment_type || formData.type,
+      priority: formData.priority || 'normal',
+      reason: formData.reason || formData.notes,
+      duration: formData.duration || 30
+    };
+    
+    await api.post('appointments', transformedData);
+    setMessage({ type: 'success', text: 'Appointment created successfully!' });
+    loadAppointments();
+    setShowModal('');
+    setFormData({});
+  } catch (error) {
+    console.error('Error creating appointment:', error);
+    setMessage({ type: 'error', text: `Error creating appointment: ${(error as Error).message}` });
+  } finally {
+    setLoading(false);
+  }
+};
+
 
   const updateAppointment = async (id: string | number, appointmentData: Record<string, any>): Promise<void> => {
     try {
@@ -773,6 +1036,115 @@ const ClinicalStaffDashboard: React.FC<ClinicalStaffDashboardProps> = ({ user, o
     }
   };
 
+  const QuickTimeSlots: React.FC<QuickTimeSlotsProps> = ({ selectedDate, onTimeSelect, formData, setFormData, checkDoctorAvailability }) => {
+    const timeSlots = ['09:00', '10:00', '11:00', '14:00', '15:00', '16:00'];
+    
+    if (isDateBlocked(selectedDate)) {
+      return (
+        <div className="mb-3">
+          <label className="form-label">Quick Time Slots</label>
+          <div className="alert alert-warning" role="alert">
+            <AlertTriangle size={16} className="me-2" />
+            Time slots not available - selected date is blocked by university holidays
+          </div>
+        </div>
+      );
+    }
+
+    return (
+      <div className="mb-3">
+        <label className="form-label">Quick Time Slots</label>
+        <div className="d-flex flex-wrap gap-2">
+          {timeSlots.map((time) => (
+            <button
+              key={time}
+              type="button"
+              className={`btn btn-sm ${formData.appointment_time === time ? 'btn-primary' : 'btn-outline-primary'}`}
+              onClick={async () => {
+                const newFormData = { ...formData, appointment_time: time };
+                setFormData(newFormData);
+                if (selectedDate) {
+                  await checkDoctorAvailability(selectedDate, time);
+                }
+              }}
+              disabled={isDateBlocked(selectedDate)}
+            >
+              {time}
+            </button>
+          ))}
+        </div>
+      </div>
+    );
+  };
+
+  const EnhancedDateInput = ({ value, onChange, disabled = false, required = false }: { 
+    value: string; 
+    onChange: (date: string) => void; 
+    disabled?: boolean; 
+    required?: boolean; 
+  }) => (
+    <div>
+      <input
+        type="date"
+        className="form-control"
+        value={value}
+        onChange={(e) => {
+          const selectedDate = e.target.value;
+          
+          if (isDateBlocked(selectedDate)) {
+            const blockingHoliday = holidays.find(h => 
+              h.blocks_appointments && 
+              selectedDate >= h.start_date && 
+              selectedDate <= h.end_date
+            );
+            setMessage({
+              type: 'error',
+              text: `Selected date is not available. ${
+                blockingHoliday ? `Reason: ${blockingHoliday.name}` : 'University holiday period'
+              }`
+            });
+            setTimeout(() => setMessage({ type: '', text: '' }), 3000);
+            return;
+          }
+          
+          onChange(selectedDate);
+        }}
+        min={new Date().toISOString().split('T')[0]}
+        disabled={disabled}
+        required={required}
+        style={{
+          backgroundColor: value && isDateBlocked(value) ? '#ffe6e6' : undefined
+        }}
+      />
+      {value && isDateBlocked(value) && (
+        <small className="text-danger">
+          This date is not available due to university holidays
+        </small>
+      )}
+    </div>
+  );
+
+  const HolidayWarning = ({ selectedDate }: { selectedDate: string }) => {
+    if (!selectedDate || !isDateBlocked(selectedDate)) return null;
+    
+    const blockingHoliday = holidays.find(h => 
+      h.blocks_appointments && 
+      selectedDate >= h.start_date && 
+      selectedDate <= h.end_date
+    );
+    
+    return (
+      <div className="alert alert-danger d-flex align-items-start" role="alert">
+        <AlertTriangle size={20} className="me-2 mt-1 flex-shrink-0" />
+        <div>
+          <strong>Date Not Available:</strong> {blockingHoliday ? ` ${blockingHoliday.name}` : ' University holiday period'}
+          <br />
+          <small>Holiday period: {blockingHoliday?.start_date} to {blockingHoliday?.end_date}</small>
+        </div>
+      </div>
+    );
+  };
+
 
   // Effects
   useEffect(() => {
@@ -782,7 +1154,9 @@ const ClinicalStaffDashboard: React.FC<ClinicalStaffDashboardProps> = ({ user, o
           loadDashboardData(),
           loadPatients(),
           loadDoctors(),
-          loadStudentRequests() // Add this line
+          loadStudentRequests(), // Add this line
+          loadUrgentRequests(),
+          fetchHolidays() // Add this line
         ]);
       } catch (error) {
         console.error('Error loading initial data:', error);
@@ -793,92 +1167,60 @@ const ClinicalStaffDashboard: React.FC<ClinicalStaffDashboardProps> = ({ user, o
   }, []);
 
   useEffect(() => {
-    const loadTabData = async () => {
-      try {
-        switch (activeTab) {
-          case 'appointments':
-            await loadAppointments();
-            break;
-          case 'patients':
-            await loadPatients();
-            break;
-          case 'medications':
-            await loadMedicationSchedule();
-            break;
-          case 'doctors':
-            await loadDoctors();
-            break;
-          case 'overview':
-            await loadDashboardData();
-            break;
+  // Define the handler for dashboard stats update
+  const handleDashboardUpdate = () => {
+    loadDashboardData();
+  };
+
+  const connectWebSocket = () => {
+    try {
+      if (websocketService?.tryConnect) {
+        websocketService.tryConnect();
+        
+        const handleConnectionChange = (connected: boolean) => {
+          setIsConnected(connected);
+        };
+        
+        const handleStudentRequestUpdate = () => {
+          loadStudentRequests();
+          loadDashboardData();
+        };
+
+        // Use your service's specific methods
+        websocketService.onConnectionChange(handleConnectionChange);
+        websocketService.onDashboardStatsUpdate(handleDashboardUpdate);
+        
+        // For custom events, get the underlying socket
+        const socket = websocketService.getSocket();
+        if (socket) {
+          socket.on('student.request.created', handleStudentRequestUpdate);
+          socket.on('student.request.updated', handleStudentRequestUpdate);
         }
-      } catch (error) {
-        console.error(`Error loading data for ${activeTab} tab:`, error);
+        
+        websocketService.joinChannel('clinical-staff');
+
+        return () => {
+          websocketService.offConnectionChange(handleConnectionChange);
+          websocketService.off('dashboard.updated', handleDashboardUpdate);
+          websocketService.off('student.request.created', handleStudentRequestUpdate);
+          websocketService.off('student.request.updated', handleStudentRequestUpdate);
+          websocketService.leaveChannel('clinical-staff');
+        };
       }
-    };
+    } catch (error) {
+      console.warn('WebSocket connection failed:', error);
+      setIsConnected(false);
+    }
+    
+    return () => {};
+  };
 
-    loadTabData();
-  }, [activeTab]);
-
-// Update the WebSocket connection in ClinicalStaffDashboard.tsx
-  useEffect(() => {
-    const connectWebSocket = () => {
-      try {
-        // Only connect if websocketService exists and is available
-        if (typeof websocketService?.tryConnect === 'function') {
-          websocketService.tryConnect();
-          
-          const handleConnectionChange = (connected: boolean) => {
-            setIsConnected(connected);
-          };
-          
-          const handleNewNotification = (notification: any) => {
-            setMessage({ 
-              type: 'success', 
-              text: notification.message 
-            });
-            setUnreadNotifications(prev => prev + 1);
-            setTimeout(() => setMessage({ type: '', text: '' }), 5000);
-          };
-
-          const handleDashboardUpdate = (stats: any) => {
-            setDashboardData(prev => ({
-              ...prev,
-              today_overview: stats.appointments || prev.today_overview
-            }));
-          };
-
-          websocketService.onConnectionChange?.(handleConnectionChange);
-          websocketService.onNotification?.(handleNewNotification);
-          websocketService.onDashboardStatsUpdate?.(handleDashboardUpdate);
-          websocketService.joinChannel?.('clinical-staff');
-
-          return () => {
-            websocketService.offConnectionChange?.(handleConnectionChange);
-            websocketService.off?.('notification', handleNewNotification);
-            websocketService.off?.('dashboard.updated', handleDashboardUpdate);
-            websocketService.leaveChannel?.('clinical-staff');
-          };
-        }
-      } catch (error) {
-        console.warn('WebSocket connection failed, continuing without real-time updates:', error);
-        setIsConnected(false);
-      }
-      
-      return () => {};
-    };
-
-    const cleanup = connectWebSocket();
-
-    return () => {
-      if (cleanup) cleanup();
-      try {
-        websocketService?.disconnect?.();
-      } catch (error) {
-        console.warn('Error disconnecting WebSocket:', error);
-      }
-    };
-  }, []);
+  const cleanup = connectWebSocket();
+  return () => {
+    if (cleanup) cleanup();
+    websocketService?.disconnect();
+  };
+}, []);
 
   useEffect(() => {
     if (activeTab === 'appointments') {
@@ -1181,72 +1523,8 @@ const Navigation = () => (
           </li>
         </ul>
 
-        {/* Right side: Language and User Dropdown */}
+        {/* Right side: User Dropdown with Language inside */}
         <div className="d-flex align-items-center ms-auto">
-          {/* Language Switcher */}
-          <div className="dropdown me-3">
-            <button 
-              className="btn btn-outline-secondary dropdown-toggle" 
-              data-bs-toggle="dropdown"
-              style={{ 
-                borderRadius: '25px',
-                borderColor: '#dc3545',
-                color: '#dc3545'
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.background = 'rgba(220, 53, 69, 0.1)';
-                e.currentTarget.style.borderColor = '#dc3545';
-                e.currentTarget.style.color = '#dc3545';
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.background = 'transparent';
-                e.currentTarget.style.borderColor = '#dc3545';
-                e.currentTarget.style.color = '#dc3545';
-              }}
-            >
-              <Globe size={16} className="me-1" />
-              {i18n.language === 'tr' ? 'TR' : 'EN'}
-            </button>
-            <ul 
-              className="dropdown-menu"
-              style={{
-                border: 'none',
-                boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
-                borderRadius: '12px',
-                padding: '8px 0'
-              }}
-            >
-              <li>
-                <button 
-                  className="dropdown-item" 
-                  onClick={() => i18n.changeLanguage('en')}
-                  style={{
-                    padding: '12px 20px',
-                    transition: 'background-color 0.2s ease'
-                  }}
-                  onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f8f9fa'}
-                  onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
-                >
-                  🇺🇸 English
-                </button>
-              </li>
-              <li>
-                <button 
-                  className="dropdown-item" 
-                  onClick={() => i18n.changeLanguage('tr')}
-                  style={{
-                    padding: '12px 20px',
-                    transition: 'background-color 0.2s ease'
-                  }}
-                  onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f8f9fa'}
-                  onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
-                >
-                  🇹🇷 Türkçe
-                </button>
-              </li>
-            </ul>
-          </div>
-
           {/* User Profile Dropdown */}
           <div className="dropdown">
             <button 
@@ -1279,7 +1557,7 @@ const Navigation = () => (
               >
                 <User size={18} />
               </div>
-              <span className="fw-semibold">{user?.name || 'Clinical Staff'}</span>
+              {/* Removed name display */}
             </button>
             <ul 
               className="dropdown-menu dropdown-menu-end" 
@@ -1325,7 +1603,12 @@ const Navigation = () => (
                 </div>
               </li>
               
-              {/* Notifications */}
+              {/* Language Selection */}
+              <li>
+                <h6 className="dropdown-header" style={{ padding: '12px 20px 8px 20px', margin: 0, color: '#6c757d', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                  Language
+                </h6>
+              </li>
               <li>
                 <button 
                   className="dropdown-item d-flex align-items-center"
@@ -1335,18 +1618,33 @@ const Navigation = () => (
                   }}
                   onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f8f9fa'}
                   onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
-                  onClick={() => setUnreadNotifications(0)}
+                  onClick={() => i18n.changeLanguage('en')}
                 >
-                  <Bell size={16} className="me-3" />
-                  <div className="flex-grow-1">
-                    {t('nav.notifications', 'Notifications')}
-                    {unreadNotifications > 0 && (
-                      <span 
-                        className="badge bg-danger rounded-pill ms-2"
-                        style={{ fontSize: '0.7rem' }}
-                      >
-                        {unreadNotifications > 99 ? '99+' : unreadNotifications}
-                      </span>
+                  <Globe size={16} className="me-3" />
+                  <div className="flex-grow-1 d-flex justify-content-between align-items-center">
+                    <span>🇺🇸 English</span>
+                    {i18n.language === 'en' && (
+                      <CheckCircle size={16} className="text-success" />
+                    )}
+                  </div>
+                </button>
+              </li>
+              <li>
+                <button 
+                  className="dropdown-item d-flex align-items-center"
+                  style={{
+                    padding: '12px 20px',
+                    transition: 'background-color 0.2s ease'
+                  }}
+                  onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f8f9fa'}
+                  onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                  onClick={() => i18n.changeLanguage('tr')}
+                >
+                  <Globe size={16} className="me-3" />
+                  <div className="flex-grow-1 d-flex justify-content-between align-items-center">
+                    <span>🇹🇷 Türkçe</span>
+                    {i18n.language === 'tr' && (
+                      <CheckCircle size={16} className="text-success" />
                     )}
                   </div>
                 </button>
@@ -1379,248 +1677,690 @@ const Navigation = () => (
 );
 
   // Dashboard Overview Component
-  const DashboardOverview: React.FC = () => (
-  <div className="container-fluid py-4">
-    <div className="row g-4">
-      {/* Welcome Card */}
-      <div className="col-12">
-        <div
-          className="card shadow-sm border-0"
-          style={{
-            borderRadius: '1rem',
-            background: 'linear-gradient(135deg, #E53E3E 0%, #C53030 100%)',
-          }}
-        >
-          <div className="card-body p-4 text-white">
-            <div className="row align-items-center">
-              <div className="col-md-8">
-                <h3 className="mb-2">
-                  {t('dashboard.welcome', {
-                    name: user?.name || 'Clinical Staff',
-                  })}
-                </h3>
-                <div className="d-flex align-items-center mb-1">
-                  <User size={16} className="me-2 opacity-75" />
-                  <span className="opacity-90">
-                    Staff No: {user?.staff_no || 'N/A'}
-                  </span>
+// Dashboard Overview Component - CORRECTED VERSION
+const DashboardOverview: React.FC = () => {
+  // Add refs for each chart
+  const appointmentsTrendRef = useRef<ChartJS<"line"> | null>(null);
+  const statusDistributionRef = useRef<ChartJS<"doughnut"> | null>(null);
+  const priorityRef = useRef<ChartJS<"doughnut"> | null>(null);
+  const departmentWorkloadRef = useRef<ChartJS<"bar"> | null>(null);
+
+  // Add cleanup effect
+  useEffect(() => {
+    return () => {
+      // Cleanup charts on component unmount
+      appointmentsTrendRef.current?.destroy();
+      statusDistributionRef.current?.destroy();
+      priorityRef.current?.destroy();
+      departmentWorkloadRef.current?.destroy();
+    };
+  }, []);
+
+  // Add null check for kpiData first
+  if (!kpiData) {
+    return (
+      <div className="container-fluid py-4">
+        <div className="text-center py-5">
+          <div className="spinner-border text-primary" role="status">
+            <span className="visually-hidden">Loading charts...</span>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Define variables only once
+  const weeklyMetrics = kpiData.weekly_metrics || {};
+  const responseTime = kpiData.response_times || {};
+
+  // Chart configurations - DEFINE ONLY ONCE
+  const chartOptions = {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: {
+        position: 'top' as const,
+      },
+    },
+    scales: {
+      y: {
+        beginAtZero: true,
+      },
+    },
+  };
+
+  const doughnutOptions = {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: {
+        position: 'bottom' as const,
+      },
+    },
+  };
+
+  // Chart data configurations - DEFINE ONLY ONCE
+  const appointmentsTrendData = {
+    labels: kpiData.appointments_trend?.map((item: any) => item.day) || [],
+    datasets: [
+      {
+        label: 'Daily Appointments',
+        data: kpiData.appointments_trend?.map((item: any) => item.count) || [],
+        borderColor: 'rgb(75, 192, 192)',
+        backgroundColor: 'rgba(75, 192, 192, 0.1)',
+        tension: 0.4,
+        fill: true,
+      },
+    ],
+  };
+
+  const statusDistributionData = {
+    labels: kpiData.patient_status_distribution?.map((item: any) => item.status) || [],
+    datasets: [
+      {
+        data: kpiData.patient_status_distribution?.map((item: any) => item.count) || [],
+        backgroundColor: [
+          'rgba(54, 162, 235, 0.8)',
+          'rgba(255, 206, 86, 0.8)',
+          'rgba(75, 192, 192, 0.8)',
+          'rgba(153, 102, 255, 0.8)',
+          'rgba(255, 159, 64, 0.8)',
+          'rgba(255, 99, 132, 0.8)',
+        ],
+        borderColor: [
+          'rgba(54, 162, 235, 1)',
+          'rgba(255, 206, 86, 1)',
+          'rgba(75, 192, 192, 1)',
+          'rgba(153, 102, 255, 1)',
+          'rgba(255, 159, 64, 1)',
+          'rgba(255, 99, 132, 1)',
+        ],
+        borderWidth: 2,
+      },
+    ],
+  };
+
+  const priorityData = {
+    labels: kpiData.priority_distribution?.map((item: any) => item.priority) || [],
+    datasets: [
+      {
+        data: kpiData.priority_distribution?.map((item: any) => item.count) || [],
+        backgroundColor: [
+          'rgba(34, 197, 94, 0.8)', // Normal - Green
+          'rgba(249, 115, 22, 0.8)', // High - Orange  
+          'rgba(239, 68, 68, 0.8)',  // Urgent - Red
+        ],
+        borderColor: [
+          'rgba(34, 197, 94, 1)',
+          'rgba(249, 115, 22, 1)',
+          'rgba(239, 68, 68, 1)',
+        ],
+        borderWidth: 2,
+      },
+    ],
+  };
+
+  const departmentWorkloadData = {
+    labels: kpiData.department_workload?.map((item: any) => item.department) || [],
+    datasets: [
+      {
+        label: 'Appointments',
+        data: kpiData.department_workload?.map((item: any) => item.appointments) || [],
+        backgroundColor: 'rgba(99, 102, 241, 0.8)',
+        borderColor: 'rgba(99, 102, 241, 1)',
+        borderWidth: 1,
+      },
+    ],
+  };
+
+  return (
+    <div className="container-fluid py-4">
+      <div className="row g-4">
+        {/* Welcome Card - keep as is */}
+        <div className="col-12">
+          <div
+            className="card shadow-sm border-0"
+            style={{
+              borderRadius: '1rem',
+              background: 'linear-gradient(135deg, #E53E3E 0%, #C53030 100%)',
+            }}
+          >
+            <div className="card-body p-4 text-white">
+              <div className="row align-items-center">
+                <div className="col-md-8">
+                  <h3 className="mb-2">
+                    {t('dashboard.welcome', {
+                      name: user?.name || 'Clinical Staff',
+                    })}
+                  </h3>
+                  <div className="d-flex align-items-center mb-1">
+                    <User size={16} className="me-2 opacity-75" />
+                    <span className="opacity-90">
+                      Staff No: {user?.staff_no || 'N/A'}
+                    </span>
+                  </div>
+                  <div className="d-flex align-items-center mb-1">
+                    <Stethoscope size={16} className="me-2 opacity-75" />
+                    <span className="opacity-75">
+                      Department: {user?.department || 'General'}
+                    </span>
+                  </div>
                 </div>
-                <div className="d-flex align-items-center mb-1">
-                  <Stethoscope size={16} className="me-2 opacity-75" />
-                  <span className="opacity-75">
-                    Department: {user?.department || 'General'}
-                  </span>
+                <div className="col-md-4 text-end">
+                  <User size={80} className="opacity-75" />
                 </div>
-              </div>
-              <div className="col-md-4 text-end">
-                <User size={80} className="opacity-75" />
               </div>
             </div>
           </div>
         </div>
-      </div>
 
-      {/* Statistics Cards */}
+        {/* Enhanced Statistics Cards with click handlers */}
         <div className="col-md-3">
           <div
-            className="card text-center border-0 shadow-sm"
-            style={{ borderRadius: '0.75rem' }}
+            className="card text-center border-0 shadow-sm h-100"
+            style={{ 
+              borderRadius: '0.75rem',
+              cursor: 'pointer',
+              transition: 'transform 0.2s ease, box-shadow 0.2s ease'
+            }}
+            onClick={() => setActiveTab('appointments')}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.transform = 'translateY(-2px)';
+              e.currentTarget.style.boxShadow = '0 8px 25px rgba(0,0,0,0.15)';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.transform = 'translateY(0)';
+              e.currentTarget.style.boxShadow = '0 2px 10px rgba(0,0,0,0.1)';
+            }}
           >
             <div className="card-body">
               <Calendar size={32} className="text-primary mb-2" />
               <h4 className="fw-bold mb-1">
                 {dashboardData.today_overview?.scheduled_appointments ?? 0}
               </h4>
-              <p className="text-muted mb-0">
+              <p className="text-muted mb-0 small">
                 {t('dashboard.scheduled_appointments', 'Scheduled Appointments')}
               </p>
+              <small className="text-primary">Click to view</small>
             </div>
           </div>
         </div>
+
         <div className="col-md-3">
           <div
-            className="card text-center border-0 shadow-sm"
-            style={{ borderRadius: '0.75rem' }}
+            className="card text-center border-0 shadow-sm h-100"
+            style={{ 
+              borderRadius: '0.75rem',
+              cursor: 'pointer',
+              transition: 'transform 0.2s ease, box-shadow 0.2s ease'
+            }}
+            onClick={() => setActiveTab('appointments')}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.transform = 'translateY(-2px)';
+              e.currentTarget.style.boxShadow = '0 8px 25px rgba(0,0,0,0.15)';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.transform = 'translateY(0)';
+              e.currentTarget.style.boxShadow = '0 2px 10px rgba(0,0,0,0.1)';
+            }}
           >
             <div className="card-body">
               <FileText size={32} className="text-info mb-2" />
               <h4 className="fw-bold mb-1">
                 {dashboardData.today_overview?.pending_student_requests ?? 0}
               </h4>
-              <p className="text-muted mb-0">
-                Pending Requests
+              <p className="text-muted mb-0 small">
+                Pending Student Requests
               </p>
+              <small className="text-info">Click to manage</small>
+              {(dashboardData.today_overview?.pending_student_requests ?? 0) > 0 && (
+                <div className="mt-2">
+                  <span className="badge bg-warning text-dark">
+                    Needs Attention
+                  </span>
+                </div>
+              )}
             </div>
           </div>
         </div>
+
         <div className="col-md-3">
           <div
-            className="card text-center border-0 shadow-sm"
-            style={{ borderRadius: '0.75rem' }}
+            className="card text-center border-0 shadow-sm h-100"
+            style={{ 
+              borderRadius: '0.75rem',
+              cursor: 'pointer',
+              transition: 'transform 0.2s ease, box-shadow 0.2s ease'
+            }}
+            onClick={() => {
+              setMessage({ type: 'warning', text: 'Tasks management coming soon!' });
+              setTimeout(() => setMessage({ type: '', text: '' }), 3000);
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.transform = 'translateY(-2px)';
+              e.currentTarget.style.boxShadow = '0 8px 25px rgba(0,0,0,0.15)';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.transform = 'translateY(0)';
+              e.currentTarget.style.boxShadow = '0 2px 10px rgba(0,0,0,0.1)';
+            }}
           >
             <div className="card-body">
               <ClipboardList size={32} className="text-warning mb-2" />
               <h4 className="fw-bold mb-1">
                 {dashboardData.today_overview?.pending_tasks ?? 0}
               </h4>
-              <p className="text-muted mb-0">
+              <p className="text-muted mb-0 small">
                 {t('dashboard.pending_tasks', 'Pending Tasks')}
               </p>
+              <small className="text-warning">Click to view</small>
             </div>
           </div>
         </div>
+
         <div className="col-md-3">
           <div
-            className="card text-center border-0 shadow-sm"
-            style={{ borderRadius: '0.75rem' }}
+            className="card text-center border-0 shadow-sm h-100"
+            style={{ 
+              borderRadius: '0.75rem',
+              cursor: 'pointer',
+              transition: 'transform 0.2s ease, box-shadow 0.2s ease'
+            }}
+            onClick={() => {
+              setFilters({ status: 'all', priority: 'urgent' });
+              setActiveTab('appointments');
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.transform = 'translateY(-2px)';
+              e.currentTarget.style.boxShadow = '0 8px 25px rgba(0,0,0,0.15)';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.transform = 'translateY(0)';
+              e.currentTarget.style.boxShadow = '0 2px 10px rgba(0,0,0,0.1)';
+            }}
           >
             <div className="card-body">
               <AlertTriangle size={32} className="text-danger mb-2" />
               <h4 className="fw-bold mb-1">
                 {dashboardData.today_overview?.urgent_cases ?? 0}
               </h4>
-              <p className="text-muted mb-0">
+              <p className="text-muted mb-0 small">
                 {t('dashboard.urgent_cases', 'Urgent Cases')}
               </p>
+              <small className="text-danger">Click to view urgent</small>
+              {(dashboardData.today_overview?.urgent_cases ?? 0) > 0 && (
+                <div className="mt-2">
+                  <span className="badge bg-danger">
+                    Immediate Action Required
+                  </span>
+                </div>
+              )}
             </div>
           </div>
         </div>
 
-      {/* Patient Queue */}
-      <div className="col-12">
-        <div
-          className="card shadow-sm border-0"
-          style={{ borderRadius: '1rem' }}
-        >
-          <div className="card-header bg-white border-0">
-            <h5 className="fw-bold mb-0">Patient Queue</h5>
-          </div>
-          <div className="card-body">
-            {dashboardData.patient_queue.length === 0 ? (
-              <div className="text-muted text-center py-4">
-                <Users size={32} className="mb-2" />
-                <div>No patients in queue</div>
+        {/* KPI Summary Cards */}
+        <div className="col-12">
+          <h5 className="fw-bold mb-3 d-flex align-items-center">
+            <TrendingUp size={20} className="me-2 text-primary" />
+            Weekly Performance Metrics
+          </h5>
+          <div className="row g-3">
+            <div className="col-md-3">
+              <div className="card border-0 shadow-sm h-100">
+                <div className="card-body text-center">
+                  <CheckCircle size={32} className="text-success mb-2" />
+                  <h3 className="fw-bold mb-1">{weeklyMetrics.appointments_completed || 0}</h3>
+                  <p className="text-muted mb-0 small">Appointments Completed</p>
+                </div>
               </div>
-            ) : (
-              <div className="table-responsive">
-                <table className="table table-hover align-middle">
-                  <thead>
-                    <tr>
-                      <th>Time</th>
-                      <th>Patient</th>
-                      <th>Status</th>
-                      <th>Priority</th>
-                      <th>Doctor</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {dashboardData.patient_queue.map((queueItem) => (
-                      <tr key={queueItem.id}>
-                        <td>{queueItem.time}</td>
-                        <td>
-                          {queueItem.patient_name} ({queueItem.student_id})
-                        </td>
-                        <td>
-                          <span className={getStatusBadge(queueItem.status)}>
-                            {queueItem.status}
-                          </span>
-                        </td>
-                        <td>
-                          <span
-                            className={getPriorityBadge(queueItem.priority)}
-                          >
-                            {queueItem.priority}
-                          </span>
-                        </td>
-                        <td>{queueItem.assigned_doctor}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+            </div>
+            <div className="col-md-3">
+              <div className="card border-0 shadow-sm h-100">
+                <div className="card-body text-center">
+                  <Users size={32} className="text-info mb-2" />
+                  <h3 className="fw-bold mb-1">{weeklyMetrics.medications_administered || 0}</h3>
+                  <p className="text-muted mb-0 small">Medications Administered</p>
+                </div>
               </div>
-            )}
+            </div>
+            <div className="col-md-3">
+              <div className="card border-0 shadow-sm h-100">
+                <div className="card-body text-center">
+                  <TrendingUp size={32} className="text-warning mb-2" />
+                  <h3 className="fw-bold mb-1">{weeklyMetrics.vital_signs_recorded || 0}</h3>
+                  <p className="text-muted mb-0 small">Vital Signs Recorded</p>
+                </div>
+              </div>
+            </div>
+            <div className="col-md-3">
+              <div className="card border-0 shadow-sm h-100">
+                <div className="card-body text-center">
+                  <Clock size={32} className="text-primary mb-2" />
+                  <h3 className="fw-bold mb-1">{responseTime.avg_response_time_minutes || 0}min</h3>
+                  <p className="text-muted mb-0 small">Avg Response Time</p>
+                  <div className="mt-2">
+                    <div 
+                      className="progress" 
+                      style={{ height: '4px' }}
+                    >
+                      <div 
+                        className="progress-bar bg-success" 
+                        style={{ width: `${responseTime.performance_score || 0}%` }}
+                      ></div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
-      </div>
 
-      {/* Pending Student Requests */}
-      <div className="col-12">
-        <div
-          className="card shadow-sm border-0"
-          style={{ borderRadius: '1rem' }}
-        >
-          <div className="card-header bg-white border-0 d-flex justify-content-between align-items-center">
-  <h5 className="fw-bold mb-0">Pending Student Requests</h5>
-  <button
-    className="btn btn-primary btn-sm"
-    onClick={() => setActiveTab('appointments')}
-    style={{ borderRadius: '0.5rem' }}
-  >
-    View All in Appointments
-  </button>
-</div>
-
-          <div className="card-body">
-            {studentRequests.length === 0 ? (
-              <div className="text-muted text-center py-4">
-                <FileText size={32} className="mb-2" />
-                <div>No pending student requests</div>
+        {/* Charts Row 1 - CORRECTED */}
+        <div className="col-md-8">
+          <div className="card shadow-sm border-0 h-100">
+            <div className="card-header bg-white border-0">
+              <h6 className="fw-bold mb-0">Appointments Trend (Last 7 Days)</h6>
+            </div>
+            <div className="card-body">
+              <div style={{ height: '300px' }}>
+                <Line 
+                  key="appointments-trend"
+                  ref={appointmentsTrendRef}
+                  data={appointmentsTrendData} 
+                  options={chartOptions} 
+                />
               </div>
-            ) : (
-              <div className="table-responsive">
-                <table className="table table-hover align-middle">
-                  <thead>
-                    <tr>
-                      <th>Student</th>
-                      <th>Requested Date</th>
-                      <th>Specialization</th>
-                      <th>Urgency</th>
-                      <th>Status</th>
-                      <th>Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {studentRequests.map((request) => (
-                      <tr key={request.id}>
-                        <td>{request.patient?.name}</td>
-                        <td>
-                          {request.date} {request.time}
-                        </td>
-                        <td>{request.specialization || 'General'}</td>
-                        <td>
-                          <span
-                            className={getPriorityBadge(
-                              request.priority || 'normal'
-                            )}
-                          >
-                            {request.priority || 'normal'}
-                          </span>
-                        </td>
-                        <td>
-                          <span className={getStatusBadge(request.status)}>
-                            {request.status}
-                          </span>
-                        </td>
-                        <td>
-  <button 
-    className="btn btn-sm btn-outline-primary"
-    onClick={() => setActiveTab('appointments')}
-  >
-    View Details
-  </button>
-</td>
+            </div>
+          </div>
+        </div>
+
+        <div className="col-md-4">
+          <div className="card shadow-sm border-0 h-100">
+            <div className="card-header bg-white border-0">
+              <h6 className="fw-bold mb-0">Priority Distribution</h6>
+            </div>
+            <div className="card-body">
+              <div style={{ height: '300px' }}>
+                <Doughnut 
+                  key="priority-distribution"
+                  ref={priorityRef}
+                  data={priorityData} 
+                  options={doughnutOptions} 
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Charts Row 2 - CORRECTED */}
+        <div className="col-md-6">
+          <div className="card shadow-sm border-0 h-100">
+            <div className="card-header bg-white border-0">
+              <h6 className="fw-bold mb-0">Patient Status Today</h6>
+            </div>
+            <div className="card-body">
+              <div style={{ height: '300px' }}>
+                <Doughnut 
+                  key="status-distribution"
+                  ref={statusDistributionRef}
+                  data={statusDistributionData} 
+                  options={doughnutOptions} 
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="col-md-6">
+          <div className="card shadow-sm border-0 h-100">
+            <div className="card-header bg-white border-0">
+              <h6 className="fw-bold mb-0">Department Workload</h6>
+            </div>
+            <div className="card-body">
+              <div style={{ height: '300px' }}>
+                <Bar 
+                  key="department-workload"
+                  ref={departmentWorkloadRef}
+                  data={departmentWorkloadData} 
+                  options={chartOptions} 
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Response Time Performance */}
+        <div className="col-12">
+          <div className="card shadow-sm border-0">
+            <div className="card-header bg-white border-0">
+              <h6 className="fw-bold mb-0 d-flex align-items-center justify-content-between">
+                Response Time Performance
+                <span className={`badge ${
+                  (responseTime.performance_score || 0) >= 80 ? 'bg-success' : 
+                  (responseTime.performance_score || 0) >= 60 ? 'bg-warning' : 'bg-danger'
+                }`}>
+                  {responseTime.performance_score || 0}% Score
+                </span>
+              </h6>
+            </div>
+            <div className="card-body">
+              <div className="row align-items-center">
+                <div className="col-md-8">
+                  <p className="mb-2">
+                    Average response time to student requests: 
+                    <strong className="ms-2">{responseTime.avg_response_time_minutes || 0} minutes</strong>
+                  </p>
+                  <p className="mb-3 text-muted small">
+                    Target: {responseTime.target_response_time || 30} minutes
+                  </p>
+                  <div className="progress" style={{ height: '12px' }}>
+                    <div 
+                      className={`progress-bar ${
+                        (responseTime.performance_score || 0) >= 80 ? 'bg-success' : 
+                        (responseTime.performance_score || 0) >= 60 ? 'bg-warning' : 'bg-danger'
+                      }`}
+                      style={{ width: `${responseTime.performance_score || 0}%` }}
+                    ></div>
+                  </div>
+                </div>
+                <div className="col-md-4 text-center">
+                  {(responseTime.performance_score || 0) >= 80 ? (
+                    <CheckCircle size={48} className="text-success" />
+                  ) : (
+                    <AlertTriangle size={48} className="text-warning" />
+                  )}
+                  <p className="mt-2 mb-0 small text-muted">
+                    {(responseTime.performance_score || 0) >= 80 ? 'Excellent Performance' : 
+                     (responseTime.performance_score || 0) >= 60 ? 'Good Performance' : 'Needs Improvement'}
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Patient Queue */}
+        <div className="col-12">
+          <div
+            className="card shadow-sm border-0"
+            style={{ borderRadius: '1rem' }}
+          >
+            <div className="card-header bg-white border-0">
+              <h5 className="fw-bold mb-0">Patient Queue</h5>
+            </div>
+            <div className="card-body">
+              {dashboardData.patient_queue.length === 0 ? (
+                <div className="text-muted text-center py-4">
+                  <Users size={32} className="mb-2" />
+                  <div>No patients in queue</div>
+                </div>
+              ) : (
+                <div className="table-responsive">
+                  <table className="table table-hover align-middle">
+                    <thead>
+                      <tr>
+                        <th>Time</th>
+                        <th>Patient</th>
+                        <th>Status</th>
+                        <th>Priority</th>
+                        <th>Doctor</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
+                    </thead>
+                    <tbody>
+                      {dashboardData.patient_queue.map((queueItem) => (
+                        <tr key={queueItem.id}>
+                          <td>{queueItem.time}</td>
+                          <td>
+                            {queueItem.patient_name} ({queueItem.student_id})
+                          </td>
+                          <td>
+                            <span className={getStatusBadge(queueItem.status)}>
+                              {queueItem.status}
+                            </span>
+                          </td>
+                          <td>
+                            <span
+                              className={getPriorityBadge(queueItem.priority)}
+                            >
+                              {queueItem.priority}
+                            </span>
+                          </td>
+                          <td>{queueItem.assigned_doctor}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Pending Student Requests with enhanced display */}
+        <div className="col-12">
+          <div
+            className="card shadow-sm border-0"
+            style={{ borderRadius: '1rem' }}
+          >
+            <div className="card-header bg-white border-0 d-flex justify-content-between align-items-center">
+              <h5 className="fw-bold mb-0">
+                Pending Student Requests 
+                {(dashboardData.today_overview?.pending_student_requests ?? 0) > 0 && (
+                  <span className="badge bg-warning text-dark ms-2">
+                    {dashboardData.today_overview.pending_student_requests}
+                  </span>
+                )}
+              </h5>
+              <button
+                className="btn btn-primary btn-sm"
+                onClick={() => setActiveTab('appointments')}
+                style={{ borderRadius: '0.5rem' }}
+              >
+                View All Appointments
+              </button>
+            </div>
+            <div className="card-body">
+              {studentRequests.filter(req => ['pending', 'under_review'].includes(req.status)).length === 0 ? (
+                <div className="text-muted text-center py-4">
+                  <FileText size={32} className="mb-2" />
+                  <div>No pending student requests</div>
+                  <small>All requests have been processed</small>
+                </div>
+              ) : (
+                <div className="table-responsive">
+                  <table className="table table-hover align-middle">
+                    <thead>
+                      <tr>
+                        <th>Student</th>
+                        <th>Requested Date</th>
+                        <th>Specialization</th>
+                        <th>Urgency</th>
+                        <th>Status</th>
+                        <th>Time Waiting</th>
+                        <th>Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {studentRequests
+                        .filter(request => ['pending', 'under_review'].includes(request.status))
+                        .slice(0, 5)
+                        .map((request) => {
+                          const requestDate = new Date(request.created_at || request.date);
+                          const now = new Date();
+                          const hoursWaiting = Math.floor((now.getTime() - requestDate.getTime()) / (1000 * 60 * 60));
+                          
+                          return (
+                            <tr key={request.id}>
+                              <td>
+                                <div>
+                                  <strong>{request.patient?.name}</strong>
+                                  <br />
+                                  <small className="text-muted">{request.patient?.student_id}</small>
+                                </div>
+                              </td>
+                              <td>
+                                {request.date} {request.time}
+                              </td>
+                              <td>{request.specialization || 'General'}</td>
+                              <td>
+                                <span
+                                  className={getPriorityBadge(
+                                    request.priority || 'normal'
+                                  )}
+                                >
+                                  {request.priority || 'normal'}
+                                </span>
+                              </td>
+                              <td>
+                                <span className={getStatusBadge(request.status)}>
+                                  {request.status}
+                                </span>
+                              </td>
+                              <td>
+                                <span className={`badge ${hoursWaiting > 24 ? 'bg-danger' : hoursWaiting > 4 ? 'bg-warning text-dark' : 'bg-success'}`}>
+                                  {hoursWaiting}h
+                                </span>
+                              </td>
+                              <td>
+                                <button 
+                                  className="btn btn-sm btn-outline-primary"
+                                  onClick={() => {
+                                    setFormData({
+                                      ...request,
+                                      appointmentId: request.id,
+                                      action: 'review'
+                                    });
+                                    setShowModal('reviewRequest');
+                                  }}
+                                >
+                                  Review
+                                </button>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                    </tbody>
+                  </table>
+                  {studentRequests.filter(req => ['pending', 'under_review'].includes(req.status)).length > 5 && (
+                    <div className="text-center mt-3">
+                      <button
+                        className="btn btn-outline-primary btn-sm"
+                        onClick={() => setActiveTab('appointments')}
+                      >
+                        View {studentRequests.filter(req => ['pending', 'under_review'].includes(req.status)).length - 5} more requests
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </div>
     </div>
-  </div>
-);
+  );
+};
 
 
 // Appointments Tab Component
@@ -1645,8 +2385,7 @@ const AppointmentsTab: React.FC = () => {
       doctor: 'To be assigned',
       type: request.appointment_type || 'Student Request',
       appointment_type: request.appointment_type || 'Student Request',
-      // FIX: Properly preserve the urgency/priority from the request
-      priority: request.priority || request.urgency || 'normal', // Check both fields and preserve original value
+      priority: request.priority || request.urgency || 'normal',
       status: request.status || 'pending',
       date: request.date || request.requested_date,
       time: request.time || request.requested_time,
@@ -1654,7 +2393,6 @@ const AppointmentsTab: React.FC = () => {
     }));
     
     return [...regularAppointments, ...studentRequestAppointments].sort((a, b) => {
-      // Sort by date, then by time
       const dateCompare = new Date(a.date || '1970-01-01').getTime() - new Date(b.date || '1970-01-01').getTime();
       if (dateCompare !== 0) return dateCompare;
       return (a.time || '00:00').localeCompare(b.time || '00:00');
@@ -1708,6 +2446,7 @@ const AppointmentsTab: React.FC = () => {
                 <option value="cancelled">Cancelled</option>
                 <option value="pending">Pending (Student Requests)</option>
                 <option value="under_review">Under Review</option>
+                <option value="rejected">Rejected</option>
               </select>
             </div>
             <div className="col-md-3">
@@ -1771,21 +2510,11 @@ const AppointmentsTab: React.FC = () => {
                 ) : (
                   combinedAppointments
                     .filter(apt => {
-                      // Apply filters
                       const statusMatch = filters.status === 'all' || apt.status === filters.status;
                       const priorityMatch = filters.priority === 'all' || (apt.priority || 'normal') === filters.priority;
                       return statusMatch && priorityMatch;
                     })
                     .map((apt) => {
-                      // Debug log to check priority values
-                      console.log('Appointment priority debug:', {
-                        id: apt.id,
-                        isStudentRequest: apt.isStudentRequest,
-                        priority: apt.priority,
-                        urgency: apt.urgency,
-                        originalRequest: apt.isStudentRequest ? studentRequests.find(r => r.id === apt.id) : null
-                      });
-                      
                       return (
                         <tr key={`${apt.isStudentRequest ? 'request' : 'appointment'}-${apt.id}`}>
                           <td>
@@ -1808,12 +2537,18 @@ const AppointmentsTab: React.FC = () => {
                             </span>
                           </td>
                           <td>
-                            <span className={getStatusBadge(apt.status)}>
-                              {getStatusText(apt.status)}
-                            </span>
+                            {/* Keep rejected status as rejected, others use default styling */}
+                            {apt.isStudentRequest && apt.status === 'rejected' ? (
+                              <span className="badge bg-danger">
+                                Rejected
+                              </span>
+                            ) : (
+                              <span className={getStatusBadge(apt.status)}>
+                                {getStatusText(apt.status)}
+                              </span>
+                            )}
                           </td>
                           <td>
-                            {/* FIX: Display the correct priority with proper styling */}
                             <span className={getPriorityBadge(apt.priority || 'normal')}>
                               {(apt.priority || 'normal').toUpperCase()}
                             </span>
@@ -1828,32 +2563,68 @@ const AppointmentsTab: React.FC = () => {
                             <div className="btn-group btn-group-sm" role="group">
                               {apt.isStudentRequest ? (
                                 <>
-                                  <button 
-                                    className="btn btn-outline-success"
-                                    onClick={() => {
-                                      setFormData({
-                                        ...apt,
-                                        appointmentId: apt.id,
-                                        action: 'assign'
-                                      });
-                                      setShowModal('assignRequest');
-                                    }}
-                                  >
-                                    Assign
-                                  </button>
-                                  <button 
-                                    className="btn btn-outline-warning"
-                                    onClick={() => {
-                                      setFormData({
-                                        ...apt,
-                                        appointmentId: apt.id,
-                                        action: 'review'
-                                      });
-                                      setShowModal('reviewRequest');
-                                    }}
-                                  >
-                                    Review
-                                  </button>
+                                  {/* Show assign button for pending/under_review requests */}
+                                  {['pending', 'under_review'].includes(apt.status) && (
+                                    <button 
+                                      className="btn btn-outline-primary"
+                                      onClick={() => {
+                                        setFormData({
+                                          ...apt,
+                                          appointmentId: apt.id,
+                                          action: 'assign'
+                                        });
+                                        setShowModal('assignRequest');
+                                      }}
+                                    >
+                                      Assign Doctor
+                                    </button>
+                                  )}
+                                  
+                                  {/* Show approve & schedule button for pending/under_review */}
+                                  {['pending', 'under_review'].includes(apt.status) && (
+                                    <button 
+                                      className="btn btn-outline-success"
+                                      onClick={() => {
+                                        setFormData({
+                                          ...apt,
+                                          appointmentId: apt.id,
+                                          action: 'approve'
+                                        });
+                                        setShowModal('reviewRequest');
+                                      }}
+                                    >
+                                      Approve & Schedule
+                                    </button>
+                                  )}
+
+                                  {/* Show "Ready for Doctor" button for assigned/scheduled requests */}
+                                  {['assigned', 'scheduled'].includes(apt.status) && (
+                                    <button 
+                                      className="btn btn-success"
+                                      disabled
+                                    >
+                                      <Check size={14} className="me-1" />
+                                      Ready for Doctor
+                                    </button>
+                                  )}
+
+                                  {/* Show reopen button for rejected requests */}
+                                  {apt.status === 'rejected' && (
+                                    <button 
+                                      className="btn btn-outline-info"
+                                      onClick={() => {
+                                        setFormData({
+                                          ...apt,
+                                          appointmentId: apt.id,
+                                          action: 'reopen'
+                                        });
+                                        setShowModal('reopenRequest');
+                                      }}
+                                    >
+                                      <RotateCcw size={14} className="me-1" />
+                                      Reopen
+                                    </button>
+                                  )}
                                 </>
                               ) : (
                                 <>
@@ -1946,9 +2717,9 @@ const AppointmentsTab: React.FC = () => {
                     <div className="card-body">
                       <div className="d-flex justify-content-between align-items-center mb-3">
                         <h5 className="card-title fw-semibold mb-0">{patient.name}</h5>
-                        <span className={`${getStatusBadge(patient.status)}`}>
+                        {/*<span className={`${getStatusBadge(patient.status)}`}>
                           {patient.status}
-                        </span>
+                        </span>*/}
                       </div>
                       <div className="text-muted small mb-3">
                         <p className="mb-1"><strong>ID:</strong> {patient.student_id}</p>
@@ -2142,7 +2913,7 @@ const AppointmentsTab: React.FC = () => {
                         <p className="mb-1"><strong>Phone:</strong> {doctor.phone}</p>
                         <p className="mb-0"><strong>Email:</strong> {doctor.email}</p>
                       </div>
-                      <div className="d-flex justify-content-between align-items-center">
+                      {/*<div className="d-flex justify-content-between align-items-center">
                         <span className={`badge ${(doctor.status || 'active') === 'active' ? 'bg-success' : 'bg-secondary'}`}>
                           {doctor.status || 'active'}
                         </span>
@@ -2152,7 +2923,7 @@ const AppointmentsTab: React.FC = () => {
                         >
                           Book Appointment
                         </button>
-                      </div>
+                      </div>*/}
                     </div>
                   </div>
                 </div>
@@ -2182,6 +2953,32 @@ const AppointmentsTab: React.FC = () => {
         </div>
       )}
 
+      {/* ADD THIS URGENT ALERT BANNER HERE */}
+      {urgentRequests.length > 0 && (
+        <div className="container-fluid px-4">
+          <div className="alert alert-danger d-flex align-items-center" role="alert">
+            <AlertTriangle size={24} className="me-3" />
+            <div className="flex-grow-1">
+              <h5 className="alert-heading mb-1">
+                URGENT: {urgentRequests.length} cases need immediate attention
+              </h5>
+              <p className="mb-0">
+                These urgent requests should be processed before scheduled appointments.
+              </p>
+            </div>
+            <button 
+              className="btn btn-warning btn-sm"
+              onClick={() => {
+                setActiveTab('appointments');
+                setFilters({ status: 'all', priority: 'urgent' });
+              }}
+            >
+              Process Urgent Cases
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Main Content */}
       {activeTab === 'overview' && <DashboardOverview />}
       {activeTab === 'appointments' && <AppointmentsTab />}
@@ -2200,7 +2997,7 @@ const AppointmentsTab: React.FC = () => {
         <Modal title="Schedule New Appointment" onClose={() => setShowModal('')}>
           <form onSubmit={(e) => {
             e.preventDefault();
-            createAppointment(formData);
+            createAppointment();
           }}>
             <div className="mb-3">
               <label className="form-label">Patient <span className="text-danger">*</span></label>
@@ -2219,24 +3016,22 @@ const AppointmentsTab: React.FC = () => {
               </select>
             </div>
             
-            {/* Date and Time selection */}
+            {/* Enhanced Date and Time selection */}
+{/* Enhanced Date and Time selection */}
             <div className="row g-3 mb-3">
               <div className="col-md-6">
                 <label className="form-label">Date <span className="text-danger">*</span></label>
-                <input
-                  type="date"
-                  className="form-control"
+                <EnhancedDateInput
                   value={formData.appointment_date || ''}
-                  onChange={async (e) => {
-                    const newFormData = { ...formData, appointment_date: e.target.value };
+                  onChange={async (selectedDate) => {
+                    const newFormData = { ...formData, appointment_date: selectedDate };
                     setFormData(newFormData);
                     
                     // Load available doctors when date changes
-                    if (e.target.value && formData.appointment_time) {
-                      await checkDoctorAvailability(e.target.value, formData.appointment_time);
+                    if (selectedDate && formData.appointment_time) {
+                      await checkDoctorAvailability(selectedDate, formData.appointment_time);
                     }
                   }}
-                  min={new Date().toISOString().split('T')[0]}
                   required
                 />
               </div>
@@ -2247,41 +3042,41 @@ const AppointmentsTab: React.FC = () => {
                   className="form-control"
                   value={formData.appointment_time || ''}
                   onChange={async (e) => {
-                    const newFormData = { ...formData, appointment_time: e.target.value };
+                    const selectedTime = e.target.value;
+                    
+                    if (formData.appointment_date && isDateBlocked(formData.appointment_date)) {
+                      setMessage({
+                        type: 'error',
+                        text: 'Please select a valid date first'
+                      });
+                      setTimeout(() => setMessage({ type: '', text: '' }), 3000);
+                      return;
+                    }
+
+                    const newFormData = { ...formData, appointment_time: selectedTime };
                     setFormData(newFormData);
                     
-                    // Load available doctors when time changes
-                    if (e.target.value && formData.appointment_date) {
-                      await checkDoctorAvailability(formData.appointment_date, e.target.value);
+                    if (selectedTime && formData.appointment_date) {
+                      await checkDoctorAvailability(formData.appointment_date, selectedTime);
                     }
                   }}
                   required
+                  disabled={formData.appointment_date && isDateBlocked(formData.appointment_date)}
                 />
               </div>
             </div>
             
-            {/* Quick Time Slots Component - Placeholder for now */}
-            <div className="mb-3">
-              <label className="form-label">Quick Time Slots</label>
-              <div className="d-flex flex-wrap gap-2">
-                {['09:00', '10:00', '11:00', '14:00', '15:00', '16:00'].map((time) => (
-                  <button
-                    key={time}
-                    type="button"
-                    className={`btn btn-sm ${formData.appointment_time === time ? 'btn-primary' : 'btn-outline-primary'}`}
-                    onClick={async () => {
-                      const newFormData = { ...formData, appointment_time: time };
-                      setFormData(newFormData);
-                      if (formData.appointment_date) {
-                        await checkDoctorAvailability(formData.appointment_date, time);
-                      }
-                    }}
-                  >
-                    {time}
-                  </button>
-                ))}
-              </div>
-            </div>
+            {/* Holiday Warning */}
+            <HolidayWarning selectedDate={formData.appointment_date || ''} />
+            
+            {/* Quick Time Slots */}
+            <QuickTimeSlots
+              selectedDate={formData.appointment_date || ''}
+              onTimeSelect={(time) => setFormData({...formData, appointment_time: time})}
+              formData={formData}
+              setFormData={setFormData}
+              checkDoctorAvailability={checkDoctorAvailability}
+            />
             
             {/* Doctor selection - shows available doctors based on date/time */}
             <div className="mb-3">
@@ -2857,15 +3652,19 @@ const AppointmentsTab: React.FC = () => {
       e.preventDefault();
       try {
         setLoading(true);
-        await api.post(`student-requests/${formData.appointmentId}/assign`, {
+        
+        // Use the approve endpoint instead of assign
+        await api.post(`student-requests/${formData.appointmentId}/approve`, {
           doctor_id: formData.doctor_id,
-          notes: formData.notes
+          notes: formData.notes || ''
         });
+        
         setMessage({ type: 'success', text: 'Student request assigned successfully!' });
         loadStudentRequests();
         loadAppointments();
         setShowModal('');
       } catch (error) {
+        console.error('Assignment error:', error);
         setMessage({ type: 'error', text: `Error assigning request: ${(error as Error).message}` });
       } finally {
         setLoading(false);
@@ -2881,6 +3680,17 @@ const AppointmentsTab: React.FC = () => {
         />
       </div>
       <div className="mb-3">
+        <label className="form-label">Current Request</label>
+        <div className="card bg-light">
+          <div className="card-body">
+            <p className="mb-1"><strong>Date:</strong> {formData.date || 'Not specified'}</p>
+            <p className="mb-1"><strong>Time:</strong> {formData.time || 'Not specified'}</p>
+            <p className="mb-1"><strong>Priority:</strong> <span className={getPriorityBadge(formData.priority || 'normal')}>{(formData.priority || 'normal').toUpperCase()}</span></p>
+            <p className="mb-0"><strong>Reason:</strong> {formData.reason || 'No reason provided'}</p>
+          </div>
+        </div>
+      </div>
+      <div className="mb-3">
         <label className="form-label">Assign to Doctor *</label>
         <select
           className="form-select"
@@ -2891,26 +3701,27 @@ const AppointmentsTab: React.FC = () => {
           <option value="">Select Doctor</option>
           {doctors.map(doctor => (
             <option key={doctor.id} value={doctor.id}>
-              {doctor.name} - {doctor.specialty} ({doctor.department})
+              {doctor.name} - {doctor.specialty || doctor.specialization} ({doctor.department})
             </option>
           ))}
         </select>
       </div>
       <div className="mb-3">
-        <label className="form-label">Notes</label>
+        <label className="form-label">Staff Notes (Optional)</label>
         <textarea
           className="form-control"
           rows={3}
           value={formData.notes || ''}
           onChange={(e) => setFormData({...formData, notes: e.target.value})}
+          placeholder="Add any notes for the doctor..."
         />
       </div>
       <div className="d-flex justify-content-end gap-2">
         <button type="button" className="btn btn-outline-secondary" onClick={() => setShowModal('')}>
           Cancel
         </button>
-        <button type="submit" className="btn btn-primary">
-          Assign Request
+        <button type="submit" className="btn btn-primary" disabled={!formData.doctor_id}>
+          Assign & Approve Request
         </button>
       </div>
     </form>

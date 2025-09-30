@@ -71,4 +71,5 @@ class Kernel extends HttpKernel
         'permission' => \App\Http\Middleware\PermissionMiddleware::class,
         'locale' => \App\Http\Middleware\SetLocale::class, // ✅ ADD: For manual route application
     ];
+    
 }

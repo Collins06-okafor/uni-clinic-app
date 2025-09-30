@@ -2,7 +2,7 @@
 // config/cors.php - For token-only authentication
 
 return [
-    'paths' => ['api/*'],
+    'paths' => ['api/*', 'doctor/*', 'sanctum/csrf-cookie'],
 
     'allowed_methods' => ['*'],
 

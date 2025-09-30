@@ -58,7 +58,8 @@
 }
 
 .login-form-container {
-  max-width: 320px;
+  max-width: 400px; /* Increased for better mobile experience */
+  width: 100%;
 }
 
 .form-title {
@@ -90,6 +91,7 @@
 .login-form {
   display: flex;
   flex-direction: column;
+  width: 100%;
 }
 
 .form-group {
@@ -97,14 +99,14 @@
 }
 
 .form-input {
-  width: 100%;           /* Make it take full width of container */
-  min-width: 350px;      /* Set minimum width (adjust as needed) */
-  max-width: 450px;      /* Set maximum width (adjust as needed) */
-  padding: 16px 20px;    /* Add more padding for better appearance */
+  width: 100%;
+  min-width: 0; /* Prevent overflow */
+  padding: clamp(12px, 3vw, 16px) clamp(16px, 4vw, 20px);
   border: 2px solid #ddd;
   border-radius: 12px;
-  font-size: 16px;
-  box-sizing: border-box; /* Include padding in width calculation */
+  font-size: clamp(14px, 3.5vw, 16px);
+  box-sizing: border-box;
+  transition: all 0.3s ease;
 }
 
 /* Hide built-in browser password reveal button */

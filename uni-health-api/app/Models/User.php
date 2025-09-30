@@ -51,6 +51,8 @@ class User extends Authenticatable
         'available_days',
         'working_hours_start',
         'working_hours_end',
+        'department_id',
+        'staff_type',
         'is_available',
     ];
 
@@ -92,6 +94,7 @@ class User extends Authenticatable
     const ROLE_CLINICAL_STAFF = 'clinical_staff';
     const ROLE_ACADEMIC_STAFF = 'academic_staff';
     const ROLE_ADMIN = 'admin';
+    const ROLE_SUPERADMIN = 'superadmin';
 
     /**
      * Status constants
@@ -167,6 +170,16 @@ class User extends Authenticatable
         return $this->hasMany(Appointment::class, 'doctor_id');
     }
 
+    public function department()
+    {
+        return $this->belongsTo(Department::class);
+    }
+
+    public function staffSchedule()
+    {
+        return $this->hasOne(StaffSchedule::class);
+    }
+
     /* ================== METHODS ================== */
 
     public function hasRole($role)
@@ -181,7 +194,7 @@ class User extends Authenticatable
 
     public function hasPermission($permission)
     {
-        if ($this->role === self::ROLE_ADMIN) {
+        if ($this->role === self::ROLE_ADMIN || $this->role === self::ROLE_SUPERADMIN) {
             return true;
         }
 
@@ -238,7 +251,6 @@ class User extends Authenticatable
         
         return $this->forceDelete();
     }
-
     
 
     /* ================== ATTRIBUTES ================== */
@@ -342,6 +354,15 @@ class User extends Authenticatable
             'student_id', 'department', 'medical_license_number',
             'specialization', 'staff_no', 'faculty'
         ]);
+    }
+
+    // Add accessor to handle both department formats
+    public function getDepartmentNameAttribute()
+    {
+        if ($this->department_id && $this->department) {
+            return $this->department->name;
+        }
+        return $this->department; // fallback to string department
     }
 
     /* ================== SCOPES ================== */
@@ -448,6 +469,19 @@ class User extends Authenticatable
                 'view_system_logs',
                 'manage_settings',
             ],
+
+            self::ROLE_SUPERADMIN => [ // ✅ ADD THIS SECTION
+            'full_access',
+            'manage_users',
+            'manage_roles',
+            'manage_departments',
+            'manage_holidays',
+            'manage_system',
+            'view_system_logs',
+            'manage_settings',
+            'create_admins',
+            'delete_users',
+        ],
         ];
 
         return $permissions[$this->role] ?? [];

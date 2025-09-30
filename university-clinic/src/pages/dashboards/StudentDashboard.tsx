@@ -112,6 +112,15 @@ interface Doctor {
   phone?: string;
 }
 
+interface Holiday {
+  id: string | number;
+  name: string;
+  start_date: string;
+  end_date: string;
+  type: string;
+  blocks_appointments: boolean;
+}
+
 interface Props {
   user?: User;
   onLogout?: () => void;
@@ -135,8 +144,11 @@ const StudentAppointmentSystem: React.FC<Props> = ({
   const [message, setMessage] = useState<Message>({ type: '', text: '' });
   const [profileComplete, setProfileComplete] = useState<boolean>(false);
   const [showRescheduleModal, setShowRescheduleModal] = useState<boolean>(false);
-  
-  
+
+  // Add missing state for alternatives modal
+  const [showAlternativesModal, setShowAlternativesModal] = useState<boolean>(false);
+  const [alternativeDates, setAlternativeDates] = useState<string[]>([]);
+
   // Profile state
   const [userProfile, setUserProfile] = useState<UserProfile>({
     student_id: user?.student_id || '',
@@ -172,6 +184,9 @@ const StudentAppointmentSystem: React.FC<Props> = ({
     time: ''
   });
 
+  const [blockedDates, setBlockedDates] = useState<string[]>([]);
+  const [holidays, setHolidays] = useState<Holiday[]>([]);
+
   // Utility Functions
   // 2. Update the checkProfileComplete function to work with current state
 const checkProfileComplete = (profileData = userProfile): boolean => {
@@ -203,6 +218,40 @@ const checkProfileComplete = (profileData = userProfile): boolean => {
       pending: pendingAppointments
     };
   };
+
+  // Add these helper functions near your other utility functions
+const getMaxBirthDate = (): string => {
+  const maxDate = new Date();
+  maxDate.setFullYear(maxDate.getFullYear() - 16);
+  return maxDate.toISOString().split('T')[0];
+};
+
+const validateAge = (birthDate: string): boolean => {
+  if (!birthDate) return true;
+  
+  const birth = new Date(birthDate);
+  const today = new Date();
+  const age = today.getFullYear() - birth.getFullYear();
+  const monthDiff = today.getMonth() - birth.getMonth();
+  
+  const exactAge = monthDiff < 0 || (monthDiff === 0 && today.getDate() < birth.getDate()) 
+    ? age - 1 
+    : age;
+  
+  return exactAge >= 16;
+};
+
+const handleDateOfBirthChange = (selectedDate: string): void => {
+  setUserProfile({...userProfile, date_of_birth: selectedDate});
+  
+  if (selectedDate && !validateAge(selectedDate)) {
+    setMessage({
+      type: 'error',
+      text: 'Students must be at least 16 years old to register.'
+    });
+    setTimeout(() => setMessage({ type: '', text: '' }), 3000);
+  }
+};
 
   const hasPendingAppointments = (): boolean => {
     const today = new Date().toISOString().split('T')[0];
@@ -245,48 +294,129 @@ const checkProfileComplete = (profileData = userProfile): boolean => {
   // Event Handlers
   const handleImageUpload = async (event: React.ChangeEvent<HTMLInputElement>): Promise<void> => {
   const file = event.target.files?.[0];
-  if (file) {
+  if (!file) return;
+
+  // Validation (keep existing validation code)
+  const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp'];
+  const maxSize = 5 * 1024 * 1024; // 5MB
+
+  if (!allowedTypes.includes(file.type)) {
+  setMessage({ 
+    type: 'error', 
+    text: 'Invalid file type. Please upload a JPEG, PNG, GIF, or WebP image file.' 
+  });
+  setTimeout(() => setMessage({ type: '', text: '' }), 5000);
+  event.target.value = '';
+  return;
+}
+
+if (file.size > maxSize) {
+  setMessage({ 
+    type: 'error', 
+    text: 'File too large. Please choose an image smaller than 5MB.' 
+  });
+  setTimeout(() => setMessage({ type: '', text: '' }), 5000);
+  event.target.value = '';
+  return;
+}
+
+  // Store the previous image URL for rollback
+  const previousImageUrl = userProfile.avatar_url;
+
+  try {
     // Show preview immediately
     const reader = new FileReader();
     reader.onload = (e: ProgressEvent<FileReader>) => {
-      setUserProfile({...userProfile, avatar_url: e.target?.result as string}); // Changed from profile_image
+      setUserProfile(prev => ({...prev, avatar_url: e.target?.result as string}));
     };
     reader.readAsDataURL(file);
 
-    // Upload the actual file to server
-    try {
-      const formData = new FormData();
-      formData.append('avatar', file);
+    // Prepare FormData
+    const formData = new FormData();
+    formData.append('avatar', file);
 
-      const token = getAuthToken();
-      const response = await fetch(`${API_BASE_URL}/api/profile/avatar`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`
-        },
-        body: formData
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to upload profile image');
-      }
-
-      const data = await response.json();
-      console.log('Image upload response:', data);
-      // Update with server response
-      if (data.avatar_url) {
-        setUserProfile(prev => ({...prev, avatar_url: data.avatar_url}));
-      }
-      setMessage({ type: 'success', text: 'Profile image uploaded successfully!' });
-      setTimeout(() => setMessage({ type: '', text: '' }), 3000);
-      
-    } catch (error) {
-      console.error('Error uploading image:', error);
-      setMessage({ type: 'error', text: 'Failed to upload profile image. Please try again.' });
-      setTimeout(() => setMessage({ type: '', text: '' }), 5000);
+    // Get authentication token
+    const token = getAuthToken();
+    if (!token) {
+      throw new Error('Authentication token not found. Please log in again.');
     }
+
+    const response = await fetch(`${API_BASE_URL}/api/auth/profile/avatar`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Accept': 'application/json'
+      },
+      body: formData
+    });
+
+    if (!response.ok) {
+      let errorMessage = `Upload failed with status ${response.status}`;
+      
+      try {
+        const errorData = await response.json();
+        if (response.status === 403) {
+          errorMessage = 'Access denied. Please check your permissions or try logging in again.';
+        } else if (response.status === 413) {
+          errorMessage = 'File too large. Please choose a smaller image.';
+        } else if (response.status === 422) {
+          errorMessage = errorData.errors ? 
+            Object.values(errorData.errors).flat().join(', ') : 
+            'Invalid file format or data.';
+        } else {
+          errorMessage = errorData.message || errorData.error || errorMessage;
+        }
+      } catch (parseError) {
+        if (response.status === 403) {
+          errorMessage = 'Access denied. You may need to log in again or check your permissions.';
+        }
+      }
+      
+      throw new Error(errorMessage);
+    }
+
+    const data = await response.json();
+    
+    // Handle different possible response formats
+    let imageUrl = data.avatar_url || data.url || data.path || data.image_url;
+    
+    // If the URL is relative, make it absolute
+    if (imageUrl && !imageUrl.startsWith('http')) {
+      imageUrl = `${API_BASE_URL}${imageUrl.startsWith('/') ? '' : '/'}${imageUrl}`;
+    }
+
+    // Update profile with server response
+    setUserProfile(prev => ({ 
+      ...prev, 
+      avatar_url: imageUrl
+    }));
+
+    setMessage({ 
+      type: 'success', 
+      text: 'Profile image uploaded successfully!' 
+    });
+
+    // Clear the file input
+    event.target.value = '';
+    
+  } catch (error) {
+    console.error('Image upload error:', error);
+    
+    // Revert the preview on error to previous image
+    setUserProfile(prev => ({ ...prev, avatar_url: previousImageUrl }));
+    
+    setMessage({ 
+      type: 'error', 
+      text: error instanceof Error ? error.message : 'Failed to upload image. Please try again.' 
+    });
+    
+    // Clear the file input on error too
+    event.target.value = '';
+  } finally {
+    setTimeout(() => setMessage({ type: '', text: '' }), 5000);
   }
 };
+
 
   const handleAllergiesChange = (type: 'known' | 'uncertain'): void => {
     if (type === 'known') {
@@ -307,13 +437,40 @@ const checkProfileComplete = (profileData = userProfile): boolean => {
   };
 
   const openRescheduleModal = (appointment: Appointment): void => {
-    setRescheduleForm({
-      id: appointment.id,
-      date: appointment.date,
-      time: appointment.time
-    });
-    setShowRescheduleModal(true);
-  };
+  console.log('Opening reschedule modal for appointment:', appointment);
+  
+  // Prevent body scrolling
+  document.body.classList.add('modal-open');
+  
+  // Clear form and set appointment data
+  setRescheduleForm({
+    id: appointment.id,
+    date: '',
+    time: ''
+  });
+  
+  // Clear any existing messages
+  setMessage({ type: '', text: '' });
+  
+  // Show the modal
+  setShowRescheduleModal(true);
+};
+console.log('Modal should be open:', showRescheduleModal);
+console.log('Reschedule form data:', rescheduleForm);
+
+const closeRescheduleModal = (): void => {
+  // Re-enable body scrolling
+  document.body.classList.remove('modal-open');
+  
+  // Close modal
+  setShowRescheduleModal(false);
+  
+  // Clear form
+  setRescheduleForm({ id: '', date: '', time: '' });
+  
+  // Clear messages
+  setMessage({ type: '', text: '' });
+};
 
   // API Functions
   const fetchSpecializations = async (): Promise<void> => {
@@ -461,12 +618,26 @@ const canRescheduleAppointment = (appointment: Appointment): boolean => {
 };
 
 
+// Replace your saveProfile function with this improved version:
+
 const saveProfile = async (): Promise<void> => {
   setLoading(true);
   try {
     // Validate required fields before sending
-    const required: (keyof UserProfile)[] = ['name', 'email', 'department', 'phone_number', 'date_of_birth', 'emergency_contact_name', 'emergency_contact_phone'];
-    const missingFields = required.filter(field => !userProfile[field] || String(userProfile[field]).trim() === '');
+    const required: (keyof UserProfile)[] = [
+      'name', 
+      'email', 
+      'department', 
+      'phone_number', 
+      'date_of_birth', 
+      'emergency_contact_name', 
+      'emergency_contact_phone'
+    ];
+    
+    const missingFields = required.filter(field => {
+      const value = userProfile[field];
+      return !value || String(value).trim() === '';
+    });
     
     if (missingFields.length > 0) {
       const fieldNames = missingFields.map(field => {
@@ -488,50 +659,196 @@ const saveProfile = async (): Promise<void> => {
       return;
     }
 
+    // Validate email format
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(userProfile.email)) {
+      setMessage({ 
+        type: 'error', 
+        text: 'Please enter a valid email address' 
+      });
+      setTimeout(() => setMessage({ type: '', text: '' }), 5000);
+      setLoading(false);
+      return;
+    }
+
+    // Validate phone number (basic check)
+    if (userProfile.phone_number && userProfile.phone_number.length < 10) {
+      setMessage({ 
+        type: 'error', 
+        text: 'Please enter a valid phone number' 
+      });
+      setTimeout(() => setMessage({ type: '', text: '' }), 5000);
+      setLoading(false);
+      return;
+    }
+
+    // Prepare clean data for submission
+    const profileData = {
+      student_id: userProfile.student_id?.trim(),
+      name: userProfile.name?.trim(),
+      email: userProfile.email?.trim(),
+      department: userProfile.department?.trim(),
+      phone_number: userProfile.phone_number?.trim(),
+      date_of_birth: userProfile.date_of_birth,
+      emergency_contact_name: userProfile.emergency_contact_name?.trim(),
+      emergency_contact_phone: userProfile.emergency_contact_phone?.trim(),
+      medical_history: userProfile.medical_history?.trim() || '',
+      allergies: userProfile.allergies?.trim() || '',
+      has_known_allergies: Boolean(userProfile.has_known_allergies),
+      allergies_uncertain: Boolean(userProfile.allergies_uncertain),
+      addictions: userProfile.addictions?.trim() || ''
+    };
+
     const token = getAuthToken();
-    console.log('Sending profile data:', userProfile);
+    if (!token) {
+      throw new Error('Authentication token not found. Please log in again.');
+    }
+
+    console.log('Sending profile data:', profileData);
     
     const response = await fetch(`${API_BASE_URL}/api/auth/profile`, {
       method: 'POST',
       headers: {  
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`
+        'Authorization': `Bearer ${token}`,
+        'Accept': 'application/json'
       },
-      body: JSON.stringify(userProfile)
+      body: JSON.stringify(profileData)
     });
     
+    console.log('Profile save response status:', response.status);
+    
     if (!response.ok) {
-      const errorData = await response.json();
-      console.log('Validation errors:', errorData);
+      let errorMessage = `Profile save failed with status ${response.status}`;
       
-      if (errorData.errors) {
-        const errorMessages = Object.values(errorData.errors).flat().join(', ');
-        throw new Error(`Validation failed: ${errorMessages}`);
+      try {
+        const errorData = await response.json();
+        console.error('Profile save error details:', errorData);
+        
+        if (response.status === 422) {
+          // Validation errors
+          if (errorData.errors) {
+            const validationErrors = Object.entries(errorData.errors)
+              .map(([field, messages]) => `${field}: ${Array.isArray(messages) ? messages.join(', ') : messages}`)
+              .join('; ');
+            errorMessage = `Validation errors: ${validationErrors}`;
+          } else {
+            errorMessage = errorData.message || 'Validation failed';
+          }
+        } else if (response.status === 500) {
+          errorMessage = 'Server error occurred. Please try again or contact support if the problem persists.';
+        } else if (response.status === 403) {
+          errorMessage = 'Access denied. Please check your permissions or try logging in again.';
+        } else {
+          errorMessage = errorData.message || errorData.error || errorMessage;
+        }
+      } catch (parseError) {
+        console.error('Could not parse error response:', parseError);
+        
+        if (response.status === 500) {
+          errorMessage = 'Server error occurred. Please try again later.';
+        } else if (response.status === 403) {
+          errorMessage = 'Access denied. You may need to log in again.';
+        }
       }
       
-      throw new Error(errorData.message || 'Failed to save profile');
+      throw new Error(errorMessage);
     }
+    
+    const responseData = await response.json();
+    console.log('Profile save successful:', responseData);
     
     // Check if profile is now complete
     const isComplete = checkProfileComplete();
     
     if (isComplete) {
-      setMessage({ type: 'success', text: 'Profile completed and saved successfully!' });
+      setMessage({ 
+        type: 'success', 
+        text: 'Profile completed and saved successfully!' 
+      });
     } else {
-      setMessage({ type: 'success', text: 'Profile saved successfully!' });
+      setMessage({ 
+        type: 'success', 
+        text: 'Profile saved successfully!' 
+      });
     }
     
     setTimeout(() => setMessage({ type: '', text: '' }), 3000);
+    
   } catch (error) {
     console.error('Error saving profile:', error);
-    setMessage({ type: 'error', text: error instanceof Error ? error.message : 'Failed to save profile. Please try again.' });
+    setMessage({ 
+      type: 'error', 
+      text: error instanceof Error ? error.message : 'Failed to save profile. Please try again.' 
+    });
     setTimeout(() => setMessage({ type: '', text: '' }), 5000);
+  } finally {
+    setLoading(false);
   }
-  setLoading(false);
 };
+
+const checkDateAvailability = async (date: string): Promise<boolean> => {
+  try {
+    const response = await apiService.get(`/holidays/check-availability?date=${date}&staff_type=clinical`);
+    
+    if (!response.is_available) {
+      const blockingHoliday = response.blocking_holidays?.[0];
+      setMessage({
+        type: 'error',
+        text: `Cannot book appointments on ${date}. ${blockingHoliday?.name ? `Reason: ${blockingHoliday.name}` : 'University holiday period'}`
+      });
+      
+      // Show alternative dates
+      if (response.alternative_dates?.length > 0) {
+        setAlternativeDates(response.alternative_dates);
+        setShowAlternativesModal(true);
+      }
+      
+      return false;
+    }
+    
+    return true;
+  } catch (error) {
+    console.error('Error checking date availability:', error);
+    return true; // Allow booking if check fails
+  }
+};
+
+// Add this function to fetch holidays and generate blocked dates
+const fetchHolidays = async (): Promise<void> => {
+  try {
+    const response = await apiService.get('/holidays');
+    const holidaysList = response.holidays || [];
+    setHolidays(holidaysList);
+    
+    // Generate list of blocked dates
+    const blocked: string[] = [];
+    holidaysList.forEach((holiday: Holiday) => {
+      if (holiday.blocks_appointments) {
+        const startDate = new Date(holiday.start_date);
+        const endDate = new Date(holiday.end_date);
+        
+        for (let d = new Date(startDate); d <= endDate; d.setDate(d.getDate() + 1)) {
+          blocked.push(d.toISOString().split('T')[0]);
+        }
+      }
+    });
+    
+    setBlockedDates(blocked);
+  } catch (error) {
+    console.error('Error fetching holidays:', error);
+  }
+};
+
+// Add this helper function to check if a date is blocked
+const isDateBlocked = (dateString: string): boolean => {
+  return blockedDates.includes(dateString);
+};
+
   
 
-  const submitAppointment = async (): Promise<void> => {
+const submitAppointment = async (): Promise<void> => {
+  // Profile and pending appointment checks (keep your existing logic)
   if (!checkProfileComplete()) {
     setMessage({ 
       type: 'error', 
@@ -559,6 +876,28 @@ const saveProfile = async (): Promise<void> => {
     return;
   }
 
+  // NEW: Check if date is blocked by holidays
+  if (isDateBlocked(appointmentForm.date)) {
+    const blockingHoliday = holidays.find(h => 
+      h.blocks_appointments && 
+      appointmentForm.date >= h.start_date && 
+      appointmentForm.date <= h.end_date
+    );
+    
+    setMessage({
+      type: 'error',
+      text: `Selected date is not available. ${blockingHoliday ? `Reason: ${blockingHoliday.name}` : 'University holiday period'}`
+    });
+    setTimeout(() => setMessage({ type: '', text: '' }), 5000);
+    return;
+  }
+
+  // Double-check with server (keep your existing logic)
+  const isAvailable = await checkDateAvailability(appointmentForm.date);
+  if (!isAvailable) {
+    return; // Stop submission if date is blocked
+  }
+
   try {
     setLoading(true);
 
@@ -567,7 +906,7 @@ const saveProfile = async (): Promise<void> => {
       date: appointmentForm.date,
       time: appointmentForm.time,
       reason: appointmentForm.reason,
-      urgency: appointmentForm.urgency, // This now supports normal, high, urgent
+      urgency: appointmentForm.urgency,
       department: appointmentForm.department
     });
 
@@ -599,103 +938,158 @@ const saveProfile = async (): Promise<void> => {
 
 
   const submitReschedule = async (): Promise<void> => {
-    if (!rescheduleForm.date || !rescheduleForm.time) {
-      setMessage({ type: 'error', text: 'Please select both date and time for rescheduling.' });
-      setTimeout(() => setMessage({ type: '', text: '' }), 5000);
-      return;
+  // Validation
+  if (!rescheduleForm.id) {
+    setMessage({ type: 'error', text: 'No appointment selected for rescheduling.' });
+    setTimeout(() => setMessage({ type: '', text: '' }), 5000);
+    return;
+  }
+
+  if (!rescheduleForm.date || !rescheduleForm.time) {
+    setMessage({ type: 'error', text: 'Please select both date and time for rescheduling.' });
+    setTimeout(() => setMessage({ type: '', text: '' }), 5000);
+    return;
+  }
+
+  // Check if the selected date is not in the past
+  const selectedDateTime = new Date(`${rescheduleForm.date}T${rescheduleForm.time}`);
+  const now = new Date();
+  
+  if (selectedDateTime <= now) {
+    setMessage({ type: 'error', text: 'Cannot reschedule to a past date/time.' });
+    setTimeout(() => setMessage({ type: '', text: '' }), 5000);
+    return;
+  }
+
+  // Check if date is blocked by holidays
+  if (isDateBlocked(rescheduleForm.date)) {
+    const blockingHoliday = holidays.find(h => 
+      h.blocks_appointments && 
+      rescheduleForm.date >= h.start_date && 
+      rescheduleForm.date <= h.end_date
+    );
+    
+    setMessage({
+      type: 'error',
+      text: `Selected date is not available. ${blockingHoliday ? `Reason: ${blockingHoliday.name}` : 'University holiday period'}`
+    });
+    setTimeout(() => setMessage({ type: '', text: '' }), 5000);
+    return;
+  }
+
+  setLoading(true);
+  
+  try {
+    const token = getAuthToken();
+    if (!token) {
+      throw new Error('Authentication token not found. Please log in again.');
     }
 
-    setLoading(true);
+    console.log('Sending reschedule request:', {
+      appointmentId: rescheduleForm.id,
+      date: rescheduleForm.date,
+      time: rescheduleForm.time
+    });
+
+    const response = await fetch(`${API_BASE_URL}/api/student/appointments/${rescheduleForm.id}/reschedule`, {
+      method: 'PUT',
+      headers: { 
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+        'Accept': 'application/json'
+      },
+      body: JSON.stringify({ 
+        date: rescheduleForm.date, 
+        time: rescheduleForm.time 
+      })
+    });
     
-    try {
-      const token = getAuthToken();
-      const response = await fetch(`${API_BASE_URL}/api/student/appointments/${rescheduleForm.id}/reschedule`, {
-        method: 'PUT',
-        headers: { 
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify({ 
-          date: rescheduleForm.date, 
-          time: rescheduleForm.time 
-        })
-      });
+    console.log('Reschedule response status:', response.status);
+    
+    if (!response.ok) {
+      let errorMessage = 'Failed to reschedule appointment';
       
-      if (!response.ok) {
-        // Check if response is JSON before trying to parse
-        let errorMessage = 'Failed to reschedule appointment';
-        
-        const contentType = response.headers.get('content-type');
-        if (contentType && contentType.includes('application/json')) {
-          try {
-            const errorData = await response.json();
-            errorMessage = errorData.message || errorMessage;
-          } catch (parseError) {
-            console.error('Error parsing JSON response:', parseError);
-          }
-        } else {
-          // If it's not JSON, get the text content for debugging
-          const textResponse = await response.text();
-          console.error('Non-JSON error response:', textResponse);
-          
-          // Provide a more specific error message based on status
-          switch (response.status) {
-            case 500:
-              errorMessage = 'Server error occurred. Please try again later.';
-              break;
-            case 404:
-              errorMessage = 'Appointment not found.';
-              break;
-            case 403:
-              errorMessage = 'You are not authorized to reschedule this appointment.';
-              break;
-            case 401:
-              errorMessage = 'Your session has expired. Please log in again.';
-              break;
-            case 400:
-              errorMessage = 'Invalid rescheduling request. Please check your date and time.';
-              break;
-            default:
-              errorMessage = `Server error (${response.status}). Please try again.`;
-          }
-        }
-        
-        throw new Error(errorMessage);
-      }
-      
-      // Handle successful response
       const contentType = response.headers.get('content-type');
-      let successMessage = 'Appointment rescheduled successfully!';
-      
       if (contentType && contentType.includes('application/json')) {
         try {
-          const data = await response.json();
-          successMessage = data.message || successMessage;
+          const errorData = await response.json();
+          console.error('Reschedule error data:', errorData);
+          errorMessage = errorData.message || errorData.error || errorMessage;
         } catch (parseError) {
-          console.error('Error parsing success response JSON:', parseError);
+          console.error('Error parsing JSON response:', parseError);
+        }
+      } else {
+        const textResponse = await response.text();
+        console.error('Non-JSON error response:', textResponse);
+        
+        switch (response.status) {
+          case 500:
+            errorMessage = 'Server error occurred. Please try again later.';
+            break;
+          case 404:
+            errorMessage = 'Appointment not found or may have been cancelled.';
+            break;
+          case 403:
+            errorMessage = 'You are not authorized to reschedule this appointment.';
+            break;
+          case 401:
+            errorMessage = 'Your session has expired. Please log in again.';
+            break;
+          case 400:
+            errorMessage = 'Invalid rescheduling request. Please check your date and time.';
+            break;
+          case 422:
+            errorMessage = 'The selected time slot may no longer be available. Please choose a different time.';
+            break;
+          default:
+            errorMessage = `Server error (${response.status}). Please try again.`;
         }
       }
       
-      setMessage({ 
-        type: 'success', 
-        text: successMessage
-      });
-      
-      setShowRescheduleModal(false);
-      setRescheduleForm({ id: '', date: '', time: '' });
-      fetchAppointments();
-    } catch (error) {
-      console.error('Error rescheduling appointment:', error);
-      const errorMessage = error instanceof Error ? error.message : 'Failed to reschedule appointment. Please try again.';
-      setMessage({ 
-        type: 'error', 
-        text: errorMessage
-      });
+      throw new Error(errorMessage);
     }
     
+    // Handle successful response
+    const contentType = response.headers.get('content-type');
+    let successMessage = 'Appointment rescheduled successfully!';
+    
+    if (contentType && contentType.includes('application/json')) {
+      try {
+        const data = await response.json();
+        console.log('Reschedule success data:', data);
+        successMessage = data.message || successMessage;
+      } catch (parseError) {
+        console.error('Error parsing success response JSON:', parseError);
+      }
+    }
+    
+    setMessage({ 
+      type: 'success', 
+      text: successMessage
+    });
+    
+    // Close modal and reset form
+    setShowRescheduleModal(false);
+    setRescheduleForm({ id: '', date: '', time: '' });
+
+    // On success, close modal properly
+    closeRescheduleModal();
+    
+    // Refresh appointments to show updated data
+    await fetchAppointments();
+    
+  } catch (error) {
+    console.error('Error rescheduling appointment:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Failed to reschedule appointment. Please try again.';
+    setMessage({ 
+      type: 'error', 
+      text: errorMessage
+    });
+  } finally {
     setLoading(false);
     setTimeout(() => setMessage({ type: '', text: '' }), 5000);
-  };
+  }
+};
 
 const cancelAppointment = async (appointmentId: string): Promise<void> => {
   if (!confirm('Are you sure you want to cancel this appointment?')) {
@@ -810,6 +1204,7 @@ const cancelAppointment = async (appointmentId: string): Promise<void> => {
       await fetchUserProfile();
       await fetchSpecializations();
       await fetchAppointments();
+      await fetchHolidays(); // Add this line
     } catch (error) {
       console.error('Error initializing dashboard:', error);
     } finally {
@@ -892,6 +1287,53 @@ useEffect(() => {
   };
 }, [user]);
 
+const AlternativeDatesModal = () => (
+  showAlternativesModal && (
+    <div className="modal-backdrop show">
+      <div className="modal modal-custom show">
+        <div className="modal-content">
+          <div className="modal-header modal-header-custom">
+            <h5 className="modal-title">Alternative Available Dates</h5>
+            <button 
+              type="button" 
+              className="btn-close" 
+              onClick={() => setShowAlternativesModal(false)}
+              aria-label="Close"
+            />
+          </div>
+          <div className="modal-body">
+            <p className="mb-3">Your selected date is not available. Here are some alternative dates:</p>
+            <div className="row g-2">
+              {alternativeDates.map((date, index) => (
+                <div key={index} className="col-md-4">
+                  <button
+                    className="btn btn-outline-primary w-100"
+                    onClick={() => {
+                      setAppointmentForm({...appointmentForm, date});
+                      setShowAlternativesModal(false);
+                    }}
+                  >
+                    {new Date(date).toLocaleDateString()}
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+          <div className="modal-footer">
+            <button 
+              type="button" 
+              className="btn btn-secondary-custom" 
+              onClick={() => setShowAlternativesModal(false)}
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+);
+
 
   return (
     <>
@@ -909,7 +1351,7 @@ useEffect(() => {
     boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
     border: 'none',
     borderBottom: 'none',
-    height: '80px', // Fixed height instead of minHeight
+    minHeight: '70px', // Reduced for mobile
     padding: 0,
     margin: 0
   }}
@@ -917,50 +1359,62 @@ useEffect(() => {
   <div 
     className="container-fluid d-flex align-items-center justify-content-between h-100"
     style={{
-      padding: '0 1.5rem', // Consistent horizontal padding
+      padding: '0.5rem 1rem', // Better mobile padding
       margin: 0
     }}
   >
-    {/* Logo Section - Better proportions */}
+    {/* Logo Section - Mobile responsive */}
     <div 
-      className="navbar-brand"
+      className="navbar-brand d-flex align-items-center"
       style={{
-        display: 'flex',
-        alignItems: 'center',
-        marginRight: 0, // Remove fixed margin for flexibility
+        marginRight: 0,
         padding: 0,
-        minWidth: '280px' // Ensure consistent width
+        minWidth: '200px' // Ensure logo is always visible
       }}
     >
       <img
         src="/logo6.png"
         alt="Final International University Logo"
         style={{
-          width: '50px',
-          height: '50px',
+          width: 'clamp(40px, 10vw, 70px)', // Responsive logo size
+          height: 'clamp(40px, 10vw, 70px)',
           objectFit: 'contain',
-          borderRadius: '10px',
-          marginRight: '12px' // Consistent spacing
+          borderRadius: '8px',
+          marginRight: 'clamp(8px, 2vw, 12px)' // Responsive spacing
         }}
       />
       <div>
         <h5 
           style={{
-            color: '#212529', // Better contrast on white
+            color: '#212529',
             fontWeight: 'bold',
-            fontSize: '1.25rem',
-            marginBottom: '2px', // Tighter spacing
+            fontSize: 'clamp(0.9rem, 3vw, 1.25rem)', // Responsive font size
+            marginBottom: '2px',
             lineHeight: 1.2
           }}
+          className="d-none d-sm-block" // Hide on very small screens
         >
           Final International University
         </h5>
+        <h6 
+          style={{
+            color: '#212529',
+            fontWeight: 'bold',
+            fontSize: '0.9rem',
+            marginBottom: '2px',
+            lineHeight: 1.2
+          }}
+          className="d-block d-sm-none" // Show abbreviated name on small screens
+        >
+          FIU Medical
+        </h6>
         <small 
           style={{
             color: '#6c757d',
-            fontSize: '0.875rem',
+            fontSize: 'clamp(0.7rem, 2vw, 0.875rem)',
             lineHeight: 1
           }}
+          className="d-none d-md-block" // Hide subtitle on mobile
         >
           Medical Appointments
         </small>
@@ -969,13 +1423,17 @@ useEffect(() => {
 
     {/* Mobile menu toggle */}
     <button 
-      className="navbar-toggler d-lg-none" 
+      className="navbar-toggler d-lg-none border-0" 
       type="button" 
       data-bs-toggle="collapse" 
       data-bs-target="#navbarContent"
       aria-controls="navbarContent" 
       aria-expanded="false" 
       aria-label="Toggle navigation"
+      style={{
+        padding: '4px 8px',
+        fontSize: '1rem'
+      }}
     >
       <span className="navbar-toggler-icon"></span>
     </button>
@@ -1156,258 +1614,212 @@ useEffect(() => {
           justifyContent: 'flex-end'
         }}
       >
-        {/* Language Switcher */}
-        <div className="dropdown">
-          <button 
-            className="btn btn-outline-secondary dropdown-toggle" 
-            data-bs-toggle="dropdown"
-            style={{ 
-              borderRadius: '25px',
-              borderColor: '#6c757d', // Neutral for better contrast
-              color: '#495057',
-              backgroundColor: 'transparent',
-              padding: '8px 16px',
-              height: '40px' // Fixed height
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.background = '#f8f9fa';
-              e.currentTarget.style.borderColor = '#6c757d';
-              e.currentTarget.style.color = '#212529';
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.background = 'transparent';
-              e.currentTarget.style.borderColor = '#6c757d';
-              e.currentTarget.style.color = '#495057';
-            }}
-          >
-            <Globe size={16} className="me-1" />
-            {i18n.language === 'tr' ? 'TR' : 'EN'}
-          </button>
-          <ul 
-            className="dropdown-menu"
-            style={{
-              border: 'none',
-              boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
-              borderRadius: '12px',
-              padding: '8px 0'
-            }}
-          >
-            <li>
-              <button 
-                className="dropdown-item" 
-                onClick={() => i18n.changeLanguage('en')}
-                style={{
-                  padding: '12px 20px',
-                  transition: 'background-color 0.2s ease',
-                  color: '#212529'
-                }}
-                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f8f9fa'}
-                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
-              >
-                🇺🇸 English
-              </button>
-            </li>
-            <li>
-              <button 
-                className="dropdown-item" 
-                onClick={() => i18n.changeLanguage('tr')}
-                style={{
-                  padding: '12px 20px',
-                  transition: 'background-color 0.2s ease',
-                  color: '#212529'
-                }}
-                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f8f9fa'}
-                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
-              >
-                🇹🇷 Türkçe
-              </button>
-            </li>
-          </ul>
-        </div>
+        
 
-        {/* User Profile Dropdown */}
-        <div className="dropdown">
-          <button 
-            className="btn btn-light dropdown-toggle d-flex align-items-center" 
-            data-bs-toggle="dropdown"
-            style={{ 
-              borderRadius: '25px',
-              border: '2px solid #dee2e6',
-              padding: '6px 12px', // Tighter padding
-              background: '#f8f9fa',
-              color: '#212529',
-              height: '40px' // Match language button height
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.background = '#e9ecef';
-              e.currentTarget.style.borderColor = '#ced4da';
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.background = '#f8f9fa';
-              e.currentTarget.style.borderColor = '#dee2e6';
-            }}
-          >
-            <div 
-              className="rounded-circle me-2 d-flex align-items-center justify-content-center"
+        {/* User Profile Dropdown - Modified to remove name and move language inside */}
+<div className="dropdown">
+  <button 
+    className="btn btn-light dropdown-toggle d-flex align-items-center" 
+    data-bs-toggle="dropdown"
+    style={{ 
+      borderRadius: '25px',
+      border: '2px solid #dee2e6',
+      padding: '6px 12px',
+      background: '#f8f9fa',
+      color: '#212529',
+      height: '40px'
+    }}
+    onMouseEnter={(e) => {
+      e.currentTarget.style.background = '#e9ecef';
+      e.currentTarget.style.borderColor = '#ced4da';
+    }}
+    onMouseLeave={(e) => {
+      e.currentTarget.style.background = '#f8f9fa';
+      e.currentTarget.style.borderColor = '#dee2e6';
+    }}
+  >
+    <div 
+      className="rounded-circle me-2 d-flex align-items-center justify-content-center"
+      style={{
+        width: '28px',
+        height: '28px',
+        backgroundColor: '#dc3545',
+        color: 'white'
+      }}
+    >
+      {userProfile.avatar_url ? (
+        <img 
+          src={userProfile.avatar_url}
+          alt="Profile" 
+          style={{
+            width: '28px',
+            height: '28px',
+            borderRadius: '50%',
+            objectFit: 'cover'
+          }}
+        />
+      ) : (
+        <User size={16} />
+      )}
+    </div>
+    {/* Removed the name span completely */}
+  </button>
+  
+  <ul 
+    className="dropdown-menu dropdown-menu-end" 
+    style={{ 
+      minWidth: '280px',
+      border: 'none',
+      boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+      borderRadius: '12px',
+      padding: '8px 0'
+    }}
+  >
+    {/* User Info Header */}
+    <li 
+      className="dropdown-header"
+      style={{
+        padding: '16px 20px 16px 20px',
+        backgroundColor: '#f8f9fa',
+        borderBottom: '1px solid #e9ecef',
+        marginBottom: '8px',
+        borderTopLeftRadius: '12px',
+        borderTopRightRadius: '12px'
+      }}
+    >
+      <div className="d-flex align-items-center">
+        <div 
+          className="rounded-circle me-3 d-flex align-items-center justify-content-center"
+          style={{
+            width: '40px',
+            height: '40px',
+            backgroundColor: '#dc3545',
+            color: 'white'
+          }}
+        >
+          {userProfile.avatar_url ? (
+            <img 
+              src={userProfile.avatar_url}
+              alt="Profile" 
               style={{
-                width: '28px', // Slightly smaller
-                height: '28px',
-                backgroundColor: '#dc3545',
-                color: 'white'
+                width: '40px',
+                height: '40px',
+                borderRadius: '50%',
+                objectFit: 'cover'
               }}
-            >
-              {userProfile.avatar_url ? (
-                <img 
-                  src={userProfile.avatar_url}
-                  alt="Profile" 
-                  style={{
-                    width: '28px',
-                    height: '28px',
-                    borderRadius: '50%',
-                    objectFit: 'cover'
-                  }}
-                />
-              ) : (
-                <User size={16} />
-              )}
-            </div>
-            <span className="fw-semibold d-none d-md-inline">
-              {userProfile.name || 'Student'}
+            />
+          ) : (
+            <User size={20} />
+          )}
+        </div>
+        <div>
+          <div className="fw-semibold">{userProfile.name || 'Student'}</div>
+          <small className="text-muted">{userProfile.email}</small>
+          <div>
+            <small className="text-muted">ID: {userProfile.student_id}</small>
+          </div>
+          <div>
+            <small className="text-muted">{userProfile.department}</small>
+          </div>
+        </div>
+      </div>
+    </li>
+    
+    {/* Language Selection - NEW SECTION */}
+    <li>
+      <h6 className="dropdown-header" style={{ padding: '12px 20px 8px 20px', margin: 0, color: '#6c757d', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+        Language
+      </h6>
+    </li>
+    <li>
+      <button 
+        className="dropdown-item d-flex align-items-center"
+        style={{
+          padding: '12px 20px',
+          transition: 'background-color 0.2s ease'
+        }}
+        onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f8f9fa'}
+        onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+        onClick={() => i18n.changeLanguage('en')}
+      >
+        <Globe size={16} className="me-3" />
+        <div className="flex-grow-1 d-flex justify-content-between align-items-center">
+          <span>🇺🇸 English</span>
+          {i18n.language === 'en' && (
+            <CheckCircle size={16} className="text-success" />
+          )}
+        </div>
+      </button>
+    </li>
+    <li>
+      <button 
+        className="dropdown-item d-flex align-items-center"
+        style={{
+          padding: '12px 20px',
+          transition: 'background-color 0.2s ease'
+        }}
+        onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f8f9fa'}
+        onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+        onClick={() => i18n.changeLanguage('tr')}
+      >
+        <Globe size={16} className="me-3" />
+        <div className="flex-grow-1 d-flex justify-content-between align-items-center">
+          <span>🇹🇷 Türkçe</span>
+          {i18n.language === 'tr' && (
+            <CheckCircle size={16} className="text-success" />
+          )}
+        </div>
+      </button>
+    </li>
+    
+    <li><hr className="dropdown-divider" style={{ margin: '8px 0' }} /></li>
+    
+    {/* Profile Status */}
+    <li>
+      <button 
+        className="dropdown-item d-flex align-items-center"
+        style={{
+          padding: '12px 20px',
+          transition: 'background-color 0.2s ease'
+        }}
+        onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f8f9fa'}
+        onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+        onClick={() => setActiveTab('profile')}
+      >
+        <User size={16} className="me-3" />
+        <div className="flex-grow-1">
+          Profile
+          {!profileComplete && (
+            <span className="badge bg-warning text-dark ms-2" style={{ fontSize: '0.7rem' }}>
+              Incomplete
             </span>
-          </button>
-                <ul 
-                  className="dropdown-menu dropdown-menu-end" 
-                  style={{ 
-                    minWidth: '280px',
-                    border: 'none',
-                    boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
-                    borderRadius: '12px',
-                    padding: '8px 0'
-                  }}
-                >
-                  {/* User Info Header */}
-                  <li 
-                    className="dropdown-header"
-                    style={{
-                      padding: '16px 20px 16px 20px',
-                      backgroundColor: '#f8f9fa',
-                      borderBottom: '1px solid #e9ecef',
-                      marginBottom: '8px',
-                      borderTopLeftRadius: '12px',
-                      borderTopRightRadius: '12px'
-                    }}
-                  >
-                    <div className="d-flex align-items-center">
-                      <div 
-                        className="rounded-circle me-3 d-flex align-items-center justify-content-center"
-                        style={{
-                          width: '40px',
-                          height: '40px',
-                          backgroundColor: '#dc3545',
-                          color: 'white'
-                        }}
-                      >
-                        {userProfile.avatar_url ? (
-                          <img 
-                            src={userProfile.avatar_url}
-                            alt="Profile" 
-                            style={{
-                              width: '40px',
-                              height: '40px',
-                              borderRadius: '50%',
-                              objectFit: 'cover'
-                            }}
-                          />
-                        ) : (
-                          <User size={20} />
-                        )}
-                      </div>
-                      <div>
-                        <div className="fw-semibold">{userProfile.name || 'Student'}</div>
-                        <small className="text-muted">{userProfile.email}</small>
-                        <div>
-                          <small className="text-muted">ID: {userProfile.student_id}</small>
-                        </div>
-                        <div>
-                          <small className="text-muted">{userProfile.department}</small>
-                        </div>
-                      </div>
-                    </div>
-                  </li>
-                  
-                  {/* Profile Status */}
-                  <li>
-                    <button 
-                      className="dropdown-item d-flex align-items-center"
-                      style={{
-                        padding: '12px 20px',
-                        transition: 'background-color 0.2s ease'
-                      }}
-                      onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f8f9fa'}
-                      onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
-                      onClick={() => setActiveTab('profile')}
-                    >
-                      <User size={16} className="me-3" />
-                      <div className="flex-grow-1">
-                        Profile
-                        {!profileComplete && (
-                          <span className="badge bg-warning text-dark ms-2" style={{ fontSize: '0.7rem' }}>
-                            Incomplete
-                          </span>
-                        )}
-                      </div>
-                    </button>
-                  </li>
-
-                  {/* Notifications */}
-                  <li>
-                    <button 
-                      className="dropdown-item d-flex align-items-center"
-                      style={{
-                        padding: '12px 20px',
-                        transition: 'background-color 0.2s ease'
-                      }}
-                      onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f8f9fa'}
-                      onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
-                      onClick={() => setUnreadNotifications(0)}
-                    >
-                      <Bell size={16} className="me-3" />
-                      <div className="flex-grow-1">
-                        Notifications
-                        {unreadNotifications > 0 && (
-                          <span 
-                            className="badge bg-danger rounded-pill ms-2"
-                            style={{ fontSize: '0.7rem' }}
-                          >
-                            {unreadNotifications > 99 ? '99+' : unreadNotifications}
-                          </span>
-                        )}
-                      </div>
-                    </button>
-                  </li>
-                  
-                  <li><hr className="dropdown-divider" style={{ margin: '8px 0' }} /></li>
-                  
-                  {/* Logout */}
-                  {onLogout && (
-                    <li>
-                      <button 
-                        className="dropdown-item d-flex align-items-center text-danger" 
-                        onClick={onLogout}
-                        style={{
-                          padding: '12px 20px',
-                          transition: 'background-color 0.2s ease'
-                        }}
-                        onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f8f9fa'}
-                        onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
-                      >
-                        <LogOut size={16} className="me-3" />
-                        {t('nav.logout')}
-                      </button>
-                    </li>
-                  )}
-                </ul>
-              </div>
+          )}
+        </div>
+      </button>
+    </li>
+    
+    <li><hr className="dropdown-divider" style={{ margin: '8px 0' }} /></li>
+    
+    {/* Logout */}
+    {onLogout && (
+      <li>
+        <button 
+          className="dropdown-item d-flex align-items-center text-danger" 
+          onClick={onLogout}
+          style={{
+            padding: '12px 20px',
+            transition: 'background-color 0.2s ease'
+          }}
+          onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f8f9fa'}
+          onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+        >
+          <LogOut size={16} className="me-3" />
+          {t('nav.logout')}
+        </button>
+      </li>
+    )}
+  </ul>
+</div>
             </div>
           </div>
         </div>
@@ -1476,54 +1888,40 @@ useEffect(() => {
                   </div>
                 </div>
 
-                {/* Statistics Cards */}
-                <div className="col-md-3 col-sm-6">
-                  <div className="card stat-card">
-                    <div className="card-body p-4 text-center">
-                      <div className="stat-icon-wrapper stat-icon-primary">
-                        <Calendar size={30} />
-                      </div>
-                      <h4 className="fw-bold mb-1 text-university-primary">{stats.total}</h4>
-                      <p className="text-muted mb-0">{t('dashboard.total_appointments')}</p>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="col-md-3 col-sm-6">
-                  <div className="card stat-card">
-                    <div className="card-body p-4 text-center">
-                      <div className="stat-icon-wrapper stat-icon-success">
-                        <CheckCircle size={30} />
-                      </div>
-                      <h4 className="fw-bold text-success mb-1">{stats.completed}</h4>
-                      <p className="text-muted mb-0">Completed</p>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="col-md-3 col-sm-6">
-                  <div className="card stat-card">
-                    <div className="card-body p-4 text-center">
-                      <div className="stat-icon-wrapper stat-icon-warning">
-                        <Clock size={30} />
-                      </div>
-                      <h4 className="fw-bold text-warning mb-1">{stats.pending}</h4>
-                      <p className="text-muted mb-0">Pending</p>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="col-md-3 col-sm-6">
-                  <div className="card stat-card">
-                    <div className="card-body p-4 text-center">
-                      <div className="stat-icon-wrapper stat-icon-info">
-                        <TrendingUp size={30} />
-                      </div>
-                      <h4 className="fw-bold text-info mb-1">{stats.upcoming}</h4>
-                      <p className="text-muted mb-0">Upcoming</p>
-                    </div>
-                  </div>
-                </div>
+                 {/* Statistics Cards - Better mobile layout */}
+    {[
+      { icon: Calendar, value: stats.total, label: t('dashboard.total_appointments'), color: '#E53E3E' },
+      { icon: CheckCircle, value: stats.completed, label: 'Completed', color: '#28a745' },
+      { icon: Clock, value: stats.pending, label: 'Pending', color: '#ffc107' },
+      { icon: TrendingUp, value: stats.upcoming, label: 'Upcoming', color: '#17a2b8' }
+    ].map((stat, index) => (
+      <div key={index} className="col-6 col-lg-3">
+        <div className="card stat-card h-100">
+          <div className="card-body p-3 p-md-4 text-center">
+            <div 
+              className="stat-icon-wrapper d-inline-flex align-items-center justify-content-center mb-3"
+              style={{
+                width: 'clamp(50px, 12vw, 60px)',
+                height: 'clamp(50px, 12vw, 60px)',
+                borderRadius: '50%'
+              }}
+            >
+              <stat.icon size={24} style={{ color: stat.color }} />
+            </div>
+            <h4 
+              className="fw-bold mb-1" 
+              style={{ 
+                color: stat.color,
+                fontSize: 'clamp(1.2rem, 5vw, 1.5rem)'
+              }}
+            >
+              {stat.value}
+            </h4>
+            <p className="text-muted mb-0 small">{stat.label}</p>
+          </div>
+        </div>
+      </div>
+    ))}
 
                 {/* Quick Actions */}
                 <div className="col-12">
@@ -1575,45 +1973,86 @@ useEffect(() => {
                   </div>
                 </div>
 
-                {/* Recent Appointments */}
-                {appointments.length > 0 && (
-                  <div className="col-12">
-                    <div className="card card-custom">
-                      <div className="card-header bg-white border-0 pb-0">
-                        <div className="d-flex justify-content-between align-items-center">
-                          <h5 className="fw-bold mb-0">Recent Appointments</h5>
-                          <button 
-                            className="btn btn-sm btn-outline-primary-custom"
-                            onClick={() => setActiveTab('history')}
-                          >
-                            View All
-                          </button>
-                        </div>
+                {/* Recent Appointments - Mobile Responsive */}
+{appointments.length > 0 && (
+  <div className="col-12">
+    <div className="card shadow-sm border-0" style={{ borderRadius: '1rem' }}>
+      <div className="card-header bg-white border-0 pb-0">
+        <div className="d-flex justify-content-between align-items-center">
+          <h5 className="fw-bold mb-0">Recent Appointments</h5>
+          <button 
+            className="btn btn-sm btn-outline-primary"
+            onClick={() => setActiveTab('history')}
+            style={{ borderRadius: '0.5rem' }}
+          >
+            View All
+          </button>
+        </div>
+      </div>
+      <div className="card-body p-3 p-md-4">
+        {/* Desktop: Original layout */}
+        <div className="d-none d-md-block">
+          {appointments.slice(0, 3).map((appointment) => (
+            <div key={appointment.id} className="d-flex align-items-center p-3 bg-light rounded-3 mb-3">
+              <div className="me-3">
+                {getSpecialtyIcon(appointment.specialty)}
+              </div>
+              <div className="flex-grow-1">
+                <h6 className="mb-1 fw-semibold">{appointment.doctor}</h6>
+                <div className="d-flex align-items-center text-muted small">
+                  <Calendar size={14} className="me-1" />
+                  {new Date(appointment.date).toLocaleDateString()}
+                  <Clock size={14} className="ms-3 me-1" />
+                  {appointment.time}
+                </div>
+                <small className="text-muted">{appointment.reason}</small>
+              </div>
+              <span className={getStatusBadge(appointment.status)}>
+                {t(`status.${appointment.status}`)}
+              </span>
+            </div>
+          ))}
+        </div>
+
+        {/* Mobile: Card layout */}
+        <div className="d-block d-md-none">
+          {appointments.slice(0, 3).map((appointment) => (
+            <div key={appointment.id} className="card mb-2 border-0 bg-light">
+              <div className="card-body p-3">
+                <div className="d-flex justify-content-between align-items-start mb-2">
+                  <div className="flex-grow-1">
+                    <div className="d-flex align-items-center mb-1">
+                      <div className="me-2">
+                        {getSpecialtyIcon(appointment.specialty)}
                       </div>
-                      <div className="card-body p-4">
-                        {appointments.slice(0, 3).map((appointment) => (
-                          <div key={appointment.id} className="appointment-card">
-                            <div className="me-3">
-                              {getSpecialtyIcon(appointment.specialty)}
-                            </div>
-                            <div className="flex-grow-1">
-                              <h6 className="mb-1 fw-semibold">{appointment.doctor}</h6>
-                              <div className="d-flex align-items-center text-muted small">
-                                <Calendar size={14} className="me-1" />
-                                {new Date(appointment.date).toLocaleDateString()}
-                                <Clock size={14} className="ms-3 me-1" />
-                                {appointment.time}
-                              </div>
-                            </div>
-                            <span className={getStatusBadge(appointment.status)}>
-                              {appointment.status.charAt(0).toUpperCase() + appointment.status.slice(1)}
-                            </span>
-                          </div>
-                        ))}
-                      </div>
+                      <h6 className="mb-0 fw-semibold">{appointment.doctor}</h6>
+                    </div>
+                    <div className="d-flex align-items-center text-muted small mb-1">
+                      <Calendar size={12} className="me-1" />
+                      <span className="me-3">{new Date(appointment.date).toLocaleDateString()}</span>
+                      <Clock size={12} className="me-1" />
+                      <span>{appointment.time}</span>
                     </div>
                   </div>
-                )}
+                  <span className={`${getStatusBadge(appointment.status)} small`}>
+                    {t(`status.${appointment.status}`)}
+                  </span>
+                </div>
+                <small className="text-muted d-block" style={{ 
+                  overflow: 'hidden', 
+                  textOverflow: 'ellipsis', 
+                  whiteSpace: 'nowrap' 
+                }}>
+                  {appointment.reason}
+                </small>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  </div>
+)}
               </div>
             )}
 
@@ -1629,34 +2068,202 @@ useEffect(() => {
                 <div className="card-body p-4">
                   <div className="row g-4">
                     {/* Profile Image */}
-                    <div className="col-12 text-center">
-                      <div className="profile-image-container">
-                        {userProfile.avatar_url ? (
-                        <img 
-                          src={userProfile.avatar_url}
-                          alt="Profile" 
-                          className="profile-image-large"
-                        />
-                      ) : (
-                        <div className="profile-image-placeholder">
-                          <User size={60} className="text-university-primary" />
-                        </div>
-                      )}
-                        <label 
-                          htmlFor="profileImageInput" 
-                          className="btn btn-sm profile-image-upload-btn"
-                        >
-                          <Camera size={16} />
-                        </label>
-                        <input 
-                          id="profileImageInput"
-                          type="file" 
-                          accept="image/*" 
-                          onChange={handleImageUpload}
-                          style={{ display: 'none' }}
-                        />
-                      </div>
+<div className="col-12 text-center">
+  <div className="profile-image-container">
+    {userProfile.avatar_url ? (
+      <img 
+        src={userProfile.avatar_url}
+        alt="Profile" 
+        style={{
+          width: 'clamp(100px, 25vw, 150px)', // Responsive image size
+          height: 'clamp(100px, 25vw, 150px)',
+          borderRadius: '50%',
+          objectFit: 'cover',
+          border: '4px solid var(--university-primary)'
+        }}
+      />
+    ) : (
+      <div 
+        style={{
+          width: 'clamp(100px, 25vw, 150px)',
+          height: 'clamp(100px, 25vw, 150px)',
+          borderRadius: '50%',
+          backgroundColor: 'var(--university-light)',
+          border: '4px solid var(--university-primary)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center'
+        }}
+      >
+        <User size={60} className="text-university-primary" />
+      </div>
+    )}
+    
+    <label 
+      htmlFor="profileImageInput" 
+      className="btn btn-sm"
+      style={{
+        position: 'absolute',
+        bottom: 0,
+        right: 'calc(50% - clamp(50px, 12.5vw, 75px))', // Center the button
+        backgroundColor: 'var(--university-primary)',
+        color: 'white',
+        borderRadius: '50%',
+        width: 'clamp(30px, 8vw, 40px)',
+        height: 'clamp(30px, 8vw, 40px)',
+        border: '2px solid white',
+        cursor: 'pointer',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: 0
+      }}
+      title="Upload profile photo"
+    >
+      <Camera size={16} />
+    </label>
+    
+    <input 
+      id="profileImageInput"
+      type="file" 
+      accept="image/jpeg,image/jpg,image/png,image/gif,image/webp" 
+      onChange={handleImageUpload}
+      style={{ display: 'none' }}
+    />
+  </div>
+
+  
+  {/* Photo Guidelines Dropdown */}
+  <div className="mt-3">
+    <div className="accordion" id="photoGuidelines">
+      <div className="accordion-item" style={{ border: 'none', background: 'transparent' }}>
+        <h2 className="accordion-header" id="photoGuidelinesHeading">
+          <button 
+            className="accordion-button collapsed"
+            type="button" 
+            data-bs-toggle="collapse" 
+            data-bs-target="#photoGuidelinesCollapse" 
+            aria-expanded="false" 
+            aria-controls="photoGuidelinesCollapse"
+            style={{
+              background: 'transparent',
+              border: '1px solid #dee2e6',
+              borderRadius: '8px',
+              padding: '8px 16px',
+              fontSize: '0.875rem',
+              color: '#6c757d'
+            }}
+          >
+            <Camera size={16} className="me-2" />
+            Photo Upload Guidelines
+          </button>
+        </h2>
+        <div 
+          id="photoGuidelinesCollapse" 
+          className="accordion-collapse collapse" 
+          aria-labelledby="photoGuidelinesHeading" 
+          data-bs-parent="#photoGuidelines"
+        >
+          <div className="accordion-body" style={{ padding: '16px 0' }}>
+            <div className="photo-requirements text-start" style={{ maxWidth: '400px', margin: '0 auto' }}>
+              <div className="row g-2">
+                <div className="col-12">
+                  <div className="d-flex align-items-start">
+                    <CheckCircle size={16} className="text-success me-2 mt-1 flex-shrink-0" />
+                    <div>
+                      <strong className="text-dark">File Types:</strong>
+                      <br />
+                      <small className="text-muted">JPEG, PNG, GIF, or WebP formats</small>
                     </div>
+                  </div>
+                </div>
+                
+                <div className="col-12">
+                  <div className="d-flex align-items-start">
+                    <CheckCircle size={16} className="text-success me-2 mt-1 flex-shrink-0" />
+                    <div>
+                      <strong className="text-dark">File Size:</strong>
+                      <br />
+                      <small className="text-muted">Maximum 5MB per file</small>
+                    </div>
+                  </div>
+                </div>
+                
+                <div className="col-12">
+                  <div className="d-flex align-items-start">
+                    <CheckCircle size={16} className="text-success me-2 mt-1 flex-shrink-0" />
+                    <div>
+                      <strong className="text-dark">Dimensions:</strong>
+                      <br />
+                      <small className="text-muted">Square format (1:1 ratio) recommended</small>
+                    </div>
+                  </div>
+                </div>
+                
+                <div className="col-12">
+                  <div className="d-flex align-items-start">
+                    <CheckCircle size={16} className="text-success me-2 mt-1 flex-shrink-0" />
+                    <div>
+                      <strong className="text-dark">Quality:</strong>
+                      <br />
+                      <small className="text-muted">Clear, well-lit, professional appearance</small>
+                    </div>
+                  </div>
+                </div>
+                
+                <div className="col-12">
+                  <div className="d-flex align-items-start">
+                    <CheckCircle size={16} className="text-success me-2 mt-1 flex-shrink-0" />
+                    <div>
+                      <strong className="text-dark">Content:</strong>
+                      <br />
+                      <small className="text-muted">Face clearly visible, appropriate attire</small>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    
+    {/* Remove photo button if photo exists */}
+    {userProfile.avatar_url && (
+      <button 
+        type="button"
+        className="btn btn-outline-danger btn-sm mt-3"
+        onClick={async () => {
+          if (confirm('Are you sure you want to remove your profile photo?')) {
+            try {
+              const token = getAuthToken();
+              const response = await fetch(`${API_BASE_URL}/api/auth/profile/avatar`, {
+                method: 'DELETE',
+                headers: {
+                  'Authorization': `Bearer ${token}`,
+                  'Accept': 'application/json'
+                }
+              });
+              
+              if (response.ok) {
+                setUserProfile({...userProfile, avatar_url: null});
+                setMessage({ type: 'success', text: 'Profile photo removed successfully!' });
+              } else {
+                throw new Error('Failed to remove photo');
+              }
+            } catch (error) {
+              setMessage({ type: 'error', text: 'Failed to remove photo. Please try again.' });
+            }
+            setTimeout(() => setMessage({ type: '', text: '' }), 3000);
+          }
+        }}
+      >
+        <X size={14} className="me-1" />
+        Remove Photo
+      </button>
+    )}
+  </div>
+</div>
 
                     {/* Basic Information */}
                     <div className="col-md-6">
@@ -1723,16 +2330,26 @@ useEffect(() => {
                     </div>
 
                     <div className="col-md-6">
-                      <label className="form-label fw-semibold">Date of Birth <span className="text-danger">*</span></label>
-                      <input
-                        type="date"
-                        className="form-control form-control-custom form-control-lg"
-                        value={userProfile.date_of_birth}
-                        onChange={(e) => setUserProfile({...userProfile, date_of_birth: e.target.value})}
-                        max={new Date().toISOString().split('T')[0]}
-                        required
-                      />
-                    </div>
+  <label className="form-label fw-semibold">Date of Birth <span className="text-danger">*</span></label>
+  <input
+    type="date"
+    className={`form-control form-control-custom form-control-lg ${
+      userProfile.date_of_birth && !validateAge(userProfile.date_of_birth) ? 'is-invalid' : ''
+    }`}
+    value={userProfile.date_of_birth}
+    onChange={(e) => handleDateOfBirthChange(e.target.value)}
+    max={getMaxBirthDate()}
+    required
+  />
+  {userProfile.date_of_birth && !validateAge(userProfile.date_of_birth) && (
+    <div className="invalid-feedback d-block">
+      Students must be at least 16 years old to register.
+    </div>
+  )}
+  <small className="form-text text-muted">
+    Students must be at least 16 years old
+  </small>
+</div>
 
                     <div className="col-md-6">
                       <label className="form-label fw-semibold">Emergency Contact Name <span className="text-danger">*</span></label>
@@ -1947,11 +2564,39 @@ useEffect(() => {
                         type="date"
                         className="form-control form-control-custom form-control-lg"
                         value={appointmentForm.date}
-                        onChange={(e) => setAppointmentForm({...appointmentForm, date: e.target.value})}
+                        onChange={(e) => {
+                          const selectedDate = e.target.value;
+                          
+                          // Check if date is blocked
+                          if (isDateBlocked(selectedDate)) {
+                            const blockingHoliday = holidays.find(h => 
+                              h.blocks_appointments && 
+                              selectedDate >= h.start_date && 
+                              selectedDate <= h.end_date
+                            );
+                            
+                            setMessage({
+                              type: 'error',
+                              text: `Selected date is not available. ${blockingHoliday ? `Reason: ${blockingHoliday.name}` : 'University holiday period'}`
+                            });
+                            setTimeout(() => setMessage({ type: '', text: '' }), 3000);
+                            return;
+                          }
+                          
+                          setAppointmentForm({...appointmentForm, date: selectedDate});
+                        }}
                         min={getMinDate()}
                         disabled={loading || !profileComplete}
                         required
+                        style={{
+                          backgroundColor: appointmentForm.date && isDateBlocked(appointmentForm.date) ? '#ffe6e6' : undefined
+                        }}
                       />
+                      {appointmentForm.date && isDateBlocked(appointmentForm.date) && (
+                        <small className="text-danger">
+                          This date is not available due to university holidays
+                        </small>
+                      )}
                     </div>
 
                     {/* Time */}
@@ -2013,210 +2658,418 @@ useEffect(() => {
 
             {/* Appointment History Tab */}
             {activeTab === 'history' && (
-              <div className="card card-custom">
-                <div className="card-header card-header-custom">
-                  <h3 className="card-title-custom">
-                    <History size={24} className="me-2" />
-                    Appointment History
-                  </h3>
-                </div>
-                <div className="card-body p-4">
-                  {appointments.length === 0 ? (
-                    <div className="empty-state">
-                      <div className="empty-state-icon">
-                        <FileText size={48} />
+  <div className="card card-custom">
+    <div className="card-header card-header-custom">
+      <h3 className="card-title-custom">
+        <History size={24} className="me-2" />
+        Appointment History
+      </h3>
+    </div>
+    <div className="card-body p-2 p-md-4">
+      {appointments.length === 0 ? (
+        <div className="empty-state">
+          <div className="empty-state-icon">
+            <FileText size={48} />
+          </div>
+          <h5 className="fw-bold">No Appointments Found</h5>
+          <p className="text-muted">You haven't booked any appointments yet.</p>
+          <button 
+            className="btn btn-primary-custom"
+            onClick={() => setActiveTab('request')}
+          >
+            <FileText size={18} className="me-2" />
+            Book an Appointment
+          </button>
+        </div>
+      ) : (
+        <>
+          {/* Mobile: Card layout */}
+          <div className="d-block d-lg-none">
+            {appointments.map((appointment) => (
+              <div key={appointment.id} className="card mb-3 border">
+                <div className="card-body p-3">
+                  <div className="d-flex justify-content-between align-items-start mb-2">
+                    <div className="flex-grow-1">
+                      <h6 className="mb-1 fw-semibold">{appointment.doctor}</h6>
+                      <div className="d-flex align-items-center small text-muted mb-1">
+                        {getSpecialtyIcon(appointment.specialty)}
+                        <span className="ms-2">{appointment.specialty}</span>
                       </div>
-                      <h5 className="fw-bold">No Appointments Found</h5>
-                      <p className="text-muted">You haven't booked any appointments yet.</p>
+                    </div>
+                    <span className={getStatusBadge(appointment.status)}>
+                      {getStatusText(appointment.status as typeof APPOINTMENT_STATUSES[keyof typeof APPOINTMENT_STATUSES])}
+                    </span>
+                  </div>
+                  
+                  <div className="mb-2">
+                    <div className="d-flex align-items-center text-muted small mb-1">
+                      <Calendar size={12} className="me-1" />
+                      {new Date(appointment.date).toLocaleDateString()}
+                      <Clock size={12} className="ms-3 me-1" />
+                      {appointment.time}
+                    </div>
+                    <small className="text-muted">{appointment.reason}</small>
+                  </div>
+                  
+                  <div className="d-flex gap-1 flex-wrap">
+                    {canRescheduleAppointment(appointment) ? (
                       <button 
-                        className="btn btn-primary-custom"
-                        onClick={() => setActiveTab('request')}
+                        className="btn btn-sm btn-outline-primary flex-fill"
+                        onClick={() => openRescheduleModal(appointment)}
                       >
-                        <FileText size={18} className="me-2" />
-                        Book an Appointment
+                        <Edit size={14} className="me-1" />
+                        Reschedule
                       </button>
-                    </div>
-                  ) : (
-                    <div className="table-responsive">
-                      <table className="table table-custom table-hover">
-                        <thead>
-                          <tr>
-                            <th>Doctor</th>
-                            <th>Specialty</th>
-                            <th>Date</th>
-                            <th>Time</th>
-                            <th>Status</th>
-                            <th>Actions</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {appointments.map((appointment) => (
-                            <tr key={appointment.id}>
-                              <td>
-                                <div className="d-flex align-items-center">
-                                  {appointment.doctorImage ? (
-                                    <img 
-                                      src={appointment.doctorImage} 
-                                      alt="Doctor" 
-                                      className="doctor-image"
-                                    />
-                                  ) : (
-                                    <User size={20} className="me-2" />
-                                  )}
-                                  {appointment.doctor}
-                                </div>
-                              </td>
-                              <td>
-                                <div className="d-flex align-items-center">
-                                  {getSpecialtyIcon(appointment.specialty)}
-                                  <span className="ms-2">{appointment.specialty}</span>
-                                </div>
-                              </td>
-                              <td>{new Date(appointment.date).toLocaleDateString()}</td>
-                              <td>{appointment.time}</td>
-                              <td>
-                                <span className={getStatusBadge(appointment.status)}>
-                                  {getStatusText(appointment.status as typeof APPOINTMENT_STATUSES[keyof typeof APPOINTMENT_STATUSES])}
-                                </span>
-                              </td>
-                              <td>
-                                <div className="d-flex gap-2">
-                                  {canRescheduleAppointment(appointment) ? (
-                                    <button 
-                                      className="btn btn-sm btn-outline-primary-custom"
-                                      onClick={() => openRescheduleModal(appointment)}
-                                      title="Reschedule appointment"
-                                    >
-                                      <Edit size={16} />
-                                    </button>
-                                  ) : (
-                                    <button 
-                                      className="btn btn-sm btn-outline-secondary"
-                                      disabled
-                                      title={
-                                        appointment.status === 'completed' || appointment.status === 'cancelled' 
-                                          ? 'Cannot reschedule completed/cancelled appointments'
-                                          : new Date(`${appointment.date}T${appointment.time}`) <= new Date()
-                                          ? 'Cannot reschedule past appointments'
-                                          : 'Reschedule not available for this status'
-                                      }
-                                    >
-                                      <Edit size={16} />
-                                    </button>
-                                  )}
+                    ) : (
+                      <button 
+                        className="btn btn-sm btn-outline-secondary flex-fill" 
+                        disabled
+                        title={
+                          appointment.status === 'completed' || appointment.status === 'cancelled' 
+                            ? 'Cannot reschedule completed/cancelled appointments'
+                            : new Date(`${appointment.date}T${appointment.time}`) <= new Date()
+                            ? 'Cannot reschedule past appointments'
+                            : 'Reschedule not available for this status'
+                        }
+                      >
+                        <Edit size={14} className="me-1" />
+                        Reschedule
+                      </button>
+                    )}
 
-                                  {canCancelAppointment(appointment) ? (
-                                    <button 
-                                      className="btn btn-sm btn-outline-danger-custom"
-                                      onClick={() => cancelAppointment(appointment.id)}
-                                      title="Cancel appointment"
-                                    >
-                                      <X size={16} />
-                                    </button>
-                                  ) : (
-                                    <button 
-                                      className="btn btn-sm btn-outline-secondary"
-                                      disabled
-                                      title={
-                                        appointment.status === 'completed' || appointment.status === 'cancelled' 
-                                          ? 'Cannot cancel completed/cancelled appointments'
-                                          : new Date(`${appointment.date}T${appointment.time}`) <= new Date()
-                                          ? 'Cannot cancel past appointments'
-                                          : 'Cancellation not available for this status'
-                                      }
-                                    >
-                                      <X size={16} />
-                                    </button>
-                                  )}
-
-                                  {!canRescheduleAppointment(appointment) && !canCancelAppointment(appointment) && (
-                                    <span className="text-muted small">
-                                      {appointment.status === 'completed' ? 'Completed' : 
-                                      appointment.status === 'cancelled' ? 'Cancelled' : 
-                                      'No actions'}
-                                    </span>
-                                  )}
-                                </div>
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  )}
+                    {canCancelAppointment(appointment) ? (
+                      <button 
+                        className="btn btn-sm btn-outline-danger flex-fill"
+                        onClick={() => cancelAppointment(appointment.id)}
+                      >
+                        <X size={14} className="me-1" />
+                        Cancel
+                      </button>
+                    ) : (
+                      <button 
+                        className="btn btn-sm btn-outline-secondary flex-fill" 
+                        disabled
+                        title={
+                          appointment.status === 'completed' || appointment.status === 'cancelled' 
+                            ? 'Cannot cancel completed/cancelled appointments'
+                            : new Date(`${appointment.date}T${appointment.time}`) <= new Date()
+                            ? 'Cannot cancel past appointments'
+                            : 'Cancellation not available for this status'
+                        }
+                      >
+                        <X size={14} className="me-1" />
+                        Cancel
+                      </button>
+                    )}
+                  </div>
                 </div>
               </div>
-            )}
+            ))}
+          </div>
+
+          {/* Desktop: Table layout */}
+          <div className="d-none d-lg-block">
+            <div className="table-responsive">
+              <table className="table table-custom table-hover">
+                <thead>
+                  <tr>
+                    <th>Doctor</th>
+                    <th>Specialty</th>
+                    <th>Date</th>
+                    <th>Time</th>
+                    <th>Status</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {appointments.map((appointment) => (
+                    <tr key={appointment.id}>
+                      <td>
+                        <div className="d-flex align-items-center">
+                          {appointment.doctorImage ? (
+                            <img 
+                              src={appointment.doctorImage} 
+                              alt="Doctor" 
+                              className="doctor-image"
+                            />
+                          ) : (
+                            <User size={20} className="me-2" />
+                          )}
+                          {appointment.doctor}
+                        </div>
+                      </td>
+                      <td>
+                        <div className="d-flex align-items-center">
+                          {getSpecialtyIcon(appointment.specialty)}
+                          <span className="ms-2">{appointment.specialty}</span>
+                        </div>
+                      </td>
+                      <td>{new Date(appointment.date).toLocaleDateString()}</td>
+                      <td>{appointment.time}</td>
+                      <td>
+                        <span className={getStatusBadge(appointment.status)}>
+                          {getStatusText(appointment.status as typeof APPOINTMENT_STATUSES[keyof typeof APPOINTMENT_STATUSES])}
+                        </span>
+                      </td>
+                      <td>
+                        <div className="d-flex gap-2">
+                          {canRescheduleAppointment(appointment) ? (
+                            <button 
+                              className="btn btn-sm btn-outline-primary-custom"
+                              onClick={() => {
+                                console.log('Reschedule button clicked for:', appointment);
+                                openRescheduleModal(appointment);
+                              }}
+                              title="Reschedule appointment"
+                            >
+                              <Edit size={16} />
+                            </button>
+                          ) : (
+                            <button 
+                              className="btn btn-sm btn-outline-secondary"
+                              disabled
+                              title={
+                                appointment.status === 'completed' || appointment.status === 'cancelled' 
+                                  ? 'Cannot reschedule completed/cancelled appointments'
+                                  : new Date(`${appointment.date}T${appointment.time}`) <= new Date()
+                                  ? 'Cannot reschedule past appointments'
+                                  : 'Reschedule not available for this status'
+                              }
+                            >
+                              <Edit size={16} />
+                            </button>
+                          )}
+
+                          {canCancelAppointment(appointment) ? (
+                            <button 
+                              className="btn btn-sm btn-outline-danger-custom"
+                              onClick={() => cancelAppointment(appointment.id)}
+                              title="Cancel appointment"
+                            >
+                              <X size={16} />
+                            </button>
+                          ) : (
+                            <button 
+                              className="btn btn-sm btn-outline-secondary"
+                              disabled
+                              title={
+                                appointment.status === 'completed' || appointment.status === 'cancelled' 
+                                  ? 'Cannot cancel completed/cancelled appointments'
+                                  : new Date(`${appointment.date}T${appointment.time}`) <= new Date()
+                                ? 'Cannot cancel past appointments'
+                                : 'Cancellation not available for this status'
+                              }
+                            >
+                              <X size={16} />
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </>
+      )}
+    </div>
+  </div>
+)}
           </div>
         </div>
       </div>
 
       {/* Reschedule Modal */}
-      {showRescheduleModal && (
-        <div className="modal-backdrop show">
-          <div className="modal modal-custom show">
-            <div className="modal-content">
-              <div className="modal-header modal-header-custom">
-                <h5 className="modal-title">Reschedule Appointment</h5>
-                <button 
-                  type="button" 
-                  className="btn-close" 
-                  onClick={() => setShowRescheduleModal(false)}
-                  aria-label="Close"
-                ></button>
+      {/* Reschedule Modal - Fixed Version */}
+{showRescheduleModal && (
+  <>
+    {/* Modal Backdrop */}
+    <div 
+      className="modal-backdrop fade show"
+      style={{ 
+        position: 'fixed',
+        top: 0,
+        left: 0,
+        width: '100%',
+        height: '100%',
+        backgroundColor: 'rgba(0,0,0,0.5)',
+        zIndex: 1050
+      }}
+      onClick={() => setShowRescheduleModal(false)}
+    />
+    
+    {/* Modal Container */}
+    <div 
+      className="modal fade show"
+      style={{ 
+        display: 'block',
+        position: 'fixed',
+        top: 0,
+        left: 0,
+        width: '100%',
+        height: '100%',
+        overflow: 'auto',
+        zIndex: 1055
+      }}
+      tabIndex={-1}
+      role="dialog"
+    >
+      <div className="modal-dialog modal-dialog-centered" role="document">
+        <div 
+          className="modal-content"
+          style={{
+            borderRadius: '1rem',
+            border: 'none',
+            boxShadow: '0 10px 30px rgba(0, 0, 0, 0.3)'
+          }}
+        >
+          {/* Modal Header */}
+          <div 
+            className="modal-header"
+            style={{
+              backgroundColor: 'var(--university-primary)',
+              color: 'white',
+              borderRadius: '1rem 1rem 0 0',
+              borderBottom: 'none',
+              padding: '1rem 1.5rem'
+            }}
+          >
+            <h5 className="modal-title mb-0">Reschedule Appointment</h5>
+            <button 
+              type="button" 
+              className="btn-close btn-close-white"
+              onClick={() => setShowRescheduleModal(false)}
+              aria-label="Close"
+              style={{
+                background: 'none',
+                border: 'none',
+                color: 'white',
+                fontSize: '1.5rem',
+                fontWeight: 'bold',
+                cursor: 'pointer'
+              }}
+            >
+              ×
+            </button>
+          </div>
+          
+          {/* Modal Body */}
+          <div className="modal-body" style={{ padding: '1.5rem' }}>
+            <div className="row g-3">
+              <div className="col-12">
+                <label className="form-label fw-semibold">New Date <span className="text-danger">*</span></label>
+                <input
+                  type="date"
+                  className="form-control form-control-custom"
+                  value={rescheduleForm.date}
+                  onChange={(e) => {
+                    const selectedDate = e.target.value;
+                    
+                    // Check if date is blocked
+                    if (isDateBlocked(selectedDate)) {
+                      const blockingHoliday = holidays.find(h => 
+                        h.blocks_appointments && 
+                        selectedDate >= h.start_date && 
+                        selectedDate <= h.end_date
+                      );
+                      
+                      setMessage({
+                        type: 'error',
+                        text: `Selected date is not available. ${blockingHoliday ? `Reason: ${blockingHoliday.name}` : 'University holiday period'}`
+                      });
+                      setTimeout(() => setMessage({ type: '', text: '' }), 3000);
+                      return;
+                    }
+                    
+                    setRescheduleForm({...rescheduleForm, date: selectedDate});
+                  }}
+                  min={new Date().toISOString().split('T')[0]}
+                  required
+                />
+                {rescheduleForm.date && isDateBlocked(rescheduleForm.date) && (
+                  <small className="text-danger">
+                    This date is not available due to university holidays
+                  </small>
+                )}
               </div>
-              <div className="modal-body">
-                <div className="mb-3">
-                  <label className="form-label">Date</label>
-                  <input
-                    type="date"
-                    className="form-control form-control-custom"
-                    value={rescheduleForm.date}
-                    onChange={(e) => setRescheduleForm({...rescheduleForm, date: e.target.value})}
-                    min={new Date().toISOString().split('T')[0]}
-                  />
-                </div>
-                <div className="mb-3">
-                  <label className="form-label">Time</label>
-                  <select
-                    className="form-select form-select-custom"
-                    value={rescheduleForm.time}
-                    onChange={(e) => setRescheduleForm({...rescheduleForm, time: e.target.value})}
-                    disabled={!rescheduleForm.date}
-                  >
-                    <option value="">Select a time slot</option>
-                    {timeSlots.map((time) => (
-                      <option key={time} value={time}>{time}</option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-              <div className="modal-footer">
-                <button 
-                  type="button" 
-                  className="btn btn-secondary-custom" 
-                  onClick={() => setShowRescheduleModal(false)}
+              
+              <div className="col-12">
+                <label className="form-label fw-semibold">New Time <span className="text-danger">*</span></label>
+                <select
+                  className="form-select form-select-custom"
+                  value={rescheduleForm.time}
+                  onChange={(e) => setRescheduleForm({...rescheduleForm, time: e.target.value})}
+                  disabled={!rescheduleForm.date}
+                  required
                 >
-                  Cancel
-                </button>
-                <button 
-                  type="button" 
-                  className="btn btn-primary-custom"
-                  onClick={submitReschedule}
-                  disabled={loading || !rescheduleForm.date || !rescheduleForm.time}
-                >
-                  {loading ? (
-                    <span className="loading-spinner me-2" role="status" aria-hidden="true"></span>
-                  ) : (
-                    <Edit size={16} className="me-2" />
-                  )}
-                  Reschedule
-                </button>
+                  <option value="">Select a time slot</option>
+                  {timeSlots.map((time) => (
+                    <option key={time} value={time}>{time}</option>
+                  ))}
+                </select>
               </div>
             </div>
           </div>
+          
+          {/* Modal Footer */}
+          <div 
+            className="modal-footer"
+            style={{ 
+              borderTop: '1px solid #dee2e6',
+              padding: '1rem 1.5rem'
+            }}
+          >
+            <button 
+              type="button" 
+              className="btn btn-secondary me-2"
+              onClick={() => {
+                setShowRescheduleModal(false);
+                setRescheduleForm({ id: '', date: '', time: '' });
+                setMessage({ type: '', text: '' });
+              }}
+              style={{
+                borderRadius: '0.5rem',
+                padding: '0.5rem 1rem'
+              }}
+            >
+              Cancel
+            </button>
+            <button 
+              type="button" 
+              className="btn btn-primary"
+              onClick={submitReschedule}
+              disabled={loading || !rescheduleForm.date || !rescheduleForm.time}
+              style={{
+                backgroundColor: 'var(--university-primary)',
+                borderColor: 'var(--university-primary)',
+                borderRadius: '0.5rem',
+                padding: '0.5rem 1rem'
+              }}
+            >
+              {loading ? (
+                <>
+                  <span 
+                    className="spinner-border spinner-border-sm me-2" 
+                    role="status" 
+                    aria-hidden="true"
+                    style={{ width: '1rem', height: '1rem' }}
+                  />
+                  Rescheduling...
+                </>
+              ) : (
+                <>
+                  <Edit size={16} className="me-2" />
+                  Reschedule Appointment
+                </>
+              )}
+            </button>
+          </div>
         </div>
-      )}
+      </div>
+    </div>
+  </>
+)}
     </div>
     </>
   
