@@ -14,9 +14,9 @@ use App\Http\Controllers\RealtimeController;
 use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\HolidayController;
 use App\Http\Controllers\DepartmentController;
-use App\Http\Controllers\StaffScheduleController;
 use App\Http\Controllers\LanguageController;
-use App\Http\Controllers\CalendarSourceController; // Added this import
+use App\Http\Controllers\CalendarSourceController;
+use App\Http\Controllers\Api\ClinicSettingsController;
 
 /*
 |--------------------------------------------------------------------------
@@ -34,6 +34,7 @@ Route::prefix('auth')->group(function () {
 });
 
 Route::post('/language/set', [LanguageController::class, 'setLanguage']);
+Route::get('/public/clinic-settings', [ClinicSettingsController::class, 'getSettings']);
 
 // Health check (public)
 Route::get('/health', function () {
@@ -57,8 +58,22 @@ Route::get('/roles', function () {
     ]);
 });
 
-// Auth user info routes
+// Make departments index route public
+Route::get('/departments', [DepartmentController::class, 'index']);
+
+// Protected routes (authentication required)
 Route::middleware('auth:sanctum')->group(function () {
+    
+    // Authentication routes
+    Route::prefix('auth')->group(function () {
+        Route::post('/logout', [AuthController::class, 'logout']);
+        Route::get('/profile', [AuthController::class, 'profile']);
+        Route::post('/profile', [AuthController::class, 'updateProfile']);
+        Route::post('/profile/avatar', [StudentController::class, 'uploadAvatar']);
+        Route::delete('/profile/avatar', [StudentController::class, 'removeAvatar']);
+    });
+
+    // Auth user info routes
     Route::get('/auth/user', function (Request $request) {
         return response()->json([
             'user' => $request->user()->makeHidden(['password']),
@@ -72,26 +87,6 @@ Route::middleware('auth:sanctum')->group(function () {
             'permissions' => $request->user()->getAllPermissions(),
         ]);
     });
-});
-
-// ✅ Make departments index route public temporarily
-Route::get('/departments', [DepartmentController::class, 'index']);
-
-// Protected routes (authentication required)
-Route::middleware('auth:sanctum')->group(function () {
-    
-    // Authentication routes
-    Route::prefix('auth')->group(function () {
-        Route::post('/logout', [AuthController::class, 'logout']);
-        Route::get('/profile', [AuthController::class, 'profile']);
-        Route::post('/profile', [AuthController::class, 'updateProfile']);
-        // Profile routes (accessible by all authenticated users)
-        Route::post('/profile/avatar', [StudentController::class, 'uploadAvatar']);
-        Route::delete('/profile/avatar', [StudentController::class, 'removeAvatar']);
-    });
-
-    
-    
 
     // Holiday Management Routes
     Route::prefix('holidays')->group(function () {
@@ -195,7 +190,6 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/patients/{patient}/assign', [DoctorController::class, 'assignPatient']);
         Route::post('/patients/{id}/records', [DoctorController::class, 'createMedicalRecord']);
         Route::get('/patients/{id}/medical-records', [DoctorController::class, 'getPatientMedicalRecords']);
-
         
         // Appointments
         Route::get('/appointments', [DoctorController::class, 'getAppointments']);
@@ -203,13 +197,10 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::put('/appointments/{id}/confirm', [DoctorController::class, 'confirmAppointment']);
         Route::put('/appointments/{id}/reschedule', [DoctorController::class, 'rescheduleAppointment']);
         Route::put('/appointments/{id}/complete', [DoctorController::class, 'completeAppointment']);
-
         
         // Prescriptions
         Route::get('/prescriptions', [DoctorController::class, 'getPrescriptions']);
         Route::post('/prescriptions', [DoctorController::class, 'createPrescription']);
-        Route::get('/patients/{id}/medical-records', [DoctorController::class, 'getPatientMedicalRecords']);
-
         
         // Availability & Schedule
         Route::put('/availability', [DoctorController::class, 'updateAvailability']);
@@ -217,35 +208,39 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/statistics', [DoctorController::class, 'getStatistics']);
     });
 
-    // Academic Staff routes (Clinic-focused)
-Route::middleware('role:academic_staff')->prefix('academic-staff')->group(function () {
-    // Dashboard
-    Route::get('/dashboard', [AcademicStaffController::class, 'dashboard']);
-    
-    // Medical History
-    Route::get('/medical-history', [AcademicStaffController::class, 'getMedicalHistory']);
-    
-    // Appointments
-    Route::get('/appointments', [AcademicStaffController::class, 'getAppointments']);
-    Route::post('/schedule-appointment', [AcademicStaffController::class, 'scheduleAppointment']);
-    Route::put('/reschedule-appointment/{appointment}', [AcademicStaffController::class, 'rescheduleAppointment']);
-    Route::put('/cancel-appointment/{appointment}', [AcademicStaffController::class, 'cancelAppointment']);
-    
-    // Doctor Availability
-    Route::get('/doctor-availability', [AcademicStaffController::class, 'getDoctorAvailability']);
-    Route::get('/available-slots', [AcademicStaffController::class, 'getAvailableSlots']);
-    
-    // Profile Management - NEW ROUTES
-    Route::get('/profile', [AcademicStaffController::class, 'getProfile']);
-    Route::put('/profile', [AcademicStaffController::class, 'updateProfile']);
-    Route::post('/profile/avatar', [AcademicStaffController::class, 'uploadAvatar']);
-    Route::delete('/profile/avatar', [AcademicStaffController::class, 'removeAvatar']);
-});
+    // Academic Staff routes
+    Route::middleware('role:academic_staff')->prefix('academic-staff')->group(function () {
+        // Dashboard
+        Route::get('/dashboard', [AcademicStaffController::class, 'dashboard']);
+        
+        // Medical History
+        Route::get('/medical-history', [AcademicStaffController::class, 'getMedicalHistory']);
+        
+        // Appointments
+        Route::get('/appointments', [AcademicStaffController::class, 'getAppointments']);
+        Route::post('/schedule-appointment', [AcademicStaffController::class, 'scheduleAppointment']);
+        Route::put('/reschedule-appointment/{appointment}', [AcademicStaffController::class, 'rescheduleAppointment']);
+        Route::put('/cancel-appointment/{appointment}', [AcademicStaffController::class, 'cancelAppointment']);
+        
+        // Doctor Availability
+        Route::get('/doctor-availability', [AcademicStaffController::class, 'getDoctorAvailability']);
+        Route::get('/available-slots', [AcademicStaffController::class, 'getAvailableSlots']);
+        
+        // Profile Management
+        Route::get('/profile', [AcademicStaffController::class, 'getProfile']);
+        Route::put('/profile', [AcademicStaffController::class, 'updateProfile']);
+        Route::post('/profile/avatar', [AcademicStaffController::class, 'uploadAvatar']);
+        Route::delete('/profile/avatar', [AcademicStaffController::class, 'removeAvatar']);
+    });
 
     // Clinical Staff routes
     Route::middleware('role:clinical_staff')->prefix('clinical')->group(function () {
         // Dashboard
         Route::get('/dashboard', [ClinicalStaffController::class, 'dashboard']);
+        
+        // Clinic Settings
+        Route::get('/clinic-settings', [ClinicSettingsController::class, 'getSettings']);
+        Route::post('/clinic-settings', [ClinicSettingsController::class, 'saveSettings']);
         
         // Appointments
         Route::get('/appointments', [ClinicalStaffController::class, 'getAppointments']);
@@ -290,7 +285,7 @@ Route::middleware('role:academic_staff')->prefix('academic-staff')->group(functi
         // Medical Records
         Route::get('/medical-records/{id}', [ClinicalStaffController::class, 'getMedicalRecord']);
 
-        //urgent
+        // Urgent Queue
         Route::get('/urgent-queue', [ClinicalStaffController::class, 'getUrgentQueue']);
 
         // Student Requests

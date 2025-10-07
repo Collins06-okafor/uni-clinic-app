@@ -66,6 +66,21 @@ interface WalkInPatientUpdate {
   timestamp: string;
 }
 
+interface PatientWalkedInAlert {
+  appointment_id: string;
+  patient: {
+    id: string;
+    name: string;
+    student_id: string;
+  };
+  type: string;
+  urgency: string;
+  queue_number: number;
+  scheduled_time: string;
+  reason: string;
+  timestamp: string;
+}
+
 class WebSocketService {
   private socket: Socket | null = null;
   private reconnectAttempts = 0;
@@ -228,6 +243,12 @@ class WebSocketService {
   onWalkInPatientUpdate(callback: (update: WalkInPatientUpdate) => void): void {
     if (this.isConnected()) {
       this.socket?.on("walkin.updated", callback);
+    }
+  }
+
+  onPatientWalkedIn(callback: (alert: PatientWalkedInAlert) => void): void {
+    if (this.isConnected()) {
+      this.socket?.on("patient.walked.in", callback);
     }
   }
 

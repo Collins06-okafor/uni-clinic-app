@@ -477,8 +477,8 @@ public function completeAppointment(Request $request, $id): JsonResponse
             'appointments' => $appointments->map(function ($appointment) {
                 return [
                     'id' => $appointment->id,
-                    'date' => $appointment->date,
-                    'time' => $appointment->time,
+                    'date' => $appointment->date, // This should be just "2025-10-07"
+                    'time' => $appointment->time, // This should be just "10:00:00" or "10:00"
                     'status' => $appointment->status,
                     'reason' => $appointment->reason,
                     'patient' => $appointment->patient ? $appointment->patient->only(['id', 'name', 'student_id']) : null,

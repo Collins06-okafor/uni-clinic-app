@@ -174,13 +174,23 @@ public function scheduleAppointment(Request $request): JsonResponse
             'date' => $validated['date'],
             'time' => $validated['time'],
             'reason' => $validated['reason'],
-            'status' => 'scheduled'
+            'status' => 'pending', // ✅ Changed from 'scheduled' to 'pending'
+            'priority' => $validated['priority'] ?? 'normal', // Add priority
+            'type' => $validated['appointment_type'] ?? 'consultation' // Add type
         ]);
 
         $appointment->load('doctor');
 
+         try {
+            broadcast(new \App\Events\DashboardStatsUpdated('clinical-staff', [
+                'pending_student_requests' => Appointment::whereIn('status', ['pending', 'under_review'])->count()
+            ]));
+        } catch (\Exception $e) {
+            \Log::warning('Failed to broadcast appointment creation: ' . $e->getMessage());
+        }
+
         return response()->json([
-            'message' => 'Appointment scheduled successfully',
+            'message' => 'Appointment request submitted successfully. Awaiting clinical staff approval.',
             'appointment' => [
                 'id' => $appointment->id,
                 'date' => $appointment->date,

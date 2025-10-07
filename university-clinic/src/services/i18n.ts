@@ -106,6 +106,7 @@ const resources = {
       "nav.medications": "Medications",
       "nav.doctors": "Doctors",
       "nav.logout": "Logout",
+      "nav.settings": "Clinic Settings",
 
       // Common
       "common.loading": "Loading...",
@@ -650,6 +651,7 @@ const resources = {
       "nav.medications": "İlaçlar",
       "nav.doctors": "Doktorlar",
       "nav.logout": "Çıkış",
+      "nav.settings": "Klinik Ayarları",
 
       // Common
       "common.loading": "Yükleniyor...",

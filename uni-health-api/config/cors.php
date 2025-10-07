@@ -2,7 +2,7 @@
 // config/cors.php - For token-only authentication
 
 return [
-    'paths' => ['api/*', 'doctor/*', 'sanctum/csrf-cookie'],
+    'paths' => ['api/*', 'clinical/*', 'doctor/*', 'sanctum/csrf-cookie'],
 
     'allowed_methods' => ['*'],
 
@@ -16,5 +16,5 @@ return [
 
     'max_age' => 0,
 
-    'supports_credentials' => false, // False for token-only auth
+    'supports_credentials' => true, // False for token-only auth
 ];

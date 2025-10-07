@@ -4,6 +4,8 @@ import RealTimeDashboard from '../../components/RealTimeDashboard';
 import { useTranslation } from 'react-i18next';
 import LanguageSwitcher from '../../components/LanguageSwitcher';
 import i18n from '../../services/i18n';
+import WalkInAlert from '../../components/WalkInAlert';
+import websocketService from '../../services/websocket';
 
 
 // Types
@@ -252,6 +254,7 @@ const EnhancedDoctorDashboard: React.FC<EnhancedDoctorDashboardProps> = ({ user,
 const [patientPrescriptions, setPatientPrescriptions] = useState<Prescription[]>([]);
 const [showPatientHistory, setShowPatientHistory] = useState<boolean>(false);
 const [selectedPrescription, setSelectedPrescription] = useState<Prescription | null>(null);
+const [walkInAlerts, setWalkInAlerts] = useState<any[]>([]);
   const [doctorProfile, setDoctorProfile] = useState<DoctorProfile>({
     name: user?.name || '',
     email: user?.email || '',
@@ -366,34 +369,63 @@ const getErrorMessage = (error: unknown): string => {
 
   // Get dashboard statistics
   // Updated stats calculation using real data
-  const getDashboardStats = () => {
-    const today = new Date().toISOString().split('T')[0];
+const getDashboardStats = () => {
+  // Get today's date in YYYY-MM-DD format
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const todayString = today.toISOString().split('T')[0];
+  
+  console.log('Today string:', todayString);
+  console.log('Sample appointments:', appointments.slice(0, 3).map(a => ({
+    id: a.id,
+    date: a.date,
+    patient: a.patient?.name
+  })));
+  
+  // FIX: Handle both ISO timestamp and date-only formats
+  const todayAppointments = appointments.filter(apt => {
+    if (!apt.date) return false;
     
-    const todayAppointments = appointments.filter(apt => 
-      apt.date === today
-    ).length;
+    // Handle ISO timestamp: "2025-10-07T10:00:00.000000Z"
+    // Handle date-only: "2025-10-07"
+    const aptDateStr = apt.date.split('T')[0];
+    const matches = aptDateStr === todayString;
     
-    const upcomingAppointments = appointments.filter(apt => 
-      new Date(apt.date) >= new Date() && (apt.status === 'scheduled' || apt.status === 'confirmed')
-    ).length;
+    if (matches) {
+      console.log('✓ Today appointment found:', {
+        patient: apt.patient?.name,
+        date: apt.date,
+        status: apt.status
+      });
+    }
     
-    const completedAppointments = appointments.filter(apt => 
-      apt.status === 'completed'
-    ).length;
-    
-    const activePrescriptions = prescriptions.filter(p => 
-      p.status === 'active'
-    ).length;
-    
-    return {
-      total: appointments.length,
-      today: todayAppointments,
-      upcoming: upcomingAppointments,
-      completed: completedAppointments,
-      patients: patients.length,
-      prescriptions: activePrescriptions
-    };
+    return matches;
+  }).length;
+  
+  console.log('Today appointments count:', todayAppointments);
+  
+  const upcomingAppointments = appointments.filter(apt => {
+    const aptDateStr = apt.date.split('T')[0];
+    return aptDateStr >= todayString && (apt.status === 'scheduled' || apt.status === 'confirmed');
+  }).length;
+  
+  const completedAppointments = appointments.filter(apt => 
+    apt.status === 'completed'
+  ).length;
+  
+  const activePrescriptions = prescriptions.filter(p => 
+    p.status === 'active'
+  ).length;
+  
+  return {
+    total: appointments.length,
+    today: todayAppointments,
+    upcoming: upcomingAppointments,
+    completed: completedAppointments,
+    patients: patients.length,
+    prescriptions: activePrescriptions
   };
+};
 
   const stats = getDashboardStats();
 
@@ -587,6 +619,17 @@ const isDateBlocked = (dateString: string): boolean => {
     
     const data = await response.json();
     const allApts = data.appointments || [];
+    
+    // ADD THIS DEBUGGING
+    console.log('=== APPOINTMENTS FETCHED ===');
+    console.log('Total appointments:', allApts.length);
+    console.log('Today date:', new Date().toISOString().split('T')[0]);
+    console.log('Sample appointment dates:', allApts.slice(0, 5).map((a: Appointment) => ({
+      id: a.id,
+      date: a.date,
+      patient: a.patient?.name
+    })));
+    
     setAppointments(allApts);
     setFilteredAppointments(allApts);
   } catch (error) {
@@ -1707,6 +1750,54 @@ const createAppointment = async (): Promise<void> => {
     }));
   };
 
+  const formatTime = (timeString: string | undefined): string => {
+  if (!timeString) return '';
+  
+  try {
+    // Handle "10:00:00" or "10:00" format
+    const timeParts = timeString.split(':');
+    let hours = parseInt(timeParts[0]);
+    const minutes = timeParts[1];
+    
+    // Convert to 12-hour format with AM/PM
+    const period = hours >= 12 ? 'PM' : 'AM';
+    hours = hours % 12 || 12; // Convert 0 to 12 for midnight
+    
+    return `${hours}:${minutes} ${period}`;
+  } catch (error) {
+    console.error('Error formatting time:', error);
+    return timeString;
+  }
+};
+
+// Format date nicely
+const formatDate = (dateString: string | undefined): string => {
+  if (!dateString) return '';
+  
+  try {
+    // Handle "2025-10-07" format
+    const datePart = dateString.split('T')[0];
+    const date = new Date(datePart + 'T00:00:00');
+    
+    // Format as "Oct 7, 2025" or use toLocaleDateString for user's locale
+    return date.toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric'
+    });
+  } catch (error) {
+    console.error('Error formatting date:', error);
+    return dateString;
+  }
+};
+
+const formatDateTime = (dateString: string): { date: string; time: string } => {
+  return {
+    date: formatDate(dateString),
+    time: formatTime(dateString)
+  };
+};
+
   
 
   useEffect(() => {
@@ -1722,6 +1813,18 @@ const createAppointment = async (): Promise<void> => {
     fetchDoctorProfile();
   }
   }, [activeTab]);
+
+  useEffect(() => {
+  console.log('=== APPOINTMENTS STATE CHANGED ===');
+  console.log('Appointments loaded:', appointments.length);
+  console.log('Sample appointments:', appointments.slice(0, 3));
+  console.log('Stats being calculated...');
+  
+  if (appointments.length > 0) {
+    const stats = getDashboardStats();
+    console.log('Calculated stats:', stats);
+  }
+}, [appointments]);
 
   useEffect(() => {
     if (appointments.length > 0) {
@@ -1755,6 +1858,56 @@ useEffect(() => {
   }, 5 * 60 * 1000);
   
   return () => clearInterval(interval);
+}, []);
+
+useEffect(() => {
+  const connectWebSocket = () => {
+    try {
+      websocketService.tryConnect();
+      
+      // Listen for patient walk-in alerts
+      websocketService.onPatientWalkedIn((alert) => {
+        console.log('Patient walked in alert received:', alert);
+        
+        // Add to alerts array
+        setWalkInAlerts(prev => [...prev, { ...alert, id: Date.now() }]);
+        
+        // Refresh appointments list
+        fetchAppointments();
+        
+        // Show browser notification if permitted
+        if ('Notification' in window && Notification.permission === 'granted') {
+          new Notification('Patient Walked In!', {
+            body: `${alert.patient.name} is ready for consultation`,
+            icon: '/logo6.png',
+            tag: 'walk-in-' + alert.appointment_id
+          });
+        }
+      });
+
+      // Join doctor's personal channel
+      websocketService.joinChannel(`doctor.${user.id}`);
+
+      return () => {
+        websocketService.off('patient.walked.in');
+        websocketService.leaveChannel(`doctor.${user.id}`);
+      };
+    } catch (error) {
+      console.warn('WebSocket connection failed:', error);
+    }
+  };
+
+  const cleanup = connectWebSocket();
+  return () => {
+    if (cleanup) cleanup();
+  };
+}, [user.id]);
+
+// Request browser notification permission on mount
+useEffect(() => {
+  if ('Notification' in window && Notification.permission === 'default') {
+    Notification.requestPermission();
+  }
 }, []);
 
 
@@ -2101,16 +2254,28 @@ const HolidayWarning = ({ selectedDate }: { selectedDate: string }) => {
             <div className="card-body p-4">
               {appointments.slice(0, 3).map((appointment) => (
                 <div key={appointment.id} className="d-flex align-items-center p-3 bg-light rounded-3 mb-3">
-                  <div className="me-3">
-                    <User size={24} className="text-primary" />
+                  <div 
+                    className="rounded-circle me-3 d-flex align-items-center justify-content-center"
+                    style={{
+                      width: '48px',
+                      height: '48px',
+                      backgroundColor: universityTheme.primary + '20',
+                      color: universityTheme.primary
+                    }}
+                  >
+                    <User size={24} />
                   </div>
                   <div className="flex-grow-1">
                     <h6 className="mb-1 fw-semibold">{appointment.patient?.name}</h6>
-                    <div className="d-flex align-items-center text-muted small">
-                      <Calendar size={14} className="me-1" />
-                      {new Date(appointment.date).toLocaleDateString()}
-                      <Clock size={14} className="ms-3 me-1" />
-                      {appointment.time}
+                    <div className="d-flex align-items-center flex-wrap gap-3">
+                      <div className="d-flex align-items-center">
+                        <Calendar size={14} className="me-1 text-primary" />
+                        <small className="text-muted">{formatDate(appointment.date)}</small>
+                      </div>
+                      <div className="d-flex align-items-center">
+                        <Clock size={14} className="me-1 text-success" />
+                        <small className="fw-semibold text-success">{formatTime(appointment.time)}</small>
+                      </div>
                     </div>
                     <small className="text-muted">{appointment.reason}</small>
                   </div>
@@ -2127,40 +2292,53 @@ const HolidayWarning = ({ selectedDate }: { selectedDate: string }) => {
   );
 
 
-  const AppointmentsTab = () => (
+const AppointmentsTab = () => (
   <div className="card shadow-sm">
+    {/* Card Header */}
     <div className="card-header" style={{ background: universityTheme.gradient }}>
-      <div className="d-flex flex-column flex-lg-row justify-content-between align-items-start align-items-lg-center gap-3">
+      <div className="d-flex justify-content-between align-items-center flex-wrap gap-3">
+        {/* Left: Title */}
         <h3 className="card-title text-white mb-0 d-flex align-items-center">
           <Calendar size={24} className="me-2" />
           {t('nav.appointments')} ({filteredAppointments.length})
         </h3>
-        <div className="d-flex flex-column flex-sm-row gap-2 w-100 w-lg-auto">
+
+        {/* Right: Controls */}
+        <div className="d-flex align-items-center flex-wrap gap-2">
           <button
             onClick={() => {
               setSelectedDate('');
               setFilteredAppointments(appointments);
             }}
-            className="btn btn-sm btn-light order-2 order-sm-1"
+            className="btn btn-sm btn-light"
           >
             {t('appointments.all_appointments')}
           </button>
+
           <input
             type="date"
             value={selectedDate}
             onChange={(e) => handleDateChange(e.target.value)}
-            className="form-control form-control-sm order-1 order-sm-2"
+            className="form-control form-control-sm"
+            style={{
+              width: '150px',
+              height: '32px',
+              padding: '4px 6px',
+              fontSize: '0.85rem'
+            }}
           />
+
           <button
             onClick={() => setShowModal('availability')}
-            className="btn btn-warning btn-sm order-3"
+            className="btn btn-warning btn-sm"
           >
             <Settings size={16} className="me-1 d-none d-sm-inline" />
             {t('appointments.set_availability')}
           </button>
+
           <button
             onClick={() => setShowModal('appointment')}
-            className="btn btn-light btn-sm order-4"
+            className="btn btn-light btn-sm"
           >
             <Plus size={16} className="me-1" />
             {t('appointments.new_appointment')}
@@ -2168,9 +2346,10 @@ const HolidayWarning = ({ selectedDate }: { selectedDate: string }) => {
         </div>
       </div>
     </div>
-    
+
+    {/* Card Body */}
     <div className="card-body p-2 p-md-4">
-      {/* Mobile responsive filters */}
+      {/* Filters */}
       <div className="d-flex flex-wrap gap-1 mb-3">
         {[
           { value: 'all', label: 'All', count: appointments.length },
@@ -2196,9 +2375,8 @@ const HolidayWarning = ({ selectedDate }: { selectedDate: string }) => {
         ))}
       </div>
 
-      {/* Mobile: Card layout, Desktop: Table layout */}
+      {/* Mobile card layout */}
       <div className="d-block d-lg-none">
-        {/* Mobile card layout */}
         {filteredAppointments.map(appointment => (
           <div key={appointment.id} className="card mb-2 border">
             <div className="card-body p-3">
@@ -2213,13 +2391,15 @@ const HolidayWarning = ({ selectedDate }: { selectedDate: string }) => {
               </div>
               
               <div className="mb-2">
-                <div className="d-flex align-items-center text-muted small mb-1">
-                  <Calendar size={12} className="me-1" />
-                  {new Date(appointment.date).toLocaleDateString()}
-                  <Clock size={12} className="ms-3 me-1" />
-                  {appointment.time}
+                <div className="d-flex align-items-center mb-1">
+                  <Calendar size={14} className="me-2 text-primary" />
+                  <span className="fw-semibold text-primary">{formatDate(appointment.date)}</span>
                 </div>
-                <small className="text-muted">{appointment.reason}</small>
+                <div className="d-flex align-items-center mb-1">
+                  <Clock size={14} className="me-2 text-success" />
+                  <span className="fw-semibold text-success">{formatTime(appointment.time)}</span>
+                </div>
+                <small className="text-muted d-block mt-2">{appointment.reason}</small>
               </div>
               
               <div className="d-flex gap-1 flex-wrap">
@@ -2254,17 +2434,18 @@ const HolidayWarning = ({ selectedDate }: { selectedDate: string }) => {
         ))}
       </div>
 
-      {/* Desktop table layout */}
+       {/* Desktop table layout */}
       <div className="d-none d-lg-block">
         <div className="table-responsive">
-          <table className="table table-hover">
+          <table className="table table-hover align-middle">
             <thead>
               <tr>
-                <th>{t('common.patient')}</th>
-                <th>{t('appointments.date_time')}</th>
-                <th>{t('appointments.reason')}</th>
-                <th>{t('common.status')}</th>
-                <th>{t('common.actions')}</th>
+                <th style={{ width: '25%' }}>{t('common.patient')}</th>
+                <th style={{ width: '15%' }}>Date</th>
+                <th style={{ width: '12%' }}>Time</th>
+                <th style={{ width: '25%' }}>{t('appointments.reason')}</th>
+                <th style={{ width: '13%' }}>{t('common.status')}</th>
+                <th style={{ width: '10%' }} className="text-center">{t('common.actions')}</th>
               </tr>
             </thead>
             <tbody>
@@ -2272,8 +2453,16 @@ const HolidayWarning = ({ selectedDate }: { selectedDate: string }) => {
                 <tr key={appointment.id}>
                   <td>
                     <div className="d-flex align-items-center">
-                      <div className="me-2">
-                        <User size={20} className="text-primary" />
+                      <div 
+                        className="rounded-circle me-3 d-flex align-items-center justify-content-center"
+                        style={{
+                          width: '40px',
+                          height: '40px',
+                          backgroundColor: universityTheme.primary + '20',
+                          color: universityTheme.primary
+                        }}
+                      >
+                        <User size={20} />
                       </div>
                       <div>
                         <div className="fw-semibold">{appointment.patient?.name}</div>
@@ -2281,22 +2470,40 @@ const HolidayWarning = ({ selectedDate }: { selectedDate: string }) => {
                       </div>
                     </div>
                   </td>
+                  
                   <td>
                     <div className="d-flex align-items-center">
-                      <Calendar size={14} className="me-1 text-muted" />
-                      {new Date(appointment.date).toLocaleDateString()}
-                      <Clock size={14} className="ms-3 me-1 text-muted" />
-                      {appointment.time}
+                      <Calendar size={16} className="me-2 text-primary" />
+                      <div>
+                        <div className="fw-semibold">{formatDate(appointment.date)}</div>
+                        <small className="text-muted">{formatDate(appointment.date)}</small>
+                      </div>
                     </div>
                   </td>
-                  <td>{appointment.reason}</td>
+                  
+                  <td>
+                    <div className="d-flex align-items-center">
+                      <Clock size={16} className="me-2 text-success" />
+                      <span className="fw-semibold badge bg-success-subtle text-success px-3 py-2">
+                        {formatTime(appointment.time)}
+                      </span>
+                    </div>
+                  </td>
+                  
+                  <td>
+                    <div className="text-truncate" style={{ maxWidth: '200px' }} title={appointment.reason}>
+                      {appointment.reason}
+                    </div>
+                  </td>
+                  
                   <td>
                     <span className={`${getStatusBadgeClass(appointment.status)}`}>
                       {t(`status.${appointment.status}`)}
                     </span>
                   </td>
+                  
                   <td>
-                    <div className="d-flex gap-1">
+                    <div className="d-flex gap-1 justify-content-center">
                       <button 
                         className="btn btn-sm btn-outline-primary" 
                         onClick={() => viewAppointmentDetails(appointment)}
@@ -2333,6 +2540,9 @@ const HolidayWarning = ({ selectedDate }: { selectedDate: string }) => {
     </div>
   </div>
 );
+
+
+
 
   const PatientsTab = () => (
   <div className="card shadow-sm">
@@ -3368,6 +3578,25 @@ const Navigation = () => (
    return (
     <div className="min-vh-100" style={{ backgroundColor: '#f8f9fa', paddingTop: '90px' }}>
       <Navigation />
+
+      {/* Walk-in Alerts */}
+    {walkInAlerts.map((alert) => (
+      <WalkInAlert
+        key={alert.id}
+        alert={alert}
+        onDismiss={() => {
+          setWalkInAlerts(prev => prev.filter(a => a.id !== alert.id));
+        }}
+        onView={(appointmentId) => {
+          const appointment = appointments.find(apt => apt.id.toString() === appointmentId);
+          if (appointment) {
+            setSelectedAppointment(appointment);
+            setShowModal('viewAppointment');
+          }
+          setWalkInAlerts(prev => prev.filter(a => a.id !== alert.id));
+        }}
+      />
+    ))}
       
       <div className="container-fluid px-4">
         <MessageAlert />
@@ -3689,14 +3918,14 @@ const Navigation = () => (
                   <label className="form-label fw-semibold text-muted small">DATE</label>
                   <div className="fw-semibold">
                     <Calendar size={16} className="me-2" />
-                    {new Date(selectedAppointment.date).toLocaleDateString()}
+                    {formatDate(selectedAppointment.date)}  {/* ← CHANGED */}
                   </div>
                 </div>
                 <div className="col-md-6 mb-3">
                   <label className="form-label fw-semibold text-muted small">TIME</label>
                   <div className="fw-semibold">
                     <Clock size={16} className="me-2" />
-                    {selectedAppointment.time}
+                    {formatTime(selectedAppointment.date)}  {/* ← CHANGED */}
                   </div>
                 </div>
               </div>
@@ -4364,8 +4593,8 @@ const Navigation = () => (
     <div className="modal-body p-4" style={{ maxHeight: '70vh', overflowY: 'auto' }}>
       <div className="alert alert-info">
         <strong>Appointment Details:</strong><br />
-        Date: {new Date(selectedAppointment.date).toLocaleDateString()}<br />
-        Time: {selectedAppointment.time}<br />
+        Date: {formatDate(selectedAppointment.date)}<br />  {/* ← CHANGED */}
+        Time: {formatTime(selectedAppointment.date)}<br />  {/* ← CHANGED */}
         Reason: {selectedAppointment.reason}
       </div>
 
@@ -4517,11 +4746,10 @@ const Navigation = () => (
     <div className="modal-body p-4">
       <div className="alert alert-info">
         <strong>Current Appointment:</strong><br />
-        Date: {new Date(selectedAppointment.date).toLocaleDateString()}<br />
-        Time: {selectedAppointment.time}<br />
+        Date: {formatDate(selectedAppointment.date)}<br />  {/* ← CHANGED */}
+        Time: {formatTime(selectedAppointment.date)}<br />  {/* ← CHANGED */}
         Reason: {selectedAppointment.reason}
       </div>
-
       <div className="row">
         <div className="col-md-6 mb-3">
           <label className="form-label fw-semibold">New Date *</label>

@@ -383,13 +383,10 @@ public function getAppointments(Request $request): JsonResponse
 public function scheduleAppointment(Request $request): JsonResponse
 {
     try {
-        // Log everything for debugging
         \Log::info('=== APPOINTMENT REQUEST START ===');
         \Log::info('Request data:', $request->all());
-        \Log::info('User:', $request->user()->toArray());
 
         $validated = $request->validate([
-            'specialization' => 'nullable|string|max:100',
             'doctor_id' => 'nullable|exists:users,id',
             'date' => 'required|date|after_or_equal:today',
             'time' => 'required|date_format:H:i',
@@ -401,11 +398,53 @@ public function scheduleAppointment(Request $request): JsonResponse
 
         $validated['urgency'] = $validated['urgency'] ?? 'normal';
 
-        // Simple appointment creation without extra checks for now
+        // If doctor_id provided, verify the doctor exists
+        if (!empty($validated['doctor_id'])) {
+            $doctor = User::where('id', $validated['doctor_id'])
+                ->where('role', 'doctor')
+                ->first();
+
+            if (!$doctor) {
+                return response()->json([
+                    'message' => 'Selected doctor not found or invalid',
+                    'errors' => ['doctor_id' => ['Selected doctor is invalid']]
+                ], 422);
+            }
+        }
+
+        // Check if user already has an appointment that day
+        $existingUserAppointment = Appointment::where('patient_id', $request->user()->id)
+            ->where('date', $validated['date'])
+            ->whereIn('status', ['scheduled', 'confirmed', 'pending'])
+            ->first();
+
+        if ($existingUserAppointment) {
+            return response()->json([
+                'message' => 'You already have an appointment scheduled for this date',
+                'errors' => ['date' => ['Only one appointment per day is allowed']]
+            ], 422);
+        }
+
+        // If doctor_id provided, check for time slot availability
+        if (!empty($validated['doctor_id'])) {
+            $existingDoctorAppointment = Appointment::where('doctor_id', $validated['doctor_id'])
+                ->where('date', $validated['date'])
+                ->where('time', $validated['time'])
+                ->whereIn('status', ['scheduled', 'confirmed'])
+                ->first();
+
+            if ($existingDoctorAppointment) {
+                return response()->json([
+                    'message' => 'Doctor is not available at this time',
+                    'errors' => ['time' => ['This time slot is already booked']]
+                ], 422);
+            }
+        }
+
+        // Create appointment
         $appointment = Appointment::create([
             'patient_id' => $request->user()->id,
             'doctor_id' => $validated['doctor_id'] ?? null,
-            'specialization' => $validated['specialization'] ?? null,
             'date' => $validated['date'],
             'time' => $validated['time'],
             'reason' => $validated['reason'],
@@ -417,8 +456,17 @@ public function scheduleAppointment(Request $request): JsonResponse
 
         \Log::info('Appointment created:', $appointment->toArray());
 
+        // Try to broadcast
+        try {
+            broadcast(new \App\Events\DashboardStatsUpdated('clinical-staff', [
+                'pending_student_requests' => Appointment::whereIn('status', ['pending', 'under_review'])->count()
+            ]));
+        } catch (\Exception $e) {
+            \Log::warning('Failed to broadcast appointment creation: ' . $e->getMessage());
+        }
+
         return response()->json([
-            'message' => 'Appointment request submitted successfully.',
+            'message' => 'Appointment request submitted successfully. Awaiting clinical staff approval.',
             'appointment' => $appointment
         ], 201);
 
@@ -432,8 +480,7 @@ public function scheduleAppointment(Request $request): JsonResponse
         \Log::error('Appointment creation error:', [
             'message' => $e->getMessage(),
             'file' => $e->getFile(),
-            'line' => $e->getLine(),
-            'trace' => $e->getTraceAsString()
+            'line' => $e->getLine()
         ]);
         
         return response()->json([

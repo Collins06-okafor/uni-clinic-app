@@ -9,13 +9,19 @@ interface UploadProgressEvent {
   percentage: number;
 }
 
+interface ApiError {
+  message: string;
+  errors?: Record<string, string[]>;
+  status?: number;
+}
+
 class ApiService {
   private client;
 
   constructor() {
     this.client = axios.create({
       baseURL: API_BASE_URL,
-      timeout: 10000,
+      timeout: 30000, // Increased to 30 seconds
       headers: {
         'Content-Type': 'application/json',
         'Accept': 'application/json',
@@ -25,7 +31,7 @@ class ApiService {
     // Request interceptor with localization support
     this.client.interceptors.request.use(
       (config) => {
-        const token = localStorage.getItem('token');
+        const token = localStorage.getItem('token') || sessionStorage.getItem('token');
         if (token) {
           config.headers.Authorization = `Bearer ${token}`;
         }
@@ -49,6 +55,7 @@ class ApiService {
         if (error.response?.status === 401) {
           localStorage.removeItem('token');
           localStorage.removeItem('user');
+          sessionStorage.removeItem('token');
           window.location.href = '/';
         }
         return Promise.reject(error);
@@ -120,29 +127,98 @@ class ApiService {
     }
   }
 
-  // New method for notification-related API calls
-  async getNotifications<T = any>(): Promise<T> {
-    return this.get('/notifications');
+  // ==================== CLINIC SETTINGS ====================
+  async getClinicSettings<T = any>(): Promise<T> {
+    return this.get('/clinical/clinic-settings');
   }
 
-  async markNotificationRead<T = any>(notificationId: string): Promise<T> {
-    return this.post(`/notifications/${notificationId}/read`);
+  async saveClinicSettings<T = any>(settingsData: {
+    clinic_hours: any[];
+    appointment_tips: any[];
+    emergency_contacts: any[];
+  }): Promise<T> {
+    return this.post('/clinical/clinic-settings', settingsData);
   }
 
-  async markAllNotificationsRead<T = any>(): Promise<T> {
-    return this.post('/notifications/mark-all-read');
+  // ==================== APPOINTMENTS ====================
+  async getAppointments<T = any>(params?: any): Promise<T> {
+    return this.get('/clinical/appointments', { params });
   }
 
-  // Real-time data endpoints
-  async getDashboardStats<T = any>(): Promise<T> {
-    return this.get('/realtime/dashboard-stats');
+  async getAppointmentById<T = any>(appointmentId: string): Promise<T> {
+    return this.get(`/clinical/appointments/${appointmentId}`);
   }
 
-  async getPatientQueue<T = any>(): Promise<T> {
-    return this.get('/realtime/patient-queue');
+  async createAppointment<T = any>(appointmentData: any): Promise<T> {
+    return this.post('/clinical/appointments', appointmentData);
   }
 
-  // Walk-in patient management
+  async updateAppointment<T = any>(appointmentId: string, appointmentData: any): Promise<T> {
+    return this.put(`/clinical/appointments/${appointmentId}`, appointmentData);
+  }
+
+  async deleteAppointment<T = any>(appointmentId: string): Promise<T> {
+    return this.delete(`/clinical/appointments/${appointmentId}`);
+  }
+
+  async confirmAppointment<T = any>(appointmentId: string, confirmationData: {
+    method: string;
+    custom_message?: string;
+  }): Promise<T> {
+    return this.post(`/clinical/appointments/${appointmentId}/confirm`, confirmationData);
+  }
+
+  async assignAppointment<T = any>(appointmentId: string, assignData: {
+    doctor_id: string;
+    notes?: string;
+  }): Promise<T> {
+    return this.put(`/clinical/appointments/${appointmentId}/assign`, assignData);
+  }
+
+  async rejectAppointment<T = any>(appointmentId: string, rejectData: {
+    reason: string;
+  }): Promise<T> {
+    return this.put(`/clinical/appointments/${appointmentId}/reject`, rejectData);
+  }
+
+  async getPendingAppointments<T = any>(): Promise<T> {
+    return this.get('/clinical/appointments/pending');
+  }
+
+  // ==================== PATIENTS ====================
+  async getPatients<T = any>(params?: any): Promise<T> {
+    return this.get('/clinical/patients', { params });
+  }
+
+  async getPatientById<T = any>(patientId: string): Promise<T> {
+    return this.get(`/clinical/patients/${patientId}`);
+  }
+
+  async updatePatient<T = any>(patientId: string, patientData: any): Promise<T> {
+    return this.put(`/clinical/patients/${patientId}`, patientData);
+  }
+
+  async recordVitalSigns<T = any>(patientId: string, vitalsData: any): Promise<T> {
+    return this.post(`/clinical/patients/${patientId}/vitals`, vitalsData);
+  }
+
+  async getVitalSignsHistory<T = any>(patientId: string): Promise<T> {
+    return this.get(`/clinical/patients/${patientId}/vital-signs/history`);
+  }
+
+  async recordMedication<T = any>(patientId: string, medicationData: any): Promise<T> {
+    return this.post(`/clinical/patients/${patientId}/medications`, medicationData);
+  }
+
+  async getMedicalCard<T = any>(patientId: string): Promise<T> {
+    return this.get(`/clinical/patients/${patientId}/medical-card`);
+  }
+
+  async updateMedicalCard<T = any>(patientId: string, cardData: any): Promise<T> {
+    return this.post(`/clinical/patients/${patientId}/medical-card`, cardData);
+  }
+
+  // ==================== WALK-IN PATIENTS ====================
   async getWalkInPatients<T = any>(): Promise<T> {
     return this.get('/clinical/walk-in-patients');
   }
@@ -155,101 +231,185 @@ class ApiService {
     return this.put(`/clinical/walk-in-patients/${patientId}/status`, statusData);
   }
 
-  // Language preference
-  async updateLanguagePreference<T = any>(language: string): Promise<T> {
-    return this.post('/user/language', { language });
-  }
-
-  // Profile image upload
-  async uploadAvatar<T = any>(imageFile: File, onProgress?: (progress: UploadProgressEvent) => void): Promise<T> {
-    const formData = new FormData();
-    formData.append('avatar', imageFile);
-    return this.upload('/profile/avatar', formData, onProgress);
-  }
-
-  // Appointment scheduling with localization
-  async scheduleAppointment<T = any>(appointmentData: any): Promise<T> {
-    return this.post('/student/appointments/schedule', appointmentData);
-  }
-
-  // Get available doctors with filters
+  // ==================== DOCTORS ====================
   async getAvailableDoctors<T = any>(params?: {
     date?: string;
     time?: string;
     specialization?: string;
   }): Promise<T> {
-    const queryParams = new URLSearchParams();
-    if (params?.date) queryParams.append('date', params.date);
-    if (params?.time) queryParams.append('time', params.time);
-    if (params?.specialization) queryParams.append('specialization', params.specialization);
-    
-    const queryString = queryParams.toString();
-    return this.get(`/clinical/doctors/availability${queryString ? `?${queryString}` : ''}`);
+    return this.get('/clinical/available-doctors', { params });
   }
 
-  // Clinical staff endpoints
-  async confirmAppointment<T = any>(appointmentId: string, confirmationData: any): Promise<T> {
-    return this.post(`/clinical/appointments/${appointmentId}/confirm`, confirmationData);
+  async getAllDoctors<T = any>(): Promise<T> {
+    return this.get('/clinical/doctors');
   }
 
-  async recordVitalSigns<T = any>(patientId: string, vitalsData: any): Promise<T> {
-    return this.post(`/clinical/patients/${patientId}/vitals`, vitalsData);
+  async getDoctorsAvailability<T = any>(): Promise<T> {
+    return this.get('/clinical/doctors/availability');
   }
 
-  async recordMedication<T = any>(patientId: string, medicationData: any): Promise<T> {
-    return this.post(`/clinical/patients/${patientId}/medications`, medicationData);
+  // ==================== MEDICATIONS ====================
+  async getMedications<T = any>(): Promise<T> {
+    return this.get('/clinical/medications');
+  }
+
+  async addMedication<T = any>(medicationData: any): Promise<T> {
+    return this.post('/clinical/medications', medicationData);
+  }
+
+  async updateMedication<T = any>(medicationId: string, medicationData: any): Promise<T> {
+    return this.put(`/clinical/medications/${medicationId}`, medicationData);
+  }
+
+  async deleteMedication<T = any>(medicationId: string): Promise<T> {
+    return this.delete(`/clinical/medications/${medicationId}`);
   }
 
   async getMedicationSchedule<T = any>(date?: string): Promise<T> {
-    const queryString = date ? `?date=${date}` : '';
-    return this.get(`/clinical/medication-schedule${queryString}`);
+    const params = date ? { date } : undefined;
+    return this.get('/clinical/medication-schedule', { params });
   }
 
-  private handleError(error: AxiosError): Error {
+  // ==================== CARE TASKS ====================
+  async getCareTasks<T = any>(): Promise<T> {
+    return this.get('/clinical/care-tasks');
+  }
+
+  async createCareTask<T = any>(taskData: any): Promise<T> {
+    return this.post('/clinical/care-tasks', taskData);
+  }
+
+  // ==================== MEDICAL RECORDS ====================
+  async getMedicalRecord<T = any>(recordId: string): Promise<T> {
+    return this.get(`/clinical/medical-records/${recordId}`);
+  }
+
+  // ==================== URGENT QUEUE ====================
+  async getUrgentQueue<T = any>(): Promise<T> {
+    return this.get('/clinical/urgent-queue');
+  }
+
+  // ==================== STUDENT REQUESTS ====================
+  async getStudentRequests<T = any>(): Promise<T> {
+    return this.get('/clinical/student-requests');
+  }
+
+  async assignStudentRequest<T = any>(requestId: string, assignData: any): Promise<T> {
+    return this.post(`/clinical/student-requests/${requestId}/assign`, assignData);
+  }
+
+  async approveStudentRequest<T = any>(requestId: string): Promise<T> {
+    return this.post(`/clinical/student-requests/${requestId}/approve`);
+  }
+
+  async rejectStudentRequest<T = any>(requestId: string, rejectData: any): Promise<T> {
+    return this.post(`/clinical/student-requests/${requestId}/reject`, rejectData);
+  }
+
+  // ==================== DASHBOARD ====================
+  async getDashboard<T = any>(): Promise<T> {
+    return this.get('/clinical/dashboard');
+  }
+
+  async getDashboardStats<T = any>(): Promise<T> {
+    return this.get('/realtime/dashboard-stats');
+  }
+
+  async getPatientQueue<T = any>(): Promise<T> {
+    return this.get('/realtime/patient-queue');
+  }
+
+  // ==================== NOTIFICATIONS ====================
+  async getNotifications<T = any>(): Promise<T> {
+    return this.get('/notifications');
+  }
+
+  async markNotificationRead<T = any>(notificationId: string): Promise<T> {
+    return this.post(`/notifications/${notificationId}/read`);
+  }
+
+  async markAllNotificationsRead<T = any>(): Promise<T> {
+    return this.post('/notifications/mark-all-read');
+  }
+
+  async deleteNotification<T = any>(notificationId: string): Promise<T> {
+    return this.delete(`/notifications/${notificationId}`);
+  }
+
+  // ==================== PROFILE ====================
+  async uploadAvatar<T = any>(imageFile: File, onProgress?: (progress: UploadProgressEvent) => void): Promise<T> {
+    const formData = new FormData();
+    formData.append('avatar', imageFile);
+    return this.upload('/auth/profile/avatar', formData, onProgress);
+  }
+
+  async removeAvatar<T = any>(): Promise<T> {
+    return this.delete('/auth/profile/avatar');
+  }
+
+  // ==================== LANGUAGE ====================
+  async updateLanguagePreference<T = any>(language: string): Promise<T> {
+    return this.post('/language/set', { language });
+  }
+
+  // ==================== ERROR HANDLING ====================
+  private handleError(error: AxiosError): ApiError {
     if (error.response) {
       const { data, status } = error.response;
       
-      if (data && typeof data === 'object' && 'message' in data) {
-        return new Error((data as any).message);
-      } else if (data && typeof data === 'object' && 'errors' in data) {
+      // Check for Laravel validation errors
+      if (data && typeof data === 'object' && 'errors' in data) {
         const errors = (data as any).errors;
         const firstError = Object.values(errors)[0];
-        return new Error(Array.isArray(firstError) ? firstError[0] : firstError as string);
-      } else if (status === 404) {
-        return new Error('Resource not found');
+        return {
+          message: Array.isArray(firstError) ? firstError[0] : firstError as string,
+          errors: errors,
+          status
+        };
+      }
+      
+      // Check for standard message
+      if (data && typeof data === 'object' && 'message' in data) {
+        return {
+          message: (data as any).message,
+          status
+        };
+      }
+      
+      // Status-based errors
+      if (status === 404) {
+        return { message: 'Resource not found', status };
       } else if (status === 403) {
-        return new Error('Access denied');
+        return { message: 'Access denied', status };
+      } else if (status === 422) {
+        return { message: 'Validation failed', status };
       } else if (status >= 500) {
-        return new Error('Server error occurred');
+        return { message: 'Server error occurred', status };
       }
     } else if (error.request) {
-      return new Error('Network error - please check your connection');
+      return { message: 'Network error - please check your connection', status: 0 };
     }
     
-    return new Error(error.message || 'An unexpected error occurred');
+    return { message: error.message || 'An unexpected error occurred' };
   }
 
-  // Get current language setting
+  // ==================== UTILITY METHODS ====================
   getCurrentLanguage(): string {
     return localStorage.getItem('language') || 'en';
   }
 
-  // Set language for future requests
   setLanguage(language: string): void {
     localStorage.setItem('language', language);
   }
 
-  // Get API base URL
   getBaseURL(): string {
     return API_BASE_URL;
   }
 
-  // Get current auth token
   getAuthToken(): string | null {
-    return localStorage.getItem('token');
+    return localStorage.getItem('token') || sessionStorage.getItem('token');
   }
 
-  // Check if user is authenticated
   isAuthenticated(): boolean {
     return !!this.getAuthToken();
   }

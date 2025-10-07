@@ -4,7 +4,7 @@ import {
   Calendar, Clock, Users, FileText, Heart, Pill, AlertTriangle, Plus, 
   Edit, Trash2, Check, X, Search, Filter, Bell, Stethoscope, 
   Activity, BarChart3, History, User, CheckCircle, Thermometer, 
-  TrendingUp, Clipboard, ClipboardCheck, ClipboardList, UserPlus, Globe, LogOut, RotateCcw
+  TrendingUp, Clipboard, ClipboardCheck, ClipboardList, UserPlus, Settings, Globe, LogOut, RotateCcw
 } from 'lucide-react';
 import {
   Chart as ChartJS,
@@ -25,6 +25,8 @@ import RealTimeDashboard from '../../components/RealTimeDashboard';
 import WalkInPatientManagement from '../../components/WalkInPatientManagement';
 import { useTranslation } from 'react-i18next';
 import websocketService from '../../services/websocket';
+import NotificationSystem from '../../components/NotificationSystem';
+import ClinicSettingsManager from '../../components/ClinicSettingsManager';
 
 ChartJS.register(
   CategoryScale,
@@ -58,6 +60,7 @@ interface Patient {
   id: string | number;
   name: string;
   student_id: string;
+  staff_no?: string;  // ADD THIS LINE
   age?: number;
   department?: string;
   assigned_doctor?: string;
@@ -86,6 +89,8 @@ interface Doctor {
   email: string;
   status?: string;
   availability_status?: string;
+  total_patients?: number;      // ADD THIS LINE
+  patients_today?: number;       // ADD THIS LINE
 }
 
 interface Appointment {
@@ -93,7 +98,7 @@ interface Appointment {
   patient_id?: string | number;
   patient_name?: string;
   student_id?: string;
-  doctor?: string | Doctor; // Can be either string (from getAppointments) or Doctor object
+  doctor?: string | Doctor;
   doctor_id?: string | number;
   date: string;
   time: string;
@@ -107,6 +112,8 @@ interface Appointment {
   appointment_date?: string;
   appointment_time?: string;
   appointment_type?: string;
+  created_at?: string;  // ADD THIS LINE
+  updated_at?: string;  // ADD THIS LINE TOO
 }
 
 interface Medication {
@@ -147,6 +154,7 @@ interface DashboardData {
   patient_queue: Array<{
     id: string | number;
     time: string;
+    date: string;
     patient_name: string;
     student_id: string;
     status: string;
@@ -208,7 +216,7 @@ interface QuickTimeSlotsProps {
   checkDoctorAvailability: (date: string, time: string) => Promise<void>;
 }
 
-type TabType = 'overview' | 'appointments' | 'patients' | 'medications' | 'doctors' | 'walkin';
+type TabType = 'overview' | 'appointments' | 'patients' | 'medications' | 'doctors' | 'walkin' | 'settings';
 
 const Modal: React.FC<ModalProps> = ({ title, children, onClose }) => (
   <div className="modal fade show d-block" tabIndex={-1} style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
@@ -1036,6 +1044,45 @@ const isDateBlocked = (dateString: string): boolean => {
     }
   };
 
+  const handleApproveRequest = async (
+  requestId: string | number, 
+  doctorId: string | number, 
+  notes: string = '',
+  status: string = 'waiting'
+) => {
+  try {
+    setLoading(true);
+    await api.post(`student-requests/${requestId}/approve`, {
+      doctor_id: doctorId,
+      notes,
+      status
+    });
+    
+    setMessage({ type: 'success', text: 'Student request approved and assigned!' });
+    
+    // Refresh all relevant data
+    await Promise.all([
+      loadStudentRequests(),
+      loadAppointments(),
+      loadDashboardData()
+    ]);
+    
+    // Trigger walk-in refresh
+    window.dispatchEvent(new CustomEvent('refreshWalkIn'));
+    
+    // Switch to walk-in tab to show the assigned patient
+    setActiveTab('walkin');
+    
+    setShowModal('');
+  } catch (error) {
+    console.error('Error approving request:', error);
+    setMessage({ type: 'error', text: `Error approving request: ${(error as Error).message}` });
+  } finally {
+    setLoading(false);
+  }
+};
+  
+  
   const QuickTimeSlots: React.FC<QuickTimeSlotsProps> = ({ selectedDate, onTimeSelect, formData, setFormData, checkDoctorAvailability }) => {
     const timeSlots = ['09:00', '10:00', '11:00', '14:00', '15:00', '16:00'];
     
@@ -1521,6 +1568,50 @@ const Navigation = () => (
               {t('nav.walkin_patients', 'Walk-in Patients')}
             </button>
           </li>
+          <li className="nav-item">
+  <button 
+    className={`nav-link btn position-relative ${activeTab === 'settings' ? 'active' : ''}`}
+    onClick={() => setActiveTab('settings')}
+    style={{
+      color: activeTab === 'settings' ? '#dc3545' : '#666',
+      background: activeTab === 'settings' ? 'rgba(220, 53, 69, 0.1)' : 'none',
+      border: 'none',
+      padding: '8px 16px',
+      borderRadius: '8px',
+      transition: 'all 0.3s ease',
+      margin: '0 4px',
+      display: 'flex',
+      alignItems: 'center',
+      fontWeight: activeTab === 'settings' ? 600 : 'normal'
+    }}
+    onMouseEnter={(e) => {
+      if (activeTab !== 'settings') {
+        e.currentTarget.style.color = '#dc3545';
+        e.currentTarget.style.background = 'rgba(220, 53, 69, 0.05)';
+        e.currentTarget.style.transform = 'translateY(-1px)';
+      }
+    }}
+    onMouseLeave={(e) => {
+      if (activeTab !== 'settings') {
+        e.currentTarget.style.color = '#666';
+        e.currentTarget.style.background = 'none';
+        e.currentTarget.style.transform = 'translateY(0)';
+      }
+    }}
+  >
+    <Settings size={18} className="me-2" />
+    {t('nav.settings', 'Clinic Settings')}
+    
+    {/* Optional: Badge for settings that need attention */}
+    {/* Uncomment if you want to show pending settings */}
+    {/* <span 
+      className="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-warning"
+      style={{ fontSize: '0.65rem', padding: '0.25em 0.5em' }}
+    >
+      !
+    </span> */}
+  </button>
+</li>
         </ul>
 
         {/* Right side: User Dropdown with Language inside */}
@@ -2197,41 +2288,57 @@ const DashboardOverview: React.FC = () => {
                 </div>
               ) : (
                 <div className="table-responsive">
-                  <table className="table table-hover align-middle">
-                    <thead>
-                      <tr>
-                        <th>Time</th>
-                        <th>Patient</th>
-                        <th>Status</th>
-                        <th>Priority</th>
-                        <th>Doctor</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {dashboardData.patient_queue.map((queueItem) => (
-                        <tr key={queueItem.id}>
-                          <td>{queueItem.time}</td>
-                          <td>
-                            {queueItem.patient_name} ({queueItem.student_id})
-                          </td>
-                          <td>
-                            <span className={getStatusBadge(queueItem.status)}>
-                              {queueItem.status}
-                            </span>
-                          </td>
-                          <td>
-                            <span
-                              className={getPriorityBadge(queueItem.priority)}
-                            >
-                              {queueItem.priority}
-                            </span>
-                          </td>
-                          <td>{queueItem.assigned_doctor}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+  <table className="table table-hover align-middle">
+    <thead>
+      <tr>
+        <th>Date</th>
+        <th>Time</th>
+        <th>Patient</th>
+        <th>Status</th>
+        <th>Priority</th>
+        <th>Doctor</th>
+      </tr>
+    </thead>
+    <tbody>
+      {dashboardData.patient_queue.length === 0 ? (
+        <div className="text-muted text-center py-4">
+          <Users size={32} className="mb-2" />
+          <div>No patients in queue</div>
+        </div>
+      ) : (
+        dashboardData.patient_queue.map((queueItem) => (
+          <tr key={queueItem.id}>
+            <td>{queueItem.date ? new Date(queueItem.date).toLocaleDateString() : new Date().toLocaleDateString()}</td>
+            <td>
+              {queueItem.time ? new Date(queueItem.time).toLocaleTimeString('en-US', { 
+                hour: 'numeric', 
+                minute: '2-digit',
+                second: '2-digit',
+                hour12: true 
+              }) : 'N/A'}
+            </td>
+            <td>
+              {queueItem.patient_name} ({queueItem.student_id})
+            </td>
+            <td>
+              <span className={getStatusBadge(queueItem.status)}>
+                {queueItem.status}
+              </span>
+            </td>
+            <td>
+              <span
+                className={getPriorityBadge(queueItem.priority)}
+              >
+                {queueItem.priority}
+              </span>
+            </td>
+            <td>{queueItem.assigned_doctor}</td>
+          </tr>
+        ))
+      )}
+    </tbody>
+  </table>
+</div>
               )}
             </div>
           </div>
@@ -2273,6 +2380,7 @@ const DashboardOverview: React.FC = () => {
                     <thead>
                       <tr>
                         <th>Student</th>
+                        <th>Date of Request</th>
                         <th>Requested Date</th>
                         <th>Specialization</th>
                         <th>Urgency</th>
@@ -2300,7 +2408,28 @@ const DashboardOverview: React.FC = () => {
                                 </div>
                               </td>
                               <td>
-                                {request.date} {request.time}
+                                {request.created_at 
+                                  ? new Date(request.created_at).toLocaleDateString('en-US', { 
+                                      year: 'numeric', 
+                                      month: 'short', 
+                                      day: 'numeric' 
+                                    })
+                                  : new Date(request.date).toLocaleDateString('en-US', { 
+                                      year: 'numeric', 
+                                      month: 'short', 
+                                      day: 'numeric' 
+                                    })
+                                }
+                              </td>
+                              <td>
+                                {request.date 
+                                  ? new Date(request.date).toLocaleDateString('en-US', { 
+                                      year: 'numeric', 
+                                      month: 'short', 
+                                      day: 'numeric' 
+                                    })
+                                  : 'Not set'
+                                }
                               </td>
                               <td>{request.specialization || 'General'}</td>
                               <td>
@@ -2479,15 +2608,15 @@ const AppointmentsTab: React.FC = () => {
             <table className="table table-hover align-middle">
               <thead>
                 <tr>
-                  <th>Type</th>
-                  <th>Patient</th>
-                  <th>Date</th>
-                  <th>Time</th>
-                  <th>Appointment Type</th>
-                  <th>Status</th>
-                  <th>Priority</th>
-                  <th>Doctor</th>
-                  <th>Actions</th>
+                  <th style={{ fontWeight: 'normal' }}>Type</th>
+                  <th style={{ fontWeight: 'normal' }}>Patient</th>
+                  <th style={{ fontWeight: 'normal' }}>Requested Date</th>
+                  <th style={{ fontWeight: 'normal' }}>Date of Request</th>
+                  <th style={{ fontWeight: 'normal' }}>Appointment Type</th>
+                  <th style={{ fontWeight: 'normal' }}>Status</th>
+                  <th style={{ fontWeight: 'normal' }}>Priority</th>
+                  <th style={{ fontWeight: 'normal' }}>Doctor</th>
+                  <th style={{ fontWeight: 'normal' }}>Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -2674,109 +2803,118 @@ const AppointmentsTab: React.FC = () => {
           </h3>
         </div>
         <div className="card-body p-4">
-          {/* Search */}
-          <div className="row mb-4">
-            <div className="col-md-6">
-              <div className="input-group">
-                <span className="input-group-text">
-                  <Search size={16} />
-                </span>
-                <input
-                  type="text"
-                  placeholder="Search patients..."
-                  value={searchTerm}
-                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSearchTerm(e.target.value)}
-                  className="form-control"
-                />
-              </div>
-            </div>
-          </div>
-
-          {/* Patients List */}
-          <div className="row g-4">
-            {loading ? (
-              <div className="col-12 text-center py-5">
-                <div className="spinner-border text-primary" role="status">
-                  <span className="visually-hidden">Loading...</span>
-                </div>
-                <p className="text-muted mt-2">Loading patients...</p>
-              </div>
-            ) : patients.length === 0 ? (
-              <div className="col-12 text-center py-5">
-                <Users size={48} className="text-muted mb-3" />
-                <p className="text-muted">No patients found</p>
-                <small className="text-muted">Try adjusting your search term</small>
-              </div>
-            ) : (
-              patients.filter((patient: Patient) => 
-                patient.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                patient.student_id?.includes(searchTerm) || false
-              ).map((patient) => (
-                <div key={patient.id} className="col-md-6 col-lg-4 col-xl-3">
-                  <div className="card h-100 shadow-sm border-0" style={{ borderRadius: '1rem' }}>
-                    <div className="card-body">
-                      <div className="d-flex justify-content-between align-items-center mb-3">
-                        <h5 className="card-title fw-semibold mb-0">{patient.name}</h5>
-                        {/*<span className={`${getStatusBadge(patient.status)}`}>
-                          {patient.status}
-                        </span>*/}
-                      </div>
-                      <div className="text-muted small mb-3">
-                        <p className="mb-1"><strong>ID:</strong> {patient.student_id}</p>
-                        <p className="mb-1"><strong>Age:</strong> {patient.age}</p>
-                        <p className="mb-1"><strong>Department:</strong> {patient.department}</p>
-                        <p className="mb-0"><strong>Doctor:</strong> {patient.assigned_doctor || 'Unassigned'}</p>
-                      </div>
-                      <div className="d-flex gap-2">
-                        <button 
-  onClick={() => {
-    setSelectedPatient(patient);
-    setFormData({
-      blood_pressure_systolic: '',
-      blood_pressure_diastolic: '',
-      heart_rate: '',
-      temperature: '',
-      temperature_unit: 'C',
-      respiratory_rate: '',
-      oxygen_saturation: '',
-      notes: ''
-    });
-    setShowModal('vitals');
-  }}
-  className="btn btn-sm btn-outline-primary flex-grow-1"
-  style={{ borderRadius: '0.5rem' }}
->
-  <Heart size={16} className="me-1" />
-  Vitals
-</button>
-                        <button 
-                          onClick={() => {
-                            setSelectedPatient(patient);
-                            setShowModal('medication');
-                          }}
-                          className="btn btn-sm btn-outline-success flex-grow-1"
-                          style={{ borderRadius: '0.5rem' }}
-                        >
-                          <Pill size={16} className="me-1" />
-                          Meds
-                        </button>
-                        <button 
-                          className="btn btn-sm btn-outline-info flex-grow-1"
-                          style={{ borderRadius: '0.5rem' }}
-                        >
-                          <FileText size={16} className="me-1" />
-                          Card
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              ))
-            )}
-          </div>
-        </div>
+  {/* Search */}
+  <div className="row mb-4">
+    <div className="col-md-6">
+      <div className="input-group">
+        <span className="input-group-text">
+          <Search size={16} />
+        </span>
+        <input
+          type="text"
+          placeholder="Search patients..."
+          value={searchTerm}
+          onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSearchTerm(e.target.value)}
+          className="form-control"
+        />
       </div>
     </div>
+  </div>
+
+  {/* Patients Table */}
+  <div className="table-responsive">
+  <table className="table table-hover align-middle">
+    <thead>
+      <tr>
+        <th style={{ fontWeight: 'normal' }}>Patient Name</th>
+        <th style={{ fontWeight: 'normal' }}>Student ID</th>
+        <th style={{ fontWeight: 'normal' }}>Staff No</th>
+        <th style={{ fontWeight: 'normal' }}>Age</th>
+        <th style={{ fontWeight: 'normal' }}>Department</th>
+        <th style={{ fontWeight: 'normal' }}>Assigned Doctor</th>
+        <th style={{ fontWeight: 'normal' }}>Actions</th>
+      </tr>
+    </thead>
+    <tbody>
+      {loading ? (
+        <tr>
+          <td colSpan={7} className="text-center py-5">
+            <div className="spinner-border text-primary" role="status">
+              <span className="visually-hidden">Loading...</span>
+            </div>
+            <p className="text-muted mt-2">Loading patients...</p>
+          </td>
+        </tr>
+      ) : patients.length === 0 ? (
+        <tr>
+          <td colSpan={7} className="text-center py-5">
+            <Users size={48} className="text-muted mb-3" />
+            <p className="text-muted">No patients found</p>
+            <small className="text-muted">Try adjusting your search term</small>
+          </td>
+        </tr>
+      ) : (
+        patients.filter((patient: Patient) => 
+          patient.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          patient.student_id?.includes(searchTerm) || false
+        ).map((patient) => (
+          <tr key={patient.id}>
+            <td>{patient.name}</td>
+            <td>{patient.student_id || 'N/A'}</td>
+            <td>{patient.staff_no || 'N/A'}</td>
+            <td>{patient.age || 'N/A'}</td>
+            <td>{patient.department || 'N/A'}</td>
+            <td>{patient.assigned_doctor || 'Unassigned'}</td>
+            <td>
+              <div className="btn-group btn-group-sm" role="group">
+                <button 
+                  onClick={() => {
+                    setSelectedPatient(patient);
+                    setFormData({
+                      blood_pressure_systolic: '',
+                      blood_pressure_diastolic: '',
+                      heart_rate: '',
+                      temperature: '',
+                      temperature_unit: 'C',
+                      respiratory_rate: '',
+                      oxygen_saturation: '',
+                      notes: ''
+                    });
+                    setShowModal('vitals');
+                  }}
+                  className="btn btn-outline-primary"
+                  title="Record Vitals"
+                >
+                  <Heart size={16} />
+                </button>
+                <button 
+                  onClick={() => {
+                    setSelectedPatient(patient);
+                    setShowModal('medication');
+                  }}
+                  className="btn btn-outline-success"
+                  title="Record Medication"
+                >
+                  <Pill size={16} />
+                </button>
+                <button 
+                  className="btn btn-outline-info"
+                  title="View Medical Card"
+                >
+                  <FileText size={16} />
+                </button>
+              </div>
+            </td>
+          </tr>
+        ))
+      )}
+    </tbody>
+  </table>
+</div>
+</div>
+        </div>
+      </div>
+    
   );
 
   // Medications Tab Component
@@ -2804,13 +2942,13 @@ const AppointmentsTab: React.FC = () => {
             <table className="table table-hover align-middle">
               <thead>
                 <tr>
-                  <th scope="col">Medication</th>
-                  <th scope="col">Dosage</th>
-                  <th scope="col">Frequency</th>
-                  <th scope="col">Start Date</th>
-                  <th scope="col">End Date</th>
-                  <th scope="col">Status</th>
-                  <th scope="col">Actions</th>
+                  <th scope="col" style={{ fontWeight: 'normal' }}>Medication</th>
+                  <th scope="col" style={{ fontWeight: 'normal' }}>Dosage</th>
+                  <th scope="col" style={{ fontWeight: 'normal' }}>Frequency</th>
+                  <th scope="col" style={{ fontWeight: 'normal' }}>Start Date</th>
+                  <th scope="col" style={{ fontWeight: 'normal' }}>End Date</th>
+                  <th scope="col" style={{ fontWeight: 'normal' }}>Status</th>
+                  <th scope="col" style={{ fontWeight: 'normal' }}>Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -2834,7 +2972,7 @@ const AppointmentsTab: React.FC = () => {
                   medicationSchedule.map((medication) => (
                     <tr key={medication.id}>
                       <td>
-                        <strong>{medication.name || medication.medication_name}</strong>
+                        {medication.name || medication.medication_name}
                         {medication.generic || medication.generic_name ? (
                           <div className="text-muted small">{medication.generic || medication.generic_name}</div>
                         ) : null}
@@ -2886,51 +3024,87 @@ const AppointmentsTab: React.FC = () => {
           </h3>
         </div>
         <div className="card-body p-4">
-          <div className="row g-4">
-            {loading ? (
-              <div className="col-12 text-center py-5">
-                <div className="spinner-border text-primary" role="status">
-                  <span className="visually-hidden">Loading...</span>
-                </div>
-                <p className="text-muted mt-2">Loading doctors...</p>
-              </div>
-            ) : doctors.length === 0 ? (
-              <div className="col-12 text-center py-5">
-                <User size={48} className="text-muted mb-3" />
-                <p className="text-muted">No doctors found</p>
-              </div>
-            ) : (
-              doctors.map((doctor) => (
-                <div key={doctor.id} className="col-md-6 col-lg-4">
-                  <div className="card h-100 shadow-sm border-0">
-                    <div className="card-body">
-                      <h5 className="card-title fw-semibold">
-                        {doctor.name || doctor.full_name}
-                      </h5>
-                      <div className="text-muted small mb-3">
-                        <p className="mb-1"><strong>Specialization:</strong> {doctor.specialty}</p>
-                        <p className="mb-1"><strong>Department:</strong> {doctor.department}</p>
-                        <p className="mb-1"><strong>Phone:</strong> {doctor.phone}</p>
-                        <p className="mb-0"><strong>Email:</strong> {doctor.email}</p>
-                      </div>
-                      {/*<div className="d-flex justify-content-between align-items-center">
-                        <span className={`badge ${(doctor.status || 'active') === 'active' ? 'bg-success' : 'bg-secondary'}`}>
-                          {doctor.status || 'active'}
-                        </span>
-                        <button 
-                          className="btn btn-sm btn-primary"
-                          style={{ borderRadius: '0.5rem' }}
-                        >
-                          Book Appointment
-                        </button>
-                      </div>*/}
+        <div className="table-responsive">
+          <table className="table table-hover align-middle">
+            <thead>
+              <tr>
+                <th style={{ fontWeight: 'normal' }}>Doctor Name</th>
+                <th style={{ fontWeight: 'normal' }}>Specialization</th>
+                <th style={{ fontWeight: 'normal' }}>Department</th>
+                <th style={{ fontWeight: 'normal' }}>Phone</th>
+                <th style={{ fontWeight: 'normal' }}>Email</th>
+                <th style={{ fontWeight: 'normal' }}>Patients</th>
+              </tr>
+            </thead>
+            <tbody>
+              {loading ? (
+                <tr>
+                  <td colSpan={6} className="text-center py-5">
+                    <div className="spinner-border text-primary" role="status">
+                      <span className="visually-hidden">Loading...</span>
                     </div>
-                  </div>
-                </div>
-              ))
-            )}
-          </div>
+                    <p className="text-muted mt-2">Loading doctors...</p>
+                  </td>
+                </tr>
+              ) : doctors.length === 0 ? (
+                <tr>
+                  <td colSpan={6} className="text-center py-5">
+                    <User size={48} className="text-muted mb-3" />
+                    <p className="text-muted">No doctors found</p>
+                  </td>
+                </tr>
+              ) : (
+                doctors.map((doctor) => (
+                  <tr key={doctor.id}>
+                    <td>
+                      <div className="d-flex align-items-center">
+                        <div 
+                          className="rounded-circle me-2 d-flex align-items-center justify-content-center"
+                          style={{
+                            width: '32px',
+                            height: '32px',
+                            backgroundColor: '#e3f2fd',
+                            color: '#1976d2'
+                          }}
+                        >
+                          <Stethoscope size={16} />
+                        </div>
+                        {doctor.name || doctor.full_name}
+                      </div>
+                    </td>
+                    <td>
+                      <span className="badge bg-info text-dark">
+                        {doctor.specialty || doctor.specialization}
+                      </span>
+                    </td>
+                    <td>{doctor.department}</td>
+                    <td>{doctor.phone}</td>
+                    <td>{doctor.email}</td>
+                    <td>
+                      <div className="d-flex flex-column">
+                        <div className="d-flex align-items-center mb-1">
+                          <Users size={14} className="me-1 text-primary" />
+                          <span className="badge bg-primary me-2">
+                            {doctor.total_patients || 0}
+                          </span>
+                          <small className="text-muted">Total</small>
+                        </div>
+                        <div className="d-flex align-items-center">
+                          <Activity size={14} className="me-1 text-success" />
+                          <span className="badge bg-success me-2">
+                            {doctor.patients_today || 0}
+                          </span>
+                          <small className="text-muted">Today</small>
+                        </div>
+                      </div>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
         </div>
+      </div>
       </div>
     </div>
   );
@@ -2986,11 +3160,12 @@ const AppointmentsTab: React.FC = () => {
       {activeTab === 'medications' && <MedicationsTab />}
       {activeTab === 'doctors' && <DoctorsTab />}
       {activeTab === 'walkin' && (
-  <WalkInPatientManagement 
-    userRole="clinical_staff" 
-    websocketService={websocketService}
-  />
-)}
+      <WalkInPatientManagement 
+        userRole="clinical_staff" 
+        websocketService={websocketService}
+      />
+      )}
+      {activeTab === 'settings' && <ClinicSettingsManager />}
 
            {/* Modals */}
       {showModal === 'createAppointment' && (
@@ -3650,25 +3825,12 @@ const AppointmentsTab: React.FC = () => {
   <Modal title="Assign Student Request" onClose={() => setShowModal('')}>
     <form onSubmit={async (e) => {
       e.preventDefault();
-      try {
-        setLoading(true);
-        
-        // Use the approve endpoint instead of assign
-        await api.post(`student-requests/${formData.appointmentId}/approve`, {
-          doctor_id: formData.doctor_id,
-          notes: formData.notes || ''
-        });
-        
-        setMessage({ type: 'success', text: 'Student request assigned successfully!' });
-        loadStudentRequests();
-        loadAppointments();
-        setShowModal('');
-      } catch (error) {
-        console.error('Assignment error:', error);
-        setMessage({ type: 'error', text: `Error assigning request: ${(error as Error).message}` });
-      } finally {
-        setLoading(false);
-      }
+      await handleApproveRequest(
+        formData.appointmentId, 
+        formData.doctor_id, 
+        formData.notes || '',
+        'waiting'
+      );
     }}>
       <div className="mb-3">
         <label className="form-label">Student</label>
@@ -3730,45 +3892,31 @@ const AppointmentsTab: React.FC = () => {
 
 {showModal === 'reviewRequest' && (
   <Modal title="Review Student Request" onClose={() => setShowModal('')}>
-    <div className="mb-3">
-      <h6>Request Details</h6>
-      <div className="card bg-light">
-        <div className="card-body">
-          <div className="row">
-            <div className="col-md-6">
-              <p><strong>Student:</strong> {formData.patient?.name || 'Unknown'}</p>
-              <p><strong>Student ID:</strong> {formData.patient?.student_id || 'N/A'}</p>
-            </div>
-            <div className="col-md-6">
-              <p><strong>Requested Date:</strong> {formData.date || 'Not specified'}</p>
-              <p><strong>Priority:</strong> <span className={getPriorityBadge(formData.priority || 'normal')}>{formData.priority || 'normal'}</span></p>
-            </div>
-          </div>
-          <p><strong>Reason:</strong> {formData.reason || 'No reason provided'}</p>
-        </div>
-      </div>
-    </div>
+    {/* ... keep the existing display code ... */}
     
     <form onSubmit={async (e) => {
       e.preventDefault();
       try {
         setLoading(true);
         if (formData.reviewAction === 'approve') {
-          await api.post(`student-requests/${formData.appointmentId}/approve`, {
-            doctor_id: formData.doctor_id,
-            notes: formData.reviewNotes
-          });
-          setMessage({ type: 'success', text: 'Student request approved!' });
+          // USE handleApproveRequest HERE
+          await handleApproveRequest(
+            formData.appointmentId, 
+            formData.doctor_id, 
+            formData.reviewNotes,
+            'scheduled' // or 'waiting' depending on your workflow
+          );
         } else {
+          // Keep existing reject logic
           await api.post(`student-requests/${formData.appointmentId}/reject`, {
             rejection_reason: formData.rejectionReason,
             notes: formData.reviewNotes
           });
           setMessage({ type: 'success', text: 'Student request rejected!' });
+          loadStudentRequests();
+          loadAppointments();
+          setShowModal('');
         }
-        loadStudentRequests();
-        loadAppointments();
-        setShowModal('');
       } catch (error) {
         setMessage({ type: 'error', text: `Error processing request: ${(error as Error).message}` });
       } finally {
