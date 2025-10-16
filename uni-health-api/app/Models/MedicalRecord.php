@@ -9,12 +9,21 @@ class MedicalRecord extends Model
     protected $fillable = [
         'patient_id',
         'doctor_id',
+        'type',
+        'content',
         'diagnosis',
         'treatment',
         'notes',
         'visit_date',
-        'created_by',
-        'type'
+        'created_by'
+    ];
+
+    // 🔥 CRITICAL: Add this casting to auto-handle JSON
+    protected $casts = [
+        'content' => 'array', // This makes Laravel auto-encode/decode JSON
+        'visit_date' => 'date',
+        'created_at' => 'datetime',
+        'updated_at' => 'datetime',
     ];
 
     // Relationship to patient

@@ -4,7 +4,7 @@ import {
   Calendar, Clock, Users, FileText, Heart, Pill, AlertTriangle, Plus, 
   Edit, Trash2, Check, X, Search, Filter, Bell, Stethoscope, 
   Activity, BarChart3, History, User, CheckCircle, Thermometer, 
-  TrendingUp, Clipboard, ClipboardCheck, ClipboardList, UserPlus, Settings, Globe, LogOut, RotateCcw
+  TrendingUp, Clipboard, ClipboardCheck, ClipboardList, UserPlus, Settings, Globe, Camera, LogOut, RotateCcw
 } from 'lucide-react';
 import {
   Chart as ChartJS,
@@ -26,7 +26,11 @@ import WalkInPatientManagement from '../../components/WalkInPatientManagement';
 import { useTranslation } from 'react-i18next';
 import websocketService from '../../services/websocket';
 import NotificationSystem from '../../components/NotificationSystem';
-import ClinicSettingsManager from '../../components/ClinicSettingsManager';
+import PatientVitalsViewer from '../../components/clinical/PatientVitalsViewer';
+import EnhancedMedicalCardViewer from '../../components/clinical/EnhancedMedicalCardViewer';
+import MedicationManagement from '../../components/clinical/MedicationManagement';
+import PhoneInput from "react-phone-input-2";
+import "react-phone-input-2/lib/style.css";
 
 ChartJS.register(
   CategoryScale,
@@ -54,6 +58,8 @@ interface User {
   avatar?: string;
   role?: string;
   status?: string;
+  phone?: string;
+  avatar_url?: string | null;
 }
 
 interface Patient {
@@ -216,7 +222,7 @@ interface QuickTimeSlotsProps {
   checkDoctorAvailability: (date: string, time: string) => Promise<void>;
 }
 
-type TabType = 'overview' | 'appointments' | 'patients' | 'medications' | 'doctors' | 'walkin' | 'settings';
+type TabType = 'overview' | 'appointments' | 'patients' | 'medications' | 'doctors' | 'walkin' | 'profile' | 'settings';
 
 const Modal: React.FC<ModalProps> = ({ title, children, onClose }) => (
   <div className="modal fade show d-block" tabIndex={-1} style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
@@ -259,7 +265,7 @@ const MedicationForm: React.FC<MedicationFormProps> = React.memo(({ onSubmit, in
     <form onSubmit={handleSubmit}>
       <div className="row g-3">
         <div className="col-md-6">
-          <label className="form-label">Medication Name *</label>
+          <label className="form-label">Medication Name <span className="text-danger">*</span></label>
           <input
             type="text"
             className="form-control"
@@ -278,7 +284,7 @@ const MedicationForm: React.FC<MedicationFormProps> = React.memo(({ onSubmit, in
           />
         </div>
         <div className="col-md-4">
-          <label className="form-label">Dosage *</label>
+          <label className="form-label">Dosage <span className="text-danger">*</span></label>
           <input
             type="text"
             className="form-control"
@@ -288,7 +294,7 @@ const MedicationForm: React.FC<MedicationFormProps> = React.memo(({ onSubmit, in
           />
         </div>
         <div className="col-md-4">
-          <label className="form-label">Frequency *</label>
+          <label className="form-label">Frequency <span className="text-danger">*</span></label>
           <select
             className="form-select"
             value={localFormData.frequency}
@@ -302,7 +308,7 @@ const MedicationForm: React.FC<MedicationFormProps> = React.memo(({ onSubmit, in
           </select>
         </div>
         <div className="col-md-4">
-          <label className="form-label">Status *</label>
+          <label className="form-label">Status <span className="text-danger">*</span></label>
           <select
             className="form-select"
             value={localFormData.status}
@@ -315,7 +321,7 @@ const MedicationForm: React.FC<MedicationFormProps> = React.memo(({ onSubmit, in
           </select>
         </div>
         <div className="col-md-6">
-          <label className="form-label">Start Date *</label>
+          <label className="form-label">Start Date <span className="text-danger">*</span></label>
           <input
             type="date"
             className="form-control"
@@ -393,6 +399,25 @@ const ClinicalStaffDashboard: React.FC<ClinicalStaffDashboardProps> = ({ user, o
 
   const [blockedDates, setBlockedDates] = useState<string[]>([]);
   const [holidays, setHolidays] = useState<Holiday[]>([]);
+
+  const [showVitalsViewer, setShowVitalsViewer] = useState(false);
+  const [showMedicalCard, setShowMedicalCard] = useState(false);
+  const [showMedicationManagement, setShowMedicationManagement] = useState(false);
+
+  const [userProfile, setUserProfile] = useState({
+    staff_no: user?.staff_no || '',
+    name: user?.name || '',
+    email: user?.email || '',
+    phone: user?.phone || '',
+    date_of_birth: '',
+    gender: '',
+    avatar_url: user?.avatar_url || null,
+    department: user?.department || ''
+  });
+
+  const [profileLoading, setProfileLoading] = useState<boolean>(false);
+  const [profileSaving, setProfileSaving] = useState<boolean>(false);
+  const fileInputRef = React.useRef<HTMLInputElement>(null);
 
   const [kpiData, setKpiData] = useState<Record<string, any> | null>(null);
 
@@ -1029,6 +1054,241 @@ const isDateBlocked = (dateString: string): boolean => {
     }
   };
 
+  // Add at the top of component (same as Academic Staff)
+const formatDate = (dateString: string): string => {
+  try {
+    const date = new Date(dateString);
+    return date.toLocaleDateString('en-US', {
+      month: '2-digit',
+      day: '2-digit',
+      year: 'numeric'
+    });
+  } catch (error) {
+    return dateString;
+  }
+};
+
+const formatTime = (timeString: string): string => {
+  try {
+    let date: Date;
+    if (timeString.includes('T')) {
+      date = new Date(timeString);
+    } else {
+      const [hours, minutes] = timeString.split(':');
+      date = new Date();
+      date.setHours(parseInt(hours), parseInt(minutes), 0);
+    }
+    
+    return date.toLocaleTimeString('en-US', {
+      hour: 'numeric',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: true
+    });
+  } catch (error) {
+    return timeString;
+  }
+};
+
+  const fetchProfile = async (): Promise<void> => {
+  setProfileLoading(true);
+  try {
+    const response = await fetch(`${CLINICAL_API_BASE}/profile`, {
+      headers: {
+        'Authorization': `Bearer ${AUTH_TOKEN}`,
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+      }
+    });
+    
+    console.log('Profile fetch response status:', response.status);
+    
+    if (response.ok) {
+      const contentType = response.headers.get('content-type');
+      if (contentType && contentType.includes('application/json')) {
+        const data = await response.json();
+        console.log('Profile data received:', data);
+        setUserProfile({
+          staff_no: data.staff_no || '',
+          name: data.name || '',
+          email: data.email || '',
+          phone: data.phone || '',
+          date_of_birth: data.date_of_birth || '',
+          gender: data.gender || '',
+          avatar_url: data.avatar_url || null,
+          department: data.department || ''
+        });
+      } else {
+        const text = await response.text();
+        console.error('Non-JSON response received:', text.substring(0, 500));
+        showMessage('error', 'Server returned invalid response format');
+      }
+    } else {
+      console.error('Failed to fetch profile. Status:', response.status);
+      const errorText = await response.text();
+      console.error('Error response:', errorText.substring(0, 500));
+      showMessage('error', `Failed to fetch profile: ${response.status}`);
+    }
+  } catch (error) {
+    console.error('Network error fetching profile:', error);
+    showMessage('error', 'Network error fetching profile');
+  } finally {
+    setProfileLoading(false);
+  }
+};
+
+const saveProfile = async (e?: React.FormEvent): Promise<void> => {
+  e?.preventDefault();
+  setProfileSaving(true);
+  try {
+    console.log('Saving profile with data:', userProfile);
+    
+    const response = await fetch(`${CLINICAL_API_BASE}/profile`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${AUTH_TOKEN}`,
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+      },
+      body: JSON.stringify({
+        name: userProfile.name,
+        phone: userProfile.phone,
+        date_of_birth: userProfile.date_of_birth,
+        gender: userProfile.gender
+      })
+    });
+
+    console.log('Profile save response status:', response.status);
+    
+    const contentType = response.headers.get('content-type');
+    const responseText = await response.text();
+    
+    if (response.ok) {
+      if (contentType && contentType.includes('application/json')) {
+        const data = JSON.parse(responseText);
+        showMessage('success', 'Profile updated successfully!');
+        if (data.user) {
+          setUserProfile(prev => ({
+            ...prev,
+            ...data.user
+          }));
+        }
+      } else {
+        console.error('Non-JSON success response:', responseText.substring(0, 500));
+        showMessage('success', 'Profile updated (but received unexpected response)');
+      }
+    } else {
+      console.error('Profile save failed. Status:', response.status);
+      console.error('Response text:', responseText);
+      
+      let errorMessage = `Failed to update profile (${response.status})`;
+      
+      if (contentType && contentType.includes('application/json')) {
+        try {
+          const errorData = JSON.parse(responseText);
+          if (errorData.errors) {
+            const validationErrors = Object.entries(errorData.errors)
+              .map(([field, messages]) => `${field}: ${(messages as string[]).join(', ')}`)
+              .join('; ');
+            errorMessage = `Validation errors: ${validationErrors}`;
+          } else if (errorData.message) {
+            errorMessage = errorData.message;
+          }
+        } catch (parseError) {
+          console.error('Failed to parse error JSON:', parseError);
+        }
+      } else {
+        // It's HTML - show generic error
+        errorMessage = 'Server error occurred. Please check the backend.';
+      }
+      
+      showMessage('error', errorMessage);
+    }
+  } catch (error) {
+    console.error('Network error saving profile:', error);
+    showMessage('error', `Network error: ${(error as Error).message}`);
+  } finally {
+    setProfileSaving(false);
+  }
+};
+
+  const handleImageUpload = async (file: File | null): Promise<void> => {
+    if (!file) return;
+    
+    const maxSize = 5 * 1024 * 1024; // 5MB
+    const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp'];
+    
+    if (file.size > maxSize) {
+      showMessage('error', 'File size must be less than 5MB');
+      return;
+    }
+
+    if (!allowedTypes.includes(file.type)) {
+      showMessage('error', 'Invalid file type. Please upload JPEG, PNG, GIF, or WebP');
+      return;
+    }
+    
+    setProfileSaving(true);
+    const formData = new FormData();
+    formData.append('avatar', file);
+    
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/auth/profile/avatar`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${AUTH_TOKEN}`
+        },
+        body: formData
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setUserProfile(prev => ({ ...prev, avatar_url: data.avatar_url }));
+        showMessage('success', 'Profile photo updated successfully!');
+      } else {
+        const errorData = await response.json().catch(() => ({}));
+        showMessage('error', errorData.message || 'Failed to upload photo');
+      }
+    } catch (error) {
+      console.error('Error uploading photo:', error);
+      showMessage('error', 'Failed to upload photo');
+    } finally {
+      setProfileSaving(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
+
+  const handlePhotoRemove = async (): Promise<void> => {
+  setProfileSaving(true);
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/auth/profile/avatar`, {
+      method: 'DELETE',
+      headers: {
+        'Authorization': `Bearer ${AUTH_TOKEN}`
+      }
+    });
+
+    if (response.ok) {
+      setUserProfile(prev => ({ ...prev, avatar_url: null }));
+      showMessage('success', 'Profile photo removed successfully!');
+    } else {
+      const errorData = await response.json().catch(() => ({}));
+      showMessage('error', errorData.message || 'Failed to remove photo');
+    }
+  } catch (error) {
+    console.error('Error removing photo:', error);
+    showMessage('error', 'Failed to remove photo');
+  } finally {
+    setProfileSaving(false);
+  }
+};
+
+  // Helper function for displaying messages
+  const showMessage = (type: 'success' | 'error', text: string): void => {
+    setMessage({ type, text });
+    setTimeout(() => setMessage({ type: '', text: '' }), 5000);
+};
+
   const loadMedications = async (): Promise<void> => {
     try {
       setLoading(true);
@@ -1045,42 +1305,43 @@ const isDateBlocked = (dateString: string): boolean => {
   };
 
   const handleApproveRequest = async (
-  requestId: string | number, 
-  doctorId: string | number, 
-  notes: string = '',
-  status: string = 'waiting'
-) => {
-  try {
-    setLoading(true);
-    await api.post(`student-requests/${requestId}/approve`, {
-      doctor_id: doctorId,
-      notes,
-      status
-    });
-    
-    setMessage({ type: 'success', text: 'Student request approved and assigned!' });
-    
-    // Refresh all relevant data
-    await Promise.all([
-      loadStudentRequests(),
-      loadAppointments(),
-      loadDashboardData()
-    ]);
-    
-    // Trigger walk-in refresh
-    window.dispatchEvent(new CustomEvent('refreshWalkIn'));
-    
-    // Switch to walk-in tab to show the assigned patient
-    setActiveTab('walkin');
-    
-    setShowModal('');
-  } catch (error) {
-    console.error('Error approving request:', error);
-    setMessage({ type: 'error', text: `Error approving request: ${(error as Error).message}` });
-  } finally {
-    setLoading(false);
-  }
-};
+    requestId: string | number, 
+    doctorId: string | number, 
+    notes: string = '',
+    status: string = 'waiting'
+  ) => {
+    try {
+      setLoading(true);
+      await api.post(`student-requests/${requestId}/approve`, {
+        doctor_id: doctorId,
+        notes,
+        status
+      });
+      
+      setMessage({ type: 'success', text: 'Student request approved and assigned!' });
+      
+      // Refresh all relevant data
+      await Promise.all([
+        loadStudentRequests(),
+        loadAppointments(),
+        loadDashboardData(),
+        loadUrgentRequests() // ADD THIS LINE - Refresh urgent requests
+      ]);
+      
+      // Trigger walk-in refresh
+      window.dispatchEvent(new CustomEvent('refreshWalkIn'));
+      
+      // Switch to walk-in tab to show the assigned patient
+      setActiveTab('walkin');
+      
+      setShowModal('');
+    } catch (error) {
+      console.error('Error approving request:', error);
+      setMessage({ type: 'error', text: `Error approving request: ${(error as Error).message}` });
+    } finally {
+      setLoading(false);
+    }
+  };
   
   
   const QuickTimeSlots: React.FC<QuickTimeSlotsProps> = ({ selectedDate, onTimeSelect, formData, setFormData, checkDoctorAvailability }) => {
@@ -1203,7 +1464,8 @@ const isDateBlocked = (dateString: string): boolean => {
           loadDoctors(),
           loadStudentRequests(), // Add this line
           loadUrgentRequests(),
-          fetchHolidays() // Add this line
+          fetchHolidays(), // Add this line
+          loadPatients()
         ]);
       } catch (error) {
         console.error('Error loading initial data:', error);
@@ -1212,6 +1474,19 @@ const isDateBlocked = (dateString: string): boolean => {
     
     loadInitialData();
   }, []);
+
+    // Add this useEffect to load profile when profile tab is selected
+useEffect(() => {
+  if (activeTab === 'profile') {
+    fetchProfile();
+  }
+}, [activeTab]);
+
+// Add this useEffect near your other effects
+useEffect(() => {
+  // This will ensure the profile photo is updated in real-time
+  // when userProfile.avatar_url changes
+}, [userProfile.avatar_url]);
 
   useEffect(() => {
   // Define the handler for dashboard stats update
@@ -1570,11 +1845,11 @@ const Navigation = () => (
           </li>
           <li className="nav-item">
   <button 
-    className={`nav-link btn position-relative ${activeTab === 'settings' ? 'active' : ''}`}
-    onClick={() => setActiveTab('settings')}
+    className={`nav-link btn ${activeTab === 'profile' ? 'active' : ''}`}
+    onClick={() => setActiveTab('profile')}
     style={{
-      color: activeTab === 'settings' ? '#dc3545' : '#666',
-      background: activeTab === 'settings' ? 'rgba(220, 53, 69, 0.1)' : 'none',
+      color: activeTab === 'profile' ? '#dc3545' : '#666',
+      background: activeTab === 'profile' ? 'rgba(220, 53, 69, 0.1)' : 'none',
       border: 'none',
       padding: '8px 16px',
       borderRadius: '8px',
@@ -1582,34 +1857,23 @@ const Navigation = () => (
       margin: '0 4px',
       display: 'flex',
       alignItems: 'center',
-      fontWeight: activeTab === 'settings' ? 600 : 'normal'
+      fontWeight: activeTab === 'profile' ? 600 : 'normal'
     }}
     onMouseEnter={(e) => {
-      if (activeTab !== 'settings') {
+      if (activeTab !== 'profile') {
         e.currentTarget.style.color = '#dc3545';
         e.currentTarget.style.background = 'rgba(220, 53, 69, 0.05)';
-        e.currentTarget.style.transform = 'translateY(-1px)';
       }
     }}
     onMouseLeave={(e) => {
-      if (activeTab !== 'settings') {
+      if (activeTab !== 'profile') {
         e.currentTarget.style.color = '#666';
         e.currentTarget.style.background = 'none';
-        e.currentTarget.style.transform = 'translateY(0)';
       }
     }}
   >
-    <Settings size={18} className="me-2" />
-    {t('nav.settings', 'Clinic Settings')}
-    
-    {/* Optional: Badge for settings that need attention */}
-    {/* Uncomment if you want to show pending settings */}
-    {/* <span 
-      className="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-warning"
-      style={{ fontSize: '0.65rem', padding: '0.25em 0.5em' }}
-    >
-      !
-    </span> */}
+    <User size={18} className="me-2" />
+    Profile
   </button>
 </li>
         </ul>
@@ -1637,18 +1901,11 @@ const Navigation = () => (
                 e.currentTarget.style.borderColor = '#e0e0e0';
               }}
             >
-              <div 
-                className="rounded-circle me-2 d-flex align-items-center justify-content-center"
-                style={{
-                  width: '32px',
-                  height: '32px',
-                  backgroundColor: '#dc3545',
-                  color: 'white'
-                }}
-              >
-                <User size={18} />
-              </div>
-              {/* Removed name display */}
+              <AvatarDisplay 
+                src={userProfile.avatar_url} 
+                size={32}
+                fallbackColor="#dc3545"
+              />
             </button>
             <ul 
               className="dropdown-menu dropdown-menu-end" 
@@ -1673,17 +1930,12 @@ const Navigation = () => (
                 }}
               >
                 <div className="d-flex align-items-center">
-                  <div 
-                    className="rounded-circle me-3 d-flex align-items-center justify-content-center"
-                    style={{
-                      width: '40px',
-                      height: '40px',
-                      backgroundColor: '#dc3545',
-                      color: 'white'
-                    }}
-                  >
-                    <User size={20} />
-                  </div>
+                  <AvatarDisplay 
+                    src={userProfile.avatar_url} 
+                    size={40}
+                    fallbackColor="#dc3545"
+                    className="me-3"
+                  />
                   <div>
                     <div className="fw-semibold">{user?.name || 'Clinical Staff'}</div>
                     <small className="text-muted">{user?.email || 'staff@hospital.com'}</small>
@@ -1692,7 +1944,7 @@ const Navigation = () => (
                     </div>
                   </div>
                 </div>
-              </li>
+            </li>
               
               {/* Language Selection */}
               <li>
@@ -1904,46 +2156,54 @@ const DashboardOverview: React.FC = () => {
     ],
   };
 
-  return (
-    <div className="container-fluid py-4">
-      <div className="row g-4">
-        {/* Welcome Card - keep as is */}
-        <div className="col-12">
-          <div
-            className="card shadow-sm border-0"
-            style={{
-              borderRadius: '1rem',
-              background: 'linear-gradient(135deg, #E53E3E 0%, #C53030 100%)',
-            }}
-          >
-            <div className="card-body p-4 text-white">
-              <div className="row align-items-center">
-                <div className="col-md-8">
-                  <h3 className="mb-2">
-                    {t('dashboard.welcome', {
-                      name: user?.name || 'Clinical Staff',
-                    })}
-                  </h3>
-                  <div className="d-flex align-items-center mb-1">
-                    <User size={16} className="me-2 opacity-75" />
-                    <span className="opacity-90">
-                      Staff No: {user?.staff_no || 'N/A'}
-                    </span>
-                  </div>
-                  <div className="d-flex align-items-center mb-1">
-                    <Stethoscope size={16} className="me-2 opacity-75" />
-                    <span className="opacity-75">
-                      Department: {user?.department || 'General'}
-                    </span>
-                  </div>
+ return (
+  <div className="container-fluid py-4">
+    <div className="row g-4">
+      {/* Welcome Card */}
+      <div className="col-12">
+        <div
+          className="card shadow-sm border-0"
+          style={{
+            borderRadius: '1rem',
+            background: 'linear-gradient(135deg, #E53E3E 0%, #C53030 100%)',
+          }}
+        >
+          <div className="card-body p-4 text-white">
+            <div className="d-flex justify-content-between align-items-center">
+              {/* Left side - Text content */}
+              <div className="flex-grow-1">
+                <h3 className="mb-2">
+                  {t('dashboard.welcome', {
+                    name: user?.name || 'Clinical Staff',
+                  })}
+                </h3>
+                <div className="d-flex align-items-center mb-1">
+                  <User size={16} className="me-2 opacity-75" />
+                  <span className="opacity-90">
+                    Staff No: {user?.staff_no || 'N/A'}
+                  </span>
                 </div>
-                <div className="col-md-4 text-end">
-                  <User size={80} className="opacity-75" />
+                <div className="d-flex align-items-center mb-1">
+                  <Stethoscope size={16} className="me-2 opacity-75" />
+                  <span className="opacity-75">
+                    Department: {user?.department || 'General'}
+                  </span>
                 </div>
               </div>
+              
+              {/* Right side - Avatar pushed to far right 
+              <div className="flex-shrink-0 ms-4">
+                <AvatarDisplay 
+                  src={userProfile.avatar_url} 
+                  size={80}
+                  fallbackColor="#ffffff"
+                  className="opacity-90"
+                />
+              </div>*/}
             </div>
           </div>
         </div>
+      </div>
 
         {/* Enhanced Statistics Cards with click handlers */}
         <div className="col-md-3">
@@ -2300,42 +2560,24 @@ const DashboardOverview: React.FC = () => {
       </tr>
     </thead>
     <tbody>
-      {dashboardData.patient_queue.length === 0 ? (
-        <div className="text-muted text-center py-4">
-          <Users size={32} className="mb-2" />
-          <div>No patients in queue</div>
-        </div>
-      ) : (
-        dashboardData.patient_queue.map((queueItem) => (
-          <tr key={queueItem.id}>
-            <td>{queueItem.date ? new Date(queueItem.date).toLocaleDateString() : new Date().toLocaleDateString()}</td>
-            <td>
-              {queueItem.time ? new Date(queueItem.time).toLocaleTimeString('en-US', { 
-                hour: 'numeric', 
-                minute: '2-digit',
-                second: '2-digit',
-                hour12: true 
-              }) : 'N/A'}
-            </td>
-            <td>
-              {queueItem.patient_name} ({queueItem.student_id})
-            </td>
-            <td>
-              <span className={getStatusBadge(queueItem.status)}>
-                {queueItem.status}
-              </span>
-            </td>
-            <td>
-              <span
-                className={getPriorityBadge(queueItem.priority)}
-              >
-                {queueItem.priority}
-              </span>
-            </td>
-            <td>{queueItem.assigned_doctor}</td>
-          </tr>
-        ))
-      )}
+      {dashboardData.patient_queue.map((queueItem) => (
+        <tr key={queueItem.id}>
+          <td>{formatDate(queueItem.date)}</td>
+          <td>{formatTime(queueItem.time)}</td>
+          <td>{queueItem.patient_name} ({queueItem.student_id})</td>
+          <td>
+            <span className={getStatusBadge(queueItem.status)}>
+              {queueItem.status}
+            </span>
+          </td>
+          <td>
+            <span className={getPriorityBadge(queueItem.priority)}>
+              {queueItem.priority}
+            </span>
+          </td>
+          <td>{queueItem.assigned_doctor}</td>
+        </tr>
+      ))}
     </tbody>
   </table>
 </div>
@@ -2380,8 +2622,8 @@ const DashboardOverview: React.FC = () => {
                     <thead>
                       <tr>
                         <th>Student</th>
-                        <th>Date of Request</th>
-                        <th>Requested Date</th>
+                        <th>Time</th>
+                        <th>Date</th>
                         <th>Specialization</th>
                         <th>Urgency</th>
                         <th>Status</th>
@@ -2610,8 +2852,8 @@ const AppointmentsTab: React.FC = () => {
                 <tr>
                   <th style={{ fontWeight: 'normal' }}>Type</th>
                   <th style={{ fontWeight: 'normal' }}>Patient</th>
-                  <th style={{ fontWeight: 'normal' }}>Requested Date</th>
-                  <th style={{ fontWeight: 'normal' }}>Date of Request</th>
+                  <th style={{ fontWeight: 'normal' }}>Date</th>
+                  <th style={{ fontWeight: 'normal' }}>Time</th>
                   <th style={{ fontWeight: 'normal' }}>Appointment Type</th>
                   <th style={{ fontWeight: 'normal' }}>Status</th>
                   <th style={{ fontWeight: 'normal' }}>Priority</th>
@@ -2658,8 +2900,12 @@ const AppointmentsTab: React.FC = () => {
                               <small className="text-muted">{apt.patient?.student_id || 'N/A'}</small>
                             </div>
                           </td>
-                          <td>{apt.date || 'Not set'}</td>
-                          <td>{apt.time || 'Not set'}</td>
+                          <td>
+  {apt.date ? formatDate(apt.date) : 'Not set'}
+</td>
+                          <td>
+  {apt.time ? formatTime(apt.time) : 'Not set'}
+</td>
                           <td>
                             <span className="badge bg-info text-dark">
                               {apt.type || apt.appointment_type || 'General'}
@@ -2887,18 +3133,25 @@ const AppointmentsTab: React.FC = () => {
                 >
                   <Heart size={16} />
                 </button>
+                {/* NEW: View Vitals History */}
                 <button 
                   onClick={() => {
                     setSelectedPatient(patient);
-                    setShowModal('medication');
+                    setShowVitalsViewer(true);
+                  }}
+                  className="btn btn-outline-info"
+                  title="View Vitals History"
+                >
+                  <Activity size={16} />
+                </button>
+                
+                {/* NEW: Enhanced Medical Card */}
+                <button 
+                  onClick={() => {
+                    setSelectedPatient(patient);
+                    setShowMedicalCard(true);
                   }}
                   className="btn btn-outline-success"
-                  title="Record Medication"
-                >
-                  <Pill size={16} />
-                </button>
-                <button 
-                  className="btn btn-outline-info"
                   title="View Medical Card"
                 >
                   <FileText size={16} />
@@ -2919,99 +3172,41 @@ const AppointmentsTab: React.FC = () => {
 
   // Medications Tab Component
   const MedicationsTab: React.FC = () => (
-    <div className="container-fluid py-4">
-      <div className="card shadow-sm border-0" style={{ borderRadius: '1rem' }}>
-        <div className="card-header" style={{ background: 'linear-gradient(135deg, #e95454ff 0%, #e13737ff 100%)' }}>
-          <div className="d-flex justify-content-between align-items-center">
-            <h3 className="card-title text-white mb-0 d-flex align-items-center">
-              <Pill size={24} className="me-2" />
-              {t('medications.schedule')}
-            </h3>
-            <button 
-              onClick={() => setShowModal('addMedication')}
-              className="btn btn-sm btn-light"
-              style={{ borderRadius: '0.5rem' }}
-            >
-              <Plus size={16} className="me-1" />
-              Add Medication
-            </button>
-          </div>
+  <div className="container-fluid py-4">
+    <div className="card shadow-sm border-0" style={{ borderRadius: '1rem' }}>
+      <div className="card-header" style={{ background: 'linear-gradient(135deg, #e95454ff 0%, #e13737ff 100%)' }}>
+        <div className="d-flex justify-content-between align-items-center">
+          <h3 className="card-title text-white mb-0 d-flex align-items-center">
+            <Pill size={24} className="me-2" />
+            {t('medications.management', 'Medication Management')}
+          </h3>
+          <button 
+            onClick={() => setShowMedicationManagement(true)}
+            className="btn btn-sm btn-light"
+            style={{ borderRadius: '0.5rem' }}
+          >
+            <Plus size={16} className="me-1" />
+            Manage Medications
+          </button>
         </div>
-        <div className="card-body p-4">
-          <div className="table-responsive">
-            <table className="table table-hover align-middle">
-              <thead>
-                <tr>
-                  <th scope="col" style={{ fontWeight: 'normal' }}>Medication</th>
-                  <th scope="col" style={{ fontWeight: 'normal' }}>Dosage</th>
-                  <th scope="col" style={{ fontWeight: 'normal' }}>Frequency</th>
-                  <th scope="col" style={{ fontWeight: 'normal' }}>Start Date</th>
-                  <th scope="col" style={{ fontWeight: 'normal' }}>End Date</th>
-                  <th scope="col" style={{ fontWeight: 'normal' }}>Status</th>
-                  <th scope="col" style={{ fontWeight: 'normal' }}>Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {loading ? (
-                  <tr>
-                    <td colSpan={7} className="text-center py-5">
-                      <div className="spinner-border text-primary" role="status">
-                        <span className="visually-hidden">Loading...</span>
-                      </div>
-                    </td>
-                  </tr>
-                ) : medicationSchedule.length === 0 ? (
-                  <tr>
-                    <td colSpan={7} className="text-center py-5 text-muted">
-                      <Pill size={48} className="text-muted mb-3" />
-                      <p className="text-muted">No medications found</p>
-                      <small className="text-muted">Add medications to see them here</small>
-                    </td>
-                  </tr>
-                ) : (
-                  medicationSchedule.map((medication) => (
-                    <tr key={medication.id}>
-                      <td>
-                        {medication.name || medication.medication_name}
-                        {medication.generic || medication.generic_name ? (
-                          <div className="text-muted small">{medication.generic || medication.generic_name}</div>
-                        ) : null}
-                      </td>
-                      <td>{medication.dosage}</td>
-                      <td>{medication.frequency}</td>
-                      <td>{medication.start_date ? new Date(medication.start_date).toLocaleDateString() : 'N/A'}</td>
-                      <td>{medication.end_date ? new Date(medication.end_date).toLocaleDateString() : 'Ongoing'}</td>
-                      <td>
-                        <span className={`badge ${medication.status === 'active' ? 'bg-success' : 'bg-secondary'}`}>
-                          {medication.status}
-                        </span>
-                      </td>
-                      <td>
-                        <button 
-                          onClick={() => {
-                            setSelectedMedication(medication);
-                            setShowModal('editMedication');
-                          }}
-                          className="btn btn-sm btn-outline-primary me-2"
-                        >
-                          <Edit size={16} />
-                        </button>
-                        <button 
-                          className="btn btn-sm btn-outline-danger"
-                        >
-                          <Trash2 size={16} />
-                        </button>
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
+      </div>
+      <div className="card-body p-4">
+        <div className="alert alert-info">
+          <Pill size={20} className="me-2" />
+          <strong>Medication Management System</strong>
+          <p className="mb-0 mt-2">
+            Click "Manage Medications" to:
+          </p>
+          <ul className="mb-0 mt-2">
+            <li>View and administer medications prescribed by doctors</li>
+            <li>Record minor treatments (headaches, minor injuries, etc.)</li>
+            <li>Track medication administration history</li>
+          </ul>
         </div>
       </div>
     </div>
-  );
+  </div>
+);
 
   // Doctors Tab Component
   const DoctorsTab: React.FC = () => (
@@ -3109,6 +3304,324 @@ const AppointmentsTab: React.FC = () => {
     </div>
   );
 
+  const AvatarDisplay: React.FC<{
+  src?: string | null;
+  size: number;
+  className?: string;
+  fallbackColor?: string;
+}> = ({ src, size, className = "", fallbackColor = "#dc3545" }) => {
+  const [hasError, setHasError] = useState(false);
+  
+  React.useEffect(() => {
+    setHasError(false);
+  }, [src]);
+
+  if (!src || hasError) {
+    return (
+      <div 
+        className={`rounded-circle d-flex align-items-center justify-content-center ${className}`}
+        style={{
+          width: size,
+          height: size,
+          backgroundColor: fallbackColor === "#ffffff" ? "rgba(255, 255, 255, 0.2)" : 
+                         fallbackColor === "#dc3545" ? "#fee2e2" : "rgba(220, 53, 69, 0.1)",
+          color: fallbackColor === "#ffffff" ? "#ffffff" : fallbackColor,
+          overflow: 'hidden',
+          border: fallbackColor === "#ffffff" ? '2px solid rgba(255, 255, 255, 0.3)' : 'none'
+        }}
+      >
+        <User size={size * 0.4} />
+      </div>
+    );
+  }
+
+  return (
+    <img 
+      src={src}
+      alt="Profile" 
+      className={`rounded-circle ${className}`}
+      style={{
+        width: size,
+        height: size,
+        objectFit: 'cover',
+        border: fallbackColor === "#ffffff" ? '2px solid rgba(255, 255, 255, 0.3)' : 'none'
+      }}
+      onError={() => setHasError(true)}
+      onLoad={() => setHasError(false)}
+    />
+  );
+};
+
+  const ProfileTab: React.FC = () => (
+  <div className="container-fluid py-4">
+    <div className="row g-4">
+      {/* Personal Information Card */}
+      <div className="col-12 col-lg-8">
+        <div className="card shadow-sm border-0" style={{ borderRadius: '1rem' }}>
+          <div 
+            className="card-header border-0" 
+            style={{ 
+              background: 'linear-gradient(135deg, #E53E3E 0%, #C53030 100%)',
+              borderRadius: '1rem 1rem 0 0' 
+            }}
+          >
+            <h5 className="card-title mb-0 text-white d-flex align-items-center">
+              <User size={20} className="me-2" />
+              Personal Information
+            </h5>
+          </div>
+          <div className="card-body p-4">
+            {profileLoading ? (
+              <div className="text-center py-4">
+                <div className="spinner-border text-primary mb-3" role="status">
+                  <span className="visually-hidden">Loading...</span>
+                </div>
+                <p className="text-muted">Loading profile...</p>
+              </div>
+            ) : (
+              <form onSubmit={saveProfile}>
+                <div className="row g-3">
+                  {/* Staff Number - Read Only */}
+                  <div className="col-12 col-md-6">
+                    <label className="form-label fw-semibold">
+                      Staff Number <span className="text-danger">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      className="form-control"
+                      value={userProfile.staff_no}
+                      disabled
+                      style={{ backgroundColor: '#f8f9fa' }}
+                    />
+                    <div className="form-text">Staff number cannot be changed</div>
+                  </div>
+
+                  {/* Email - Read Only */}
+                  <div className="col-12 col-md-6">
+                    <label className="form-label fw-semibold">
+                      Email Address <span className="text-danger">*</span>
+                    </label>
+                    <input
+                      type="email"
+                      className="form-control"
+                      value={userProfile.email}
+                      disabled
+                      style={{ backgroundColor: '#f8f9fa' }}
+                    />
+                    <div className="form-text">Email cannot be changed</div>
+                  </div>
+
+                  {/* Full Name */}
+                  <div className="col-12 col-md-6">
+                    <label className="form-label fw-semibold">
+                      Full Name <span className="text-danger">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      className="form-control"
+                      value={userProfile.name}
+                      onChange={(e) => setUserProfile({ ...userProfile, name: e.target.value })}
+                      required
+                      placeholder="Enter your full name"
+                    />
+                  </div>
+
+                  {/* Phone Number */}
+                  <div className="col-12 col-md-6">
+                    <label className="form-label fw-semibold">
+                      Phone Number <span className="text-danger">*</span>
+                    </label>
+                    <PhoneInput
+                      country={'tr'}
+                      value={userProfile.phone}
+                      onChange={(phone) => setUserProfile({ ...userProfile, phone })}
+                      placeholder="Enter your phone number"
+                      inputProps={{
+                        className: 'form-control',
+                        required: true
+                      }}
+                      containerClass="phone-input-container w-100"
+                    />
+                  </div>
+
+                  {/* Date of Birth */}
+                  <div className="col-12 col-md-6">
+                    <label className="form-label fw-semibold">
+                      Date of Birth <span className="text-danger">*</span>
+                    </label>
+                    <input
+                      type="date"
+                      className="form-control"
+                      value={userProfile.date_of_birth}
+                      onChange={(e) => setUserProfile({ ...userProfile, date_of_birth: e.target.value })}
+                      max={new Date(new Date().setFullYear(new Date().getFullYear() - 21)).toISOString().split('T')[0]}
+                      required
+                    />
+                    <div className="form-text">Must be at least 21 years old</div>
+                  </div>
+
+                  {/* Gender */}
+                  <div className="col-12 col-md-6">
+                    <label className="form-label fw-semibold">
+                      Gender <span className="text-danger">*</span>
+                    </label>
+                    <select
+                      className="form-select"
+                      value={userProfile.gender}
+                      onChange={(e) => setUserProfile({ ...userProfile, gender: e.target.value })}
+                      required
+                    >
+                      <option value="">Select gender</option>
+                      <option value="male">Male</option>
+                      <option value="female">Female</option>
+                      <option value="other">Other</option>
+                      <option value="prefer_not_to_say">Prefer not to say</option>
+                    </select>
+                  </div>
+
+                  {/* Department - Read Only */}
+                  <div className="col-12 col-md-6">
+                    <label className="form-label fw-semibold">Department</label>
+                    <input
+                      type="text"
+                      className="form-control"
+                      value={userProfile.department}
+                      disabled
+                      style={{ backgroundColor: '#f8f9fa' }}
+                    />
+                  </div>
+                </div>
+
+                {/* Save Button */}
+                <div className="mt-4 d-flex gap-2">
+                  <button 
+                    type="submit" 
+                    className="btn btn-primary"
+                    disabled={profileSaving}
+                    style={{ 
+                      background: 'linear-gradient(135deg, #E53E3E 0%, #C53030 100%)',
+                      border: 'none' 
+                    }}
+                  >
+                    {profileSaving ? (
+                      <>
+                        <span className="spinner-border spinner-border-sm me-2" role="status"></span>
+                        Saving...
+                      </>
+                    ) : (
+                      'Save Changes'
+                    )}
+                  </button>
+                </div>
+              </form>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Profile Picture Card */}
+      <div className="col-12 col-lg-4">
+        <div className="card shadow-sm border-0" style={{ borderRadius: '1rem' }}>
+          <div className="card-header border-0" style={{ background: '#fee2e2', borderRadius: '1rem 1rem 0 0' }}>
+            <h5 className="card-title mb-0 text-danger d-flex align-items-center">
+              <Camera size={20} className="me-2" />
+              Profile Picture
+            </h5>
+          </div>
+          <div className="card-body p-4 text-center">
+            <div className="mb-3">
+              <AvatarDisplay 
+                src={userProfile.avatar_url} 
+                size={120}
+                className="mx-auto"
+              />
+            </div>
+            
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/jpeg,image/jpg,image/png,image/gif,image/webp"
+              style={{ display: 'none' }}
+              onChange={(e) => handleImageUpload(e.target.files?.[0] || null)}
+            />
+            
+            <button 
+              className="btn btn-outline-primary w-100 mb-2" 
+              onClick={() => fileInputRef.current?.click()}
+              disabled={profileSaving}
+            >
+              <Camera size={16} className="me-1" /> 
+              Upload New Photo
+            </button>
+            
+            {userProfile.avatar_url && (
+              <button 
+                className="btn btn-outline-danger w-100 mb-3" 
+                onClick={handlePhotoRemove}
+                disabled={profileSaving}
+              >
+                <X size={16} className="me-1" /> 
+                Remove Photo
+              </button>
+            )}
+            
+            {/* Photo Guidelines */}
+            <div className="accordion" id="photoGuidelines">
+              <div className="accordion-item" style={{ border: 'none', background: 'transparent' }}>
+                <h2 className="accordion-header">
+                  <button 
+                    className="accordion-button collapsed"
+                    type="button" 
+                    data-bs-toggle="collapse" 
+                    data-bs-target="#photoGuidelinesCollapse"
+                    style={{
+                      background: 'transparent',
+                      border: '1px solid #dee2e6',
+                      borderRadius: '8px',
+                      padding: '8px 16px',
+                      fontSize: '0.875rem',
+                      color: '#6c757d'
+                    }}
+                  >
+                    <Camera size={16} className="me-2" />
+                    Photo Guidelines
+                  </button>
+                </h2>
+                <div 
+                  id="photoGuidelinesCollapse" 
+                  className="accordion-collapse collapse"
+                  data-bs-parent="#photoGuidelines"
+                >
+                  <div className="accordion-body" style={{ padding: '16px 0' }}>
+                    <div className="text-start" style={{ fontSize: '0.875rem' }}>
+                      <div className="mb-2">
+                        <CheckCircle size={14} className="text-success me-2" />
+                        <strong>Types:</strong> JPEG, PNG, GIF, WebP
+                      </div>
+                      <div className="mb-2">
+                        <CheckCircle size={14} className="text-success me-2" />
+                        <strong>Size:</strong> Maximum 5MB
+                      </div>
+                      <div className="mb-2">
+                        <CheckCircle size={14} className="text-success me-2" />
+                        <strong>Format:</strong> Square (1:1 ratio) recommended
+                      </div>
+                      <div className="mb-2">
+                        <CheckCircle size={14} className="text-success me-2" />
+                        <strong>Quality:</strong> Professional appearance
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+);
+
   return (
   <div style={{ minHeight: '100vh', backgroundColor: '#f8f9fa', paddingTop: '90px' }}>
       {/* Navigation */}
@@ -3141,7 +3654,7 @@ const AppointmentsTab: React.FC = () => {
               </p>
             </div>
             <button 
-              className="btn btn-warning btn-sm"
+              className="btn btn-danger btn-sm"
               onClick={() => {
                 setActiveTab('appointments');
                 setFilters({ status: 'all', priority: 'urgent' });
@@ -3153,19 +3666,21 @@ const AppointmentsTab: React.FC = () => {
         </div>
       )}
 
+
+
       {/* Main Content */}
       {activeTab === 'overview' && <DashboardOverview />}
       {activeTab === 'appointments' && <AppointmentsTab />}
       {activeTab === 'patients' && <PatientsTab />}
       {activeTab === 'medications' && <MedicationsTab />}
       {activeTab === 'doctors' && <DoctorsTab />}
+      {activeTab === 'profile' && <ProfileTab />} 
       {activeTab === 'walkin' && (
       <WalkInPatientManagement 
         userRole="clinical_staff" 
         websocketService={websocketService}
       />
-      )}
-      {activeTab === 'settings' && <ClinicSettingsManager />}
+      )} 
 
            {/* Modals */}
       {showModal === 'createAppointment' && (
@@ -3479,114 +3994,205 @@ const AppointmentsTab: React.FC = () => {
       )}
 
       {showModal === 'vitals' && selectedPatient && (
-        <Modal title={`Record Vital Signs - ${selectedPatient.name}`} onClose={() => setShowModal('')}>
-          <form onSubmit={(e) => {
-            e.preventDefault();
-            updateVitals(selectedPatient.id, formData);
-          }}>
+        <Modal
+          title={`Record Vital Signs - ${selectedPatient.name}`}
+          onClose={() => setShowModal('')}
+        >
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (
+                !formData.blood_pressure_systolic ||
+                !formData.blood_pressure_diastolic ||
+                !formData.heart_rate ||
+                !formData.temperature
+              ) {
+                setMessage({
+                  type: 'error',
+                  text: 'Please fill in all required fields before recording vitals.',
+                });
+                setTimeout(() => setMessage({ type: '', text: '' }), 4000);
+                return;
+              }
+              updateVitals(selectedPatient.id, formData);
+            }}
+          >
             <div className="row g-3">
-  <div className="col-md-6">
-    <label className="form-label">Systolic BP (mmHg) *</label>
-    <input
-      type="number"
-      className="form-control"
-      placeholder="120"
-      min="60"
-      max="250"
-      value={formData.blood_pressure_systolic || ''}
-      onChange={(e) => setFormData({...formData, blood_pressure_systolic: e.target.value})}
-      required
-    />
-  </div>
-  <div className="col-md-6">
-    <label className="form-label">Diastolic BP (mmHg) *</label>
-    <input
-      type="number"
-      className="form-control"
-      placeholder="80"
-      min="40"
-      max="150"
-      value={formData.blood_pressure_diastolic || ''}
-      onChange={(e) => setFormData({...formData, blood_pressure_diastolic: e.target.value})}
-      required
-    />
-  </div>
-  <div className="col-md-6">
-    <label className="form-label">Heart Rate (bpm) *</label>
-    <input
-      type="number"
-      className="form-control"
-      placeholder="72"
-      min="30"
-      max="200"
-      value={formData.heart_rate || ''}
-      onChange={(e) => setFormData({...formData, heart_rate: e.target.value})}
-      required
-    />
-  </div>
-  <div className="col-md-4">
-    <label className="form-label">Temperature *</label>
-    <input
-      type="number"
-      step="0.1"
-      className="form-control"
-      placeholder="36.6"
-      min="30"
-      max="45"
-      value={formData.temperature || ''}
-      onChange={(e) => setFormData({...formData, temperature: e.target.value})}
-      required
-    />
-  </div>
-  <div className="col-md-2">
-    <label className="form-label">Unit *</label>
-    <select
-      className="form-select"
-      value={formData.temperature_unit || 'C'}
-      onChange={(e) => setFormData({...formData, temperature_unit: e.target.value})}
-      required
-    >
-      <option value="C">°C</option>
-      <option value="F">°F</option>
-    </select>
-  </div>
-  <div className="col-md-6">
-    <label className="form-label">Respiratory Rate (breaths/min)</label>
-    <input
-      type="number"
-      className="form-control"
-      placeholder="16"
-      min="8"
-      max="40"
-      value={formData.respiratory_rate || ''}
-      onChange={(e) => setFormData({...formData, respiratory_rate: e.target.value})}
-    />
-  </div>
-  <div className="col-md-6">
-    <label className="form-label">Oxygen Saturation (%)</label>
-    <input
-      type="number"
-      className="form-control"
-      placeholder="98"
-      min="70"
-      max="100"
-      value={formData.oxygen_saturation || ''}
-      onChange={(e) => setFormData({...formData, oxygen_saturation: e.target.value})}
-    />
-  </div>
-  <div className="col-12">
-    <label className="form-label">Notes</label>
-    <textarea
-      className="form-control"
-      rows={3}
-      placeholder="Any observations or concerns..."
-      value={formData.notes || ''}
-      onChange={(e) => setFormData({...formData, notes: e.target.value})}
-    />
-  </div>
-</div>
+              {/* Systolic BP */}
+              <div className="col-md-6">
+                <label className="form-label fw-semibold">
+                  Systolic BP (mmHg) <span className="text-danger">*</span>
+                </label>
+                <input
+                  type="number"
+                  className="form-control"
+                  placeholder="120"
+                  min="60"
+                  max="250"
+                  value={formData.blood_pressure_systolic || ''}
+                  onChange={(e) =>
+                    setFormData({
+                      ...formData,
+                      blood_pressure_systolic: e.target.value,
+                    })
+                  }
+                  required
+                />
+                {!formData.blood_pressure_systolic && (
+                  <div className="form-text text-danger fst-italic small">
+                    Please enter systolic blood pressure
+                  </div>
+                )}
+              </div>
+
+              {/* Diastolic BP */}
+              <div className="col-md-6">
+                <label className="form-label fw-semibold">
+                  Diastolic BP (mmHg) <span className="text-danger">*</span>
+                </label>
+                <input
+                  type="number"
+                  className="form-control"
+                  placeholder="80"
+                  min="40"
+                  max="150"
+                  value={formData.blood_pressure_diastolic || ''}
+                  onChange={(e) =>
+                    setFormData({
+                      ...formData,
+                      blood_pressure_diastolic: e.target.value,
+                    })
+                  }
+                  required
+                />
+                {!formData.blood_pressure_diastolic && (
+                  <div className="form-text text-danger fst-italic small">
+                    Please enter diastolic blood pressure
+                  </div>
+                )}
+              </div>
+
+              {/* Heart Rate */}
+              <div className="col-md-6">
+                <label className="form-label fw-semibold">
+                  Heart Rate (bpm) <span className="text-danger">*</span>
+                </label>
+                <input
+                  type="number"
+                  className="form-control"
+                  placeholder="72"
+                  min="30"
+                  max="200"
+                  value={formData.heart_rate || ''}
+                  onChange={(e) =>
+                    setFormData({ ...formData, heart_rate: e.target.value })
+                  }
+                  required
+                />
+                {!formData.heart_rate && (
+                  <div className="form-text text-danger fst-italic small">
+                    Please enter heart rate
+                  </div>
+                )}
+              </div>
+
+              {/* Temperature */}
+              <div className="col-md-4">
+                <label className="form-label fw-semibold">
+                  Temperature <span className="text-danger">*</span>
+                </label>
+                <input
+                  type="number"
+                  step="0.1"
+                  className="form-control"
+                  placeholder="36.6"
+                  min="30"
+                  max="45"
+                  value={formData.temperature || ''}
+                  onChange={(e) =>
+                    setFormData({ ...formData, temperature: e.target.value })
+                  }
+                  required
+                />
+                {!formData.temperature && (
+                  <div className="form-text text-danger fst-italic small">
+                    Please enter temperature
+                  </div>
+                )}
+              </div>
+
+              {/* Unit */}
+              <div className="col-md-2">
+                <label className="form-label fw-semibold">
+                  Unit <span className="text-danger">*</span>
+                </label>
+                <select
+                  className="form-select"
+                  value={formData.temperature_unit || 'C'}
+                  onChange={(e) =>
+                    setFormData({ ...formData, temperature_unit: e.target.value })
+                  }
+                  required
+                >
+                  <option value="C">°C</option>
+                  <option value="F">°F</option>
+                </select>
+              </div>
+
+              {/* Respiratory Rate */}
+              <div className="col-md-6">
+                <label className="form-label fw-semibold">Respiratory Rate (breaths/min)</label>
+                <input
+                  type="number"
+                  className="form-control"
+                  placeholder="16"
+                  min="8"
+                  max="40"
+                  value={formData.respiratory_rate || ''}
+                  onChange={(e) =>
+                    setFormData({ ...formData, respiratory_rate: e.target.value })
+                  }
+                />
+              </div>
+
+              {/* Oxygen Saturation */}
+              <div className="col-md-6">
+                <label className="form-label fw-semibold">Oxygen Saturation (%)</label>
+                <input
+                  type="number"
+                  className="form-control"
+                  placeholder="98"
+                  min="70"
+                  max="100"
+                  value={formData.oxygen_saturation || ''}
+                  onChange={(e) =>
+                    setFormData({ ...formData, oxygen_saturation: e.target.value })
+                  }
+                />
+              </div>
+
+              {/* Notes */}
+              <div className="col-12">
+                <label className="form-label fw-semibold">Notes</label>
+                <textarea
+                  className="form-control"
+                  rows={3}
+                  placeholder="Any observations or concerns..."
+                  value={formData.notes || ''}
+                  onChange={(e) =>
+                    setFormData({ ...formData, notes: e.target.value })
+                  }
+                />
+              </div>
+            </div>
+
+            {/* Footer Buttons */}
             <div className="d-flex justify-content-end gap-2 mt-4">
-              <button type="button" className="btn btn-outline-secondary" onClick={() => setShowModal('')}>
+              <button
+                type="button"
+                className="btn btn-outline-secondary"
+                onClick={() => setShowModal('')}
+              >
                 Cancel
               </button>
               <button type="submit" className="btn btn-primary">
@@ -3597,6 +4203,7 @@ const AppointmentsTab: React.FC = () => {
         </Modal>
       )}
 
+
       {showModal === 'medication' && selectedPatient && (
         <Modal title={`Record Medication - ${selectedPatient.name}`} onClose={() => setShowModal('')}>
           <form onSubmit={(e) => {
@@ -3605,7 +4212,7 @@ const AppointmentsTab: React.FC = () => {
           }}>
             <div className="row g-3">
               <div className="col-md-6">
-                <label className="form-label">Medication Name *</label>
+                <label className="form-label">Medication Name <span className="text-danger">*</span></label>
                 <input
                   type="text"
                   className="form-control"
@@ -3615,7 +4222,7 @@ const AppointmentsTab: React.FC = () => {
                 />
               </div>
               <div className="col-md-6">
-  <label className="form-label">Administration Time *</label>
+  <label className="form-label">Administration Time <span className="text-danger">*</span></label>
   <input
     type="datetime-local"
     className="form-control"
@@ -3626,7 +4233,7 @@ const AppointmentsTab: React.FC = () => {
 </div>
 
 <div className="col-md-6">
-  <label className="form-label">Prescribing Doctor *</label>
+  <label className="form-label">Prescribing Doctor <span className="text-danger">*</span></label>
   <input
     type="text"
     className="form-control"
@@ -3636,7 +4243,7 @@ const AppointmentsTab: React.FC = () => {
   />
 </div>
               <div className="col-md-6">
-                <label className="form-label">Dosage *</label>
+                <label className="form-label">Dosage <span className="text-danger">*</span></label>
                 <input
                   type="text"
                   className="form-control"
@@ -3647,7 +4254,7 @@ const AppointmentsTab: React.FC = () => {
                 />
               </div>
               <div className="col-md-6">
-                <label className="form-label">Frequency *</label>
+                <label className="form-label">Frequency <span className="text-danger">*</span></label>
                 <select
                   className="form-select"
                   value={formData.frequency || 'daily'}
@@ -3661,7 +4268,7 @@ const AppointmentsTab: React.FC = () => {
                 </select>
               </div>
               <div className="col-md-6">
-                <label className="form-label">Route *</label>
+                <label className="form-label">Route <span className="text-danger">*</span></label>
                 <select
                   className="form-select"
                   value={formData.route || 'oral'}
@@ -3676,7 +4283,7 @@ const AppointmentsTab: React.FC = () => {
                 </select>
               </div>
               <div className="col-md-6">
-                <label className="form-label">Start Date *</label>
+                <label className="form-label">Start Date <span className="text-danger">*</span></label>
                 <input
                   type="date"
                   className="form-control"
@@ -3853,7 +4460,7 @@ const AppointmentsTab: React.FC = () => {
         </div>
       </div>
       <div className="mb-3">
-        <label className="form-label">Assign to Doctor *</label>
+        <label className="form-label">Assign to Doctor <span className="text-danger">*</span></label>
         <select
           className="form-select"
           value={formData.doctor_id || ''}
@@ -3924,7 +4531,7 @@ const AppointmentsTab: React.FC = () => {
       }
     }}>
       <div className="mb-3">
-        <label className="form-label">Action *</label>
+        <label className="form-label">Action <span className="text-danger">*</span></label>
         <select
           className="form-select"
           value={formData.reviewAction || ''}
@@ -3939,7 +4546,7 @@ const AppointmentsTab: React.FC = () => {
       
       {formData.reviewAction === 'approve' && (
         <div className="mb-3">
-          <label className="form-label">Assign to Doctor *</label>
+          <label className="form-label">Assign to Doctor <span className="text-danger">*</span></label>
           <select
             className="form-select"
             value={formData.doctor_id || ''}
@@ -3958,7 +4565,7 @@ const AppointmentsTab: React.FC = () => {
       
       {formData.reviewAction === 'reject' && (
         <div className="mb-3">
-          <label className="form-label">Rejection Reason *</label>
+          <label className="form-label">Rejection Reason<span className="text-danger">*</span></label>
           <textarea
             className="form-control"
             rows={3}
@@ -3989,6 +4596,44 @@ const AppointmentsTab: React.FC = () => {
       </div>
     </form>
   </Modal>
+)}
+
+{/* Vitals Viewer Modal */}
+{showVitalsViewer && selectedPatient && (
+  <PatientVitalsViewer
+    patientId={selectedPatient.id}
+    patientName={selectedPatient.name}
+    onClose={() => {
+      setShowVitalsViewer(false);
+      setSelectedPatient(null);
+    }}
+    authToken={AUTH_TOKEN}
+    apiBaseUrl={API_BASE_URL}
+  />
+)}
+
+{/* Enhanced Medical Card Modal */}
+{showMedicalCard && selectedPatient && (
+  <EnhancedMedicalCardViewer
+    patientId={selectedPatient.id}
+    onClose={() => {
+      setShowMedicalCard(false);
+      setSelectedPatient(null);
+    }}
+    authToken={AUTH_TOKEN}
+    apiBaseUrl={API_BASE_URL}
+  />
+)}
+
+{/* Medication Management Modal */}
+{showMedicationManagement && (
+  <MedicationManagement
+    onClose={() => setShowMedicationManagement(false)}
+    authToken={AUTH_TOKEN}
+    apiBaseUrl={API_BASE_URL}
+    currentUser={user}
+    patients={patients} 
+  />
 )}
     </div>
   );

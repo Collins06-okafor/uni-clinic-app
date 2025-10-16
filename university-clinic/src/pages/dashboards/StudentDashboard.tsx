@@ -42,7 +42,7 @@ interface UserProfile {
   name: string;
   email: string;
   department: string;
-  avatar_url: string | null; // Changed from profile_image
+  avatar_url: string | null;
   allergies: string;
   has_known_allergies: boolean;
   allergies_uncertain: boolean;
@@ -51,6 +51,10 @@ interface UserProfile {
   date_of_birth: string;
   emergency_contact_name: string;
   emergency_contact_phone: string;
+  emergency_contact_relationship: string;
+  emergency_contact_email: string;
+  blood_type: string;
+  gender: string;
   medical_history: string;
 }
 
@@ -179,21 +183,25 @@ const StudentAppointmentSystem: React.FC<Props> = ({
 
   // Profile state
   const [userProfile, setUserProfile] = useState<UserProfile>({
-    student_id: user?.student_id || '',
-    name: user?.name || '',
-    email: user?.email || '',
-    department: user?.department || '',
-    avatar_url: null, // Changed from profile_image
-    allergies: '',
-    has_known_allergies: false,
-    allergies_uncertain: false,
-    addictions: '',
-    phone_number: user?.phone || '',
-    date_of_birth: user?.date_of_birth || '',
-    emergency_contact_name: user?.emergency_contact_name || '',
-    emergency_contact_phone: user?.emergency_contact_phone || '',
-    medical_history: user?.medical_history || ''
-  });
+  student_id: user?.student_id || '',
+  name: user?.name || '',
+  email: user?.email || '',
+  department: user?.department || '',
+  avatar_url: null,
+  allergies: '',
+  has_known_allergies: false,
+  allergies_uncertain: false,
+  addictions: '',
+  phone_number: user?.phone || '',
+  date_of_birth: user?.date_of_birth || '',
+  emergency_contact_name: user?.emergency_contact_name || '',
+  emergency_contact_phone: user?.emergency_contact_phone || '',
+  emergency_contact_relationship: '',  // ✅ Empty string, not null
+  emergency_contact_email: '',         // ✅ Empty string, not null
+  blood_type: '',                      // ✅ Empty string (changed from 'Unknown')
+  gender: '',                          // ✅ Empty string, not null
+  medical_history: user?.medical_history || ''
+});
   
   // Form state for new appointment
   const [appointmentForm, setAppointmentForm] = useState<AppointmentForm>({
@@ -218,7 +226,19 @@ const StudentAppointmentSystem: React.FC<Props> = ({
   // Utility Functions
   // 2. Update the checkProfileComplete function to work with current state
 const checkProfileComplete = (profileData = userProfile): boolean => {
-  const required: (keyof UserProfile)[] = ['name', 'email', 'department', 'phone_number', 'date_of_birth', 'emergency_contact_name', 'emergency_contact_phone'];
+  const required: (keyof UserProfile)[] = [
+    'name', 
+    'email', 
+    'department', 
+    'phone_number', 
+    'date_of_birth', 
+    'emergency_contact_name', 
+    'emergency_contact_phone',
+    'emergency_contact_relationship',  // ✅ ADD THIS
+    'emergency_contact_email',         // ✅ ADD THIS
+    'blood_type',                      // ✅ ADD THIS
+    'gender'                           // ✅ ADD THIS
+  ];
   const isComplete = required.every(field => profileData[field] && String(profileData[field]).trim() !== '');
   setProfileComplete(isComplete);
   return isComplete;
@@ -557,55 +577,77 @@ setAppointments(Array.isArray(data.appointments) ? data.appointments : []);
     setLoading(false);
   };
 
+  // ✅ Add this helper function BEFORE your fetchUserProfile function
+const safeString = (value: any): string => {
+  if (value === null || value === undefined) return '';
+  return String(value);
+};
+
   // 1. Add a new function to fetch user profile from backend
 const fetchUserProfile = async (): Promise<void> => {
   try {
     const token = getAuthToken();
-    const response = await fetch(`${API_BASE_URL}/api/auth/profile`, {
+    console.log('🔑 Token:', token ? 'EXISTS' : 'MISSING');
+    
+    const response = await fetch(`${API_BASE_URL}/api/student/profile`, {
       method: 'GET',
       headers: {
-        'Authorization': `Bearer ${token}`
+        'Authorization': `Bearer ${token}`,
+        'Accept': 'application/json'
       }
     });
     
+    console.log('📡 Response status:', response.status);
+    
     if (response.ok) {
       const data = await response.json();
-      console.log('Fetched profile data:', data); // Debug log
+      console.log('📥 RAW API Response:', JSON.stringify(data, null, 2));
       
-      // Update userProfile state with fetched data
-      const updatedProfile = {
-        student_id: data.student_id || user?.student_id || '',
-        name: data.name || user?.name || '',
-        email: data.email || user?.email || '',
-        department: data.department || user?.department || '',
-        avatar_url: data.avatar_url || null,
-        allergies: data.allergies || '',
-        has_known_allergies: data.has_known_allergies || false,
-        allergies_uncertain: data.allergies_uncertain || false,
-        addictions: data.addictions || '',
-        phone_number: data.phone_number || user?.phone || '',
-        date_of_birth: data.date_of_birth || user?.date_of_birth || '',
-        emergency_contact_name: data.emergency_contact_name || user?.emergency_contact_name || '',
-        emergency_contact_phone: data.emergency_contact_phone || user?.emergency_contact_phone || '',
-        medical_history: data.medical_history || user?.medical_history || ''
+      // Format date properly
+      const formatDate = (dateString: string | null | undefined): string => {
+        if (!dateString) return '';
+        if (/^\d{4}-\d{2}-\d{2}$/.test(dateString)) return dateString;
+        return dateString.split('T')[0];
       };
       
-      setUserProfile(updatedProfile);
+      // Convert ALL null values to empty strings
+      const updatedProfile = {
+        student_id: safeString(data.student_id),
+        name: safeString(data.name),
+        email: safeString(data.email),
+        department: safeString(data.department),
+        avatar_url: data.avatar_url || null,
+        allergies: safeString(data.allergies),
+        has_known_allergies: data.has_known_allergies || false,
+        allergies_uncertain: data.allergies_uncertain || false,
+        addictions: safeString(data.addictions),
+        phone_number: safeString(data.phone_number),
+        date_of_birth: formatDate(data.date_of_birth),
+        emergency_contact_name: safeString(data.emergency_contact_name),
+        emergency_contact_phone: safeString(data.emergency_contact_phone),
+        emergency_contact_relationship: safeString(data.emergency_contact_relationship),
+        emergency_contact_email: safeString(data.emergency_contact_email),
+        blood_type: safeString(data.blood_type),
+        gender: safeString(data.gender),
+        medical_history: safeString(data.medical_history)
+      };
       
-      // Check if profile is complete based on fetched data
+      console.log('✅ Updated Profile State:', JSON.stringify(updatedProfile, null, 2));
+      
+      setUserProfile(updatedProfile);
       const isComplete = checkProfileComplete(updatedProfile);
-      console.log('Profile complete status:', isComplete, updatedProfile); // Debug log
+      console.log('📊 Profile complete:', isComplete);
       
     } else if (response.status === 404) {
-      // Profile doesn't exist yet, keep current state
-      console.log('Profile not found, using default values');
+      console.log('❌ Profile not found (404)');
       setProfileComplete(false);
     } else {
+      const errorText = await response.text();
+      console.error('❌ Error response:', errorText);
       throw new Error('Failed to fetch profile');
     }
   } catch (error) {
-    console.error('Error fetching user profile:', error);
-    // On error, assume profile is incomplete to be safe
+    console.error('💥 Error fetching user profile:', error);
     setProfileComplete(false);
   }
 };
@@ -677,7 +719,11 @@ const saveProfile = async (): Promise<void> => {
       'phone_number', 
       'date_of_birth', 
       'emergency_contact_name', 
-      'emergency_contact_phone'
+      'emergency_contact_phone',
+      'emergency_contact_relationship',
+      'emergency_contact_email',
+      'blood_type',
+      'gender'
     ];
     
     const missingFields = required.filter(field => {
@@ -692,6 +738,10 @@ const saveProfile = async (): Promise<void> => {
           case 'date_of_birth': return 'Date of Birth';
           case 'emergency_contact_name': return 'Emergency Contact Name';
           case 'emergency_contact_phone': return 'Emergency Contact Phone';
+          case 'emergency_contact_relationship': return 'Emergency Contact Relationship';
+          case 'emergency_contact_email': return 'Emergency Contact Email';
+          case 'blood_type': return 'Blood Type';
+          case 'gender': return 'Gender';
           default: return field.charAt(0).toUpperCase() + field.slice(1);
         }
       });
@@ -705,39 +755,18 @@ const saveProfile = async (): Promise<void> => {
       return;
     }
 
-    // Validate email format
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(userProfile.email)) {
-      setMessage({ 
-        type: 'error', 
-        text: 'Please enter a valid email address' 
-      });
-      setTimeout(() => setMessage({ type: '', text: '' }), 5000);
-      setLoading(false);
-      return;
-    }
-
-    // Validate phone number (basic check)
-    if (userProfile.phone_number && userProfile.phone_number.length < 10) {
-      setMessage({ 
-        type: 'error', 
-        text: 'Please enter a valid phone number' 
-      });
-      setTimeout(() => setMessage({ type: '', text: '' }), 5000);
-      setLoading(false);
-      return;
-    }
-
-    // Prepare clean data for submission
+    // Prepare clean data
     const profileData = {
-      student_id: userProfile.student_id?.trim(),
-      name: userProfile.name?.trim(),
-      email: userProfile.email?.trim(),
-      department: userProfile.department?.trim(),
-      phone_number: userProfile.phone_number?.trim(),
-      date_of_birth: userProfile.date_of_birth,
-      emergency_contact_name: userProfile.emergency_contact_name?.trim(),
-      emergency_contact_phone: userProfile.emergency_contact_phone?.trim(),
+      name: userProfile.name?.trim() || '',
+      department: userProfile.department?.trim() || '',
+      phone_number: userProfile.phone_number?.trim() || '',
+      date_of_birth: userProfile.date_of_birth || '',
+      emergency_contact_name: userProfile.emergency_contact_name?.trim() || '',
+      emergency_contact_phone: userProfile.emergency_contact_phone?.trim() || '',
+      emergency_contact_relationship: userProfile.emergency_contact_relationship?.trim() || '',
+      emergency_contact_email: userProfile.emergency_contact_email?.trim() || '',
+      blood_type: userProfile.blood_type || '',
+      gender: userProfile.gender || '',
       medical_history: userProfile.medical_history?.trim() || '',
       allergies: userProfile.allergies?.trim() || '',
       has_known_allergies: Boolean(userProfile.has_known_allergies),
@@ -750,10 +779,10 @@ const saveProfile = async (): Promise<void> => {
       throw new Error('Authentication token not found. Please log in again.');
     }
 
-    console.log('Sending profile data:', profileData);
+    console.log('📤 Sending profile data:', profileData);
     
-    const response = await fetch(`${API_BASE_URL}/api/auth/profile`, {
-      method: 'POST',
+    const response = await fetch(`${API_BASE_URL}/api/student/profile`, {
+      method: 'PUT',
       headers: {  
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${token}`,
@@ -762,17 +791,16 @@ const saveProfile = async (): Promise<void> => {
       body: JSON.stringify(profileData)
     });
     
-    console.log('Profile save response status:', response.status);
+    console.log('📡 Response status:', response.status);
     
     if (!response.ok) {
       let errorMessage = `Profile save failed with status ${response.status}`;
       
       try {
         const errorData = await response.json();
-        console.error('Profile save error details:', errorData);
+        console.error('❌ Error details:', errorData);
         
         if (response.status === 422) {
-          // Validation errors
           if (errorData.errors) {
             const validationErrors = Object.entries(errorData.errors)
               .map(([field, messages]) => `${field}: ${Array.isArray(messages) ? messages.join(', ') : messages}`)
@@ -781,48 +809,38 @@ const saveProfile = async (): Promise<void> => {
           } else {
             errorMessage = errorData.message || 'Validation failed';
           }
-        } else if (response.status === 500) {
-          errorMessage = 'Server error occurred. Please try again or contact support if the problem persists.';
-        } else if (response.status === 403) {
-          errorMessage = 'Access denied. Please check your permissions or try logging in again.';
         } else {
           errorMessage = errorData.message || errorData.error || errorMessage;
         }
       } catch (parseError) {
         console.error('Could not parse error response:', parseError);
-        
-        if (response.status === 500) {
-          errorMessage = 'Server error occurred. Please try again later.';
-        } else if (response.status === 403) {
-          errorMessage = 'Access denied. You may need to log in again.';
-        }
       }
       
       throw new Error(errorMessage);
     }
     
     const responseData = await response.json();
-    console.log('Profile save successful:', responseData);
+    console.log('✅ Profile saved successfully:', responseData);
     
-    // Check if profile is now complete
+    // Update local state with the response
+    if (responseData.user) {
+      setUserProfile(prev => ({
+        ...prev,
+        ...responseData.user
+      }));
+    }
+    
     const isComplete = checkProfileComplete();
     
-    if (isComplete) {
-      setMessage({ 
-        type: 'success', 
-        text: 'Profile completed and saved successfully!' 
-      });
-    } else {
-      setMessage({ 
-        type: 'success', 
-        text: 'Profile saved successfully!' 
-      });
-    }
+    setMessage({ 
+      type: 'success', 
+      text: isComplete ? 'Profile completed and saved successfully!' : 'Profile saved successfully!'
+    });
     
     setTimeout(() => setMessage({ type: '', text: '' }), 3000);
     
   } catch (error) {
-    console.error('Error saving profile:', error);
+    console.error('💥 Error saving profile:', error);
     setMessage({ 
       type: 'error', 
       text: error instanceof Error ? error.message : 'Failed to save profile. Please try again.' 
@@ -833,6 +851,24 @@ const saveProfile = async (): Promise<void> => {
   }
 };
 
+// Add this helper function
+const isWeekday = (dateString: string): boolean => {
+  const date = new Date(dateString);
+  const day = date.getDay();
+  // 0 = Sunday, 6 = Saturday
+  // Returns true only for Monday (1) through Friday (5)
+  return day >= 1 && day <= 5;
+};
+
+const getDateClosureReason = (dateString: string): string => {
+  const date = new Date(dateString);
+  const day = date.getDay();
+  
+  if (day === 0) return 'Clinic is closed on Sundays';
+  if (day === 6) return 'Clinic is closed on Saturdays';
+  return 'Clinic is not operating on this date';
+};
+  
 const checkDateAvailability = async (date: string): Promise<boolean> => {
   try {
     const response = await apiService.get(`/holidays/check-availability?date=${date}&staff_type=clinical`);
@@ -1100,6 +1136,42 @@ const submitAppointment = async (): Promise<void> => {
   }
 };
 
+// Add utility functions at top
+const formatDate = (dateString: string): string => {
+  try {
+    const date = new Date(dateString);
+    return date.toLocaleDateString('en-US', {
+      month: '2-digit',
+      day: '2-digit',
+      year: 'numeric'
+    });
+  } catch (error) {
+    return dateString;
+  }
+};
+
+const formatTime = (timeString: string): string => {
+  try {
+    let date: Date;
+    if (timeString.includes('T')) {
+      date = new Date(timeString);
+    } else {
+      const [hours, minutes] = timeString.split(':');
+      date = new Date();
+      date.setHours(parseInt(hours), parseInt(minutes), 0);
+    }
+    
+    return date.toLocaleTimeString('en-US', {
+      hour: 'numeric',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: true
+    });
+  } catch (error) {
+    return timeString;
+  }
+};
+
 const cancelAppointment = async (appointmentId: string): Promise<void> => {
   setLoading(true);
   
@@ -1197,7 +1269,8 @@ const cancelAppointment = async (appointmentId: string): Promise<void> => {
   
   const timeSlots: string[] = [
     '09:00', '09:30', '10:00', '10:30', '11:00', '11:30',
-    '14:00', '14:30', '15:00', '15:30', '16:00', '16:30'
+    '12:00', '12:30', '13:00', '13:30', '14:00', '14:30',
+    '15:00', '15:30', '16:00', '16:30'
   ];
 
   const urgencyLevels: UrgencyLevel[] = [
@@ -1921,7 +1994,7 @@ const AlternativeDatesModal = () => (
                           <p className="mb-1 opacity-90">{userProfile.email}</p>
                           <p className="mb-1 opacity-90">Student ID: {userProfile.student_id}</p>
                           <p className="mb-0 opacity-75">Department: {userProfile.department}</p>
-                        </div>
+                        </div>{/*
                         <div className="col-md-4 text-end">
                           {userProfile.avatar_url ? (
                           <img 
@@ -1932,7 +2005,7 @@ const AlternativeDatesModal = () => (
                         ) : (
                           <User size={80} className="opacity-75" />
                         )}
-                        </div>
+                        </div>*/}
                       </div>
                     </div>
                   </div>
@@ -2051,9 +2124,9 @@ const AlternativeDatesModal = () => (
                 <h6 className="mb-1 fw-semibold">{appointment.doctor}</h6>
                 <div className="d-flex align-items-center text-muted small">
                   <Calendar size={14} className="me-1" />
-                  {new Date(appointment.date).toLocaleDateString()}
+                  {formatDate(appointment.date)}
                   <Clock size={14} className="ms-3 me-1" />
-                  {appointment.time}
+                  {formatTime(appointment.time)}
                 </div>
                 <small className="text-muted">{appointment.reason}</small>
               </div>
@@ -2380,6 +2453,73 @@ const AlternativeDatesModal = () => (
                     </div>
 
                     <div className="col-md-6">
+                      <label className="form-label fw-semibold">Emergency Contact Relationship <span className="text-danger">*</span></label>
+                      <select
+                        className="form-select form-select-custom form-select-lg"
+                        value={userProfile.emergency_contact_relationship || ''}  // ✅ Add || '' fallback
+                        onChange={(e) => setUserProfile({...userProfile, emergency_contact_relationship: e.target.value})}
+                        required
+                      >
+                        <option value="">Select relationship</option>
+                        <option value="parent">Parent</option>
+                        <option value="guardian">Guardian</option>
+                        <option value="spouse">Spouse</option>
+                        <option value="sibling">Sibling</option>
+                        <option value="friend">Friend</option>
+                        <option value="other">Other</option>
+                      </select>
+                    </div>
+
+                  <div className="col-md-6">
+                    <label className="form-label fw-semibold">Emergency Contact Email <span className="text-danger">*</span></label>
+                    <input
+                      type="email"
+                      className="form-control form-control-custom form-control-lg"
+                      value={userProfile.emergency_contact_email}
+                      onChange={(e) => setUserProfile({...userProfile, emergency_contact_email: e.target.value})}
+                      placeholder="Emergency contact email"
+                      required
+                    />
+                  </div>
+
+                  <div className="col-md-6">
+                    <label className="form-label fw-semibold">Blood Type <span className="text-danger">*</span></label>
+                    <select
+                      className="form-select form-select-custom form-select-lg"
+                      value={userProfile.blood_type || ''}  // ✅ Add || '' fallback
+                      onChange={(e) => setUserProfile({...userProfile, blood_type: e.target.value})}
+                      required
+                    >
+                      <option value="">Select blood type</option>
+                      <option value="A+">A+</option>
+                      <option value="A-">A-</option>
+                      <option value="B+">B+</option>
+                      <option value="B-">B-</option>
+                      <option value="AB+">AB+</option>
+                      <option value="AB-">AB-</option>
+                      <option value="O+">O+</option>
+                      <option value="O-">O-</option>
+                      <option value="Unknown">Unknown</option>
+                    </select>
+                  </div>
+
+                  <div className="col-md-6">
+                    <label className="form-label fw-semibold">Gender <span className="text-danger">*</span></label>
+                    <select
+                      className="form-select form-select-custom form-select-lg"
+                      value={userProfile.gender || ''}  // ✅ Add || '' fallback
+                      onChange={(e) => setUserProfile({...userProfile, gender: e.target.value})}
+                      required
+                    >
+                      <option value="">Select gender</option>
+                      <option value="male">Male</option>
+                      <option value="female">Female</option>
+                      <option value="other">Other</option>
+                      <option value="prefer_not_to_say">Prefer not to say</option>
+                    </select>
+                  </div>
+
+                    <div className="col-md-6">
                       <label className="form-label fw-semibold">Date of Birth <span className="text-danger">*</span></label>
                       <input
                         type="date"
@@ -2610,16 +2750,29 @@ const AlternativeDatesModal = () => (
               </div>
             </div>
 
-            {/* Date */}
+            {/* Date - with clinic hours validation */}
             <div className="col-md-6">
               <label className="form-label fw-semibold">Date <span className="text-danger">*</span></label>
               <input
                 type="date"
-                className="form-control form-control-custom form-control-lg"
+                className={`form-control form-control-custom form-control-lg ${
+                  appointmentForm.date && !isWeekday(appointmentForm.date) ? 'is-invalid' : ''
+                }`}
                 value={appointmentForm.date}
                 onChange={(e) => {
                   const selectedDate = e.target.value;
                   
+                  // Check if date is a weekday (Monday-Friday)
+                  if (selectedDate && !isWeekday(selectedDate)) {
+                    setMessage({
+                      type: 'error',
+                      text: getDateClosureReason(selectedDate) + '. Please select a weekday (Monday-Friday).'
+                    });
+                    setTimeout(() => setMessage({ type: '', text: '' }), 5000);
+                    return; // Don't set the date
+                  }
+                  
+                  // Check if date is blocked by holidays (existing check)
                   if (isDateBlocked(selectedDate)) {
                     const blockingHoliday = holidays.find(h => 
                       h.blocks_appointments && 
@@ -2641,6 +2794,14 @@ const AlternativeDatesModal = () => (
                 disabled={loading || !profileComplete}
                 required
               />
+              {appointmentForm.date && !isWeekday(appointmentForm.date) && (
+                <div className="invalid-feedback d-block">
+                  {getDateClosureReason(appointmentForm.date)}. Please select a weekday.
+                </div>
+              )}
+              <small className="form-text text-muted">
+                Clinic operates Monday-Friday, 9:00 AM - 5:00 PM
+              </small>
             </div>
 
             {/* Time */}
@@ -2885,8 +3046,8 @@ const AlternativeDatesModal = () => (
                           <span className="ms-2">{appointment.specialty}</span>
                         </div>
                       </td>
-                      <td>{new Date(appointment.date).toLocaleDateString()}</td>
-                      <td>{appointment.time}</td>
+                      <td>{formatDate(appointment.date)}</td>
+                      <td>{formatTime(appointment.time)}</td>
                       <td>
                         <span className={getStatusBadge(appointment.status)}>
                           {getStatusText(appointment.status as typeof APPOINTMENT_STATUSES[keyof typeof APPOINTMENT_STATUSES])}
@@ -3067,7 +3228,7 @@ const AlternativeDatesModal = () => (
                     <tr key={record.id}>
                       <td>
                         <div className="d-flex flex-column">
-                          <span className="fw-semibold">{new Date(record.date).toLocaleDateString()}</span>
+                          <span className="fw-semibold">{formatDate(record.date)}</span>
                         </div>
                       </td>
                       <td>

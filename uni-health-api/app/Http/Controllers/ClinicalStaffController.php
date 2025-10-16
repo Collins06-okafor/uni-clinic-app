@@ -46,8 +46,8 @@ public function dashboard(Request $request): JsonResponse
                 'id' => $appointment->id,
                 'patient_name' => $appointment->patient->name,
                 'student_id' => $appointment->patient->student_id,
-                'date' => $appointment->date,  // ADD THIS LINE
-                'time' => $appointment->time,
+                'date' => $appointment->date, // Keep as YYYY-MM-DD
+                'time' => $appointment->time, // Keep as HH:mm
                 'status' => $appointment->status,
                 'priority' => $appointment->priority,
                 'reason' => $appointment->reason,
@@ -478,6 +478,258 @@ public function confirmAppointment(Request $request, $id): JsonResponse
         'appointment' => $appointment
     ]);
 }
+
+/**
+     * Get clinical staff profile
+     */
+    public function getProfile(Request $request): JsonResponse
+    {
+        try {
+            $user = $request->user();
+            
+            if (!$user) {
+                return response()->json([
+                    'message' => 'User not found'
+                ], 404);
+            }
+            
+            // Ensure avatar_url is a full URL
+            $avatarUrl = null;
+            if ($user->avatar_url) {
+                if (filter_var($user->avatar_url, FILTER_VALIDATE_URL)) {
+                    $avatarUrl = $user->avatar_url;
+                } else {
+                    $avatarUrl = url($user->avatar_url);
+                }
+            }
+            
+            // FIX: Handle date_of_birth properly - it might be a string or Carbon object
+            $dateOfBirth = null;
+            if ($user->date_of_birth) {
+                if ($user->date_of_birth instanceof \Carbon\Carbon) {
+                    $dateOfBirth = $user->date_of_birth->format('Y-m-d');
+                } else {
+                    $dateOfBirth = $user->date_of_birth;
+                }
+            }
+            
+            return response()->json([
+                'staff_no' => $user->staff_no,
+                'name' => $user->name,
+                'email' => $user->email,
+                'phone' => $user->phone,
+                'date_of_birth' => $dateOfBirth,
+                'gender' => $user->gender,
+                'avatar_url' => $avatarUrl,
+                'department' => $user->department,
+                'role' => $user->role,
+            ]);
+            
+        } catch (\Exception $e) {
+            \Log::error('Clinical staff profile fetch error: ' . $e->getMessage());
+            
+            return response()->json([
+                'message' => 'Failed to fetch profile',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Update clinical staff profile
+     */
+    public function updateProfile(Request $request): JsonResponse
+    {
+        try {
+            $user = $request->user();
+            
+            if (!$user) {
+                return response()->json([
+                    'message' => 'User not found'
+                ], 404);
+            }
+            
+            $minBirthDate = now()->subYears(21)->toDateString();
+            
+            $validated = $request->validate([
+                'name' => 'sometimes|string|max:255',
+                'phone' => 'sometimes|string|max:20',
+                'date_of_birth' => [
+                    'sometimes',
+                    'date',
+                    'before_or_equal:' . $minBirthDate
+                ],
+                'gender' => 'sometimes|in:male,female,other,prefer_not_to_say',
+            ], [
+                'date_of_birth.before_or_equal' => 'Clinical staff must be at least 21 years old.',
+            ]);
+
+            // Age verification if date_of_birth is being updated
+            if (isset($validated['date_of_birth'])) {
+                $birthDate = Carbon::parse($validated['date_of_birth']);
+                $age = $birthDate->diffInYears(now());
+                
+                if ($age < 21) {
+                    return response()->json([
+                        'message' => 'Age requirement not met',
+                        'errors' => [
+                            'date_of_birth' => ['Clinical staff must be at least 21 years old. Current age: ' . $age . ' years.']
+                        ]
+                    ], 422);
+                }
+                
+                // Ensure date_of_birth is properly cast to Carbon
+                $validated['date_of_birth'] = $birthDate;
+            }
+
+            $user->update($validated);
+
+            // Refresh the user to get updated data
+            $user->refresh();
+
+            // Ensure avatar_url is a full URL in response
+            $avatarUrl = null;
+            if ($user->avatar_url) {
+                if (filter_var($user->avatar_url, FILTER_VALIDATE_URL)) {
+                    $avatarUrl = $user->avatar_url;
+                } else {
+                    $avatarUrl = url($user->avatar_url);
+                }
+            }
+
+            // FIX: Handle date_of_birth properly in response
+            $dateOfBirth = null;
+            if ($user->date_of_birth) {
+                if ($user->date_of_birth instanceof \Carbon\Carbon) {
+                    $dateOfBirth = $user->date_of_birth->format('Y-m-d');
+                } else {
+                    $dateOfBirth = $user->date_of_birth;
+                }
+            }
+
+            return response()->json([
+                'message' => 'Profile updated successfully',
+                'user' => [
+                    'staff_no' => $user->staff_no,
+                    'name' => $user->name,
+                    'email' => $user->email,
+                    'phone' => $user->phone,
+                    'date_of_birth' => $dateOfBirth,
+                    'gender' => $user->gender,
+                    'avatar_url' => $avatarUrl,
+                    'department' => $user->department,
+                ]
+            ]);
+
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return response()->json([
+                'message' => 'Validation failed',
+                'errors' => $e->errors()
+            ], 422);
+        } catch (\Exception $e) {
+            \Log::error('Clinical staff profile update error: ' . $e->getMessage());
+            \Log::error('Stack trace: ' . $e->getTraceAsString());
+            
+            return response()->json([
+                'message' => 'Failed to update profile',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Upload clinical staff avatar
+     */
+    public function uploadAvatar(Request $request): JsonResponse
+    {
+        try {
+            $validated = $request->validate([
+                'avatar' => 'required|image|mimes:jpeg,png,jpg,gif,webp|max:5120', // 5MB max
+            ]);
+
+            $user = $request->user();
+            
+            // Delete old avatar if exists
+            if ($user->avatar_url) {
+                $oldPath = str_replace('/storage/', '', $user->avatar_url);
+                $oldPath = str_replace(url('/storage/'), '', $user->avatar_url);
+                
+                if (Storage::disk('public')->exists($oldPath)) {
+                    Storage::disk('public')->delete($oldPath);
+                }
+            }
+
+            // Store new avatar
+            $file = $request->file('avatar');
+            $filename = $user->id . '_' . time() . '.' . $file->getClientOriginalExtension();
+            $path = $file->storeAs('avatars', $filename, 'public');
+            
+            // Create FULL URL
+            $avatarUrl = url('/storage/' . $path);
+            
+            // Update user record
+            $user->update(['avatar_url' => $avatarUrl]);
+
+            \Log::info('Clinical staff avatar uploaded', [
+                'user_id' => $user->id,
+                'path' => $path,
+                'full_url' => $avatarUrl
+            ]);
+
+            return response()->json([
+                'message' => 'Avatar uploaded successfully',
+                'avatar_url' => $avatarUrl
+            ]);
+
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return response()->json([
+                'message' => 'Validation failed',
+                'errors' => $e->errors()
+            ], 422);
+        } catch (\Exception $e) {
+            \Log::error('Clinical staff avatar upload error: ' . $e->getMessage());
+            
+            return response()->json([
+                'message' => 'Failed to upload avatar',
+                'error' => 'An unexpected error occurred'
+            ], 500);
+        }
+    }
+
+    /**
+     * Remove clinical staff avatar
+     */
+    public function removeAvatar(Request $request): JsonResponse
+    {
+        try {
+            $user = $request->user();
+            
+            if ($user->avatar_url) {
+                $oldPath = str_replace('/storage/', '', $user->avatar_url);
+                $oldPath = str_replace(url('/storage/'), '', $user->avatar_url);
+                
+                if (Storage::disk('public')->exists($oldPath)) {
+                    Storage::disk('public')->delete($oldPath);
+                }
+                
+                $user->update(['avatar_url' => null]);
+                
+                \Log::info('Clinical staff avatar removed', ['user_id' => $user->id]);
+            }
+
+            return response()->json([
+                'message' => 'Avatar removed successfully'
+            ]);
+
+        } catch (\Exception $e) {
+            \Log::error('Clinical staff avatar removal error: ' . $e->getMessage());
+            
+            return response()->json([
+                'message' => 'Failed to remove avatar',
+                'error' => 'An unexpected error occurred'
+            ], 500);
+        }
+    }
 
 // Add to ClinicalStaffController
 public function registerWalkInPatient(Request $request): JsonResponse
@@ -1572,18 +1824,25 @@ private function checkVitalSignsAlerts(array $vitals): array
 
    public function updateVitalSigns(Request $request, $patientId): JsonResponse
 {
+    \Log::info('=== VITAL SIGNS REQUEST RECEIVED ===', [
+        'patient_id' => $patientId,
+        'request_data' => $request->all()
+    ]);
+
     $validated = $request->validate([
-        'blood_pressure' => 'sometimes|string|max:20',  // ADD THIS
+        'blood_pressure' => 'sometimes|string|max:20',
         'blood_pressure_systolic' => 'required|integer|min:60|max:250',
         'blood_pressure_diastolic' => 'required|integer|min:40|max:150',
         'heart_rate' => 'required|integer|min:30|max:200',
-        'temperature' => 'required|numeric|min:30|max:45', // Fixed range for Celsius
+        'temperature' => 'required|numeric|min:30|max:45',
         'temperature_unit' => 'required|in:F,C',
         'respiratory_rate' => 'nullable|integer|min:8|max:40',
         'oxygen_saturation' => 'nullable|integer|min:70|max:100',
         'notes' => 'nullable|string|max:500',
         'doctor_id' => 'sometimes|exists:users,id'
     ]);
+
+    \Log::info('Validation passed', ['validated' => $validated]);
 
     $doctorId = $validated['doctor_id'] ?? null;
     
@@ -1594,34 +1853,87 @@ private function checkVitalSignsAlerts(array $vitals): array
             ->first();
             
         $doctorId = $todayAppointment ? $todayAppointment->doctor_id : null;
+        \Log::info('Doctor ID resolved', ['doctor_id' => $doctorId]);
     }
 
+    // Handle blood_pressure string format
     if (isset($validated['blood_pressure']) && !isset($validated['blood_pressure_systolic'])) {
-    $bp = explode('/', $validated['blood_pressure']);
-    if (count($bp) === 2) {
-        $validated['blood_pressure_systolic'] = (int)$bp[0];
-        $validated['blood_pressure_diastolic'] = (int)$bp[1];
+        $bp = explode('/', $validated['blood_pressure']);
+        if (count($bp) === 2) {
+            $validated['blood_pressure_systolic'] = (int)$bp[0];
+            $validated['blood_pressure_diastolic'] = (int)$bp[1];
+        }
     }
-}
 
-    unset($validated['doctor_id']);
+    // Prepare content - remove fields that should NOT be in content
+    $contentData = $validated;
+    unset($contentData['doctor_id']);
+    $notes = $contentData['notes'] ?? null;
+    unset($contentData['notes']);
 
-    $record = MedicalRecord::create([
+    \Log::info('Prepared data for saving', [
         'patient_id' => $patientId,
         'doctor_id' => $doctorId,
-        'type' => 'vital_signs',
-        'content' => $validated,
-        'diagnosis' => 'Vital signs recording',
-        'treatment' => 'N/A',
-        'visit_date' => now()->format('Y-m-d'), // Add current date
+        'content_data' => $contentData,
+        'notes' => $notes,
         'created_by' => $request->user()->id
     ]);
-    
-    return response()->json([
-        'message' => __('messages.vital_signs_recorded'), // ✅ Localized
-        'record' => $record->load(['patient', 'doctor']),
-        'alerts' => $this->checkVitalSignsAlerts($validated)
-    ], 201);
+
+    try {
+        // Create the record
+        $record = MedicalRecord::create([
+            'patient_id' => $patientId,
+            'doctor_id' => $doctorId,
+            'type' => 'vital_signs',
+            'content' => $contentData,
+            'diagnosis' => 'Vital signs recording',
+            'treatment' => 'N/A',
+            'notes' => $notes,
+            'visit_date' => now()->format('Y-m-d'),
+            'created_by' => $request->user()->id
+        ]);
+
+        \Log::info('Record created', ['record_id' => $record->id]);
+
+        // Immediately fetch it back to verify
+        $verifyRecord = MedicalRecord::find($record->id);
+        
+        \Log::info('=== VERIFICATION CHECK ===', [
+            'record_id' => $verifyRecord->id,
+            'content_is_null' => is_null($verifyRecord->content),
+            'content_is_array' => is_array($verifyRecord->content),
+            'content_value' => $verifyRecord->content,
+            'raw_content' => $verifyRecord->getRawOriginal('content')
+        ]);
+
+        if (is_null($verifyRecord->content)) {
+            \Log::error('CRITICAL: Content saved as NULL!', [
+                'model_casts' => $verifyRecord->getCasts(),
+                'model_fillable' => $verifyRecord->getFillable()
+            ]);
+        }
+
+        return response()->json([
+            'message' => 'Vital signs recorded successfully',
+            'record' => $record->load(['patient', 'doctor']),
+            'debug_info' => [
+                'content_saved' => !is_null($verifyRecord->content),
+                'content_keys' => $verifyRecord->content ? array_keys($verifyRecord->content) : null
+            ],
+            'alerts' => $this->checkVitalSignsAlerts($contentData)
+        ], 201);
+
+    } catch (\Exception $e) {
+        \Log::error('Error creating vital signs record', [
+            'error' => $e->getMessage(),
+            'trace' => $e->getTraceAsString()
+        ]);
+        
+        return response()->json([
+            'message' => 'Failed to record vital signs',
+            'error' => $e->getMessage()
+        ], 500);
+    }
 }
 
 
@@ -1848,37 +2160,479 @@ public function storeMedicalCard(Request $request, $userId)
      */
     public function getVitalSignsHistory(Request $request, $patientId): JsonResponse
     {
-        $days = $request->get('days', 7); // Default to 1 week
+        $days = $request->get('days', 7);
         
-        $records = MedicalRecord::where('patient_id', $patientId)
-            ->where('type', 'vital_signs')
-            ->whereDate('created_at', '>=', now()->subDays($days))
-            ->orderBy('created_at', 'desc')
-            ->get()
-            ->map(function($record) {
-                return [
-                    'id' => $record->id,
-                    'date' => $record->created_at->format('Y-m-d H:i'),
-                    'blood_pressure' => $record->content['blood_pressure_systolic'] . '/' . 
-                                       $record->content['blood_pressure_diastolic'],
-                    'heart_rate' => $record->content['heart_rate'],
-                    'temperature' => $record->content['temperature'] . '°' . 
-                                    ($record->content['temperature_unit'] ?? 'F'),
-                    'respiratory_rate' => $record->content['respiratory_rate'] ?? null,
-                    'oxygen_saturation' => $record->content['oxygen_saturation'] ?? null,
-                    'recorded_by' => $record->creator->name,
-                    'alerts' => $this->checkVitalSignsAlerts($record->content)
-                ];
-            });
+        try {
+            // First check if patient exists
+            $patient = User::find($patientId);
+            if (!$patient) {
+                return response()->json([
+                    'message' => 'Patient not found',
+                    'vital_signs_history' => []
+                ], 404);
+            }
+
+            \Log::info("Fetching vitals for patient {$patientId}, last {$days} days");
             
-        return response()->json([
+            $records = MedicalRecord::where('patient_id', $patientId)
+                ->where('type', 'vital_signs')
+                ->whereDate('created_at', '>=', now()->subDays($days))
+                ->orderBy('created_at', 'desc')
+                ->with(['creator'])
+                ->get();
+                
+            \Log::info("Found {$records->count()} vital sign records");
+            
+            $mappedRecords = $records->map(function($record) {
+                try {
+                    // FIX: Properly handle JSON content - check if it's already an array
+                    if (is_array($record->content)) {
+                        $content = $record->content;
+                    } elseif (is_string($record->content)) {
+                        $content = json_decode($record->content, true);
+                        if (json_last_error() !== JSON_ERROR_NONE) {
+                            \Log::warning("JSON decode error for record {$record->id}: " . json_last_error_msg());
+                            return null;
+                        }
+                    } else {
+                        \Log::warning("Unexpected content type for record {$record->id}");
+                        return null;
+                    }
+                    
+                    // Handle missing data gracefully
+                    $systolic = $content['blood_pressure_systolic'] ?? 0;
+                    $diastolic = $content['blood_pressure_diastolic'] ?? 0;
+                    $heartRate = $content['heart_rate'] ?? 0;
+                    $temp = $content['temperature'] ?? 0;
+                    $tempUnit = $content['temperature_unit'] ?? 'C';
+                    
+                    return [
+                        'id' => $record->id,
+                        'date' => $record->created_at->toISOString(),
+                        'blood_pressure' => "{$systolic}/{$diastolic}",
+                        'heart_rate' => $heartRate,
+                        'temperature' => "{$temp}°{$tempUnit}",
+                        'respiratory_rate' => $content['respiratory_rate'] ?? null,
+                        'oxygen_saturation' => $content['oxygen_saturation'] ?? null,
+                        'recorded_by' => $record->creator->name ?? 'Unknown',
+                        'alerts' => $this->checkVitalSignsAlerts($content)
+                    ];
+                } catch (\Exception $e) {
+                    \Log::error("Error processing record {$record->id}: " . $e->getMessage());
+                    return null;
+                }
+            })->filter(); // Remove null entries
+                
+            return response()->json([
+                'patient_id' => $patientId,
+                'vital_signs_history' => $mappedRecords->values(), // Reset array keys
+                'time_period' => "$days days",
+                'summary' => [
+                    'total_readings' => $mappedRecords->count(),
+                    'abnormal_readings' => $mappedRecords->filter(fn($r) => !empty($r['alerts']))->count()
+                ]
+            ]);
+        } catch (\Exception $e) {
+            \Log::error('Error fetching vitals history: ' . $e->getMessage());
+            \Log::error('Stack trace: ' . $e->getTraceAsString());
+            return response()->json([
+                'message' => 'Failed to fetch vitals history',
+                'error' => $e->getMessage(),
+                'vital_signs_history' => []
+            ], 500);
+        }
+    }
+
+    /**
+     * Get patient's medical card with complete user data
+     */
+    public function getPatientMedicalCard(Request $request, $patientId): JsonResponse
+{
+    try {
+        // Load patient with all relationships
+        $patient = User::with(['medicalCard'])->findOrFail($patientId);
+        
+        \Log::info('Loading medical card for patient', [
             'patient_id' => $patientId,
-            'vital_signs_history' => $records,
-            'time_period' => "$days days",
-            'summary' => [
-                'total_readings' => $records->count(),
-                'abnormal_readings' => $records->filter(fn($r) => !empty($r['alerts']))->count()
-            ]
+            'has_medical_card' => !is_null($patient->medicalCard),
+            'emergency_contact_name' => $patient->emergency_contact_name,
+            'emergency_contact_phone' => $patient->emergency_contact_phone,
+            'allergies' => $patient->allergies,
+            'date_of_birth' => $patient->date_of_birth,
+            'email' => $patient->email,
+            'phone' => $patient->phone,
         ]);
+        
+        // Get latest vitals
+        $latestVitals = MedicalRecord::where('patient_id', $patientId)
+            ->where('type', 'vital_signs')
+            ->orderBy('created_at', 'desc')
+            ->with(['creator'])
+            ->first();
+        
+        // Prepare vitals data if exists
+        $vitalsData = null;
+        if ($latestVitals) {
+            // Handle JSON content properly
+            $content = is_array($latestVitals->content) 
+                ? $latestVitals->content 
+                : (is_string($latestVitals->content) 
+                    ? json_decode($latestVitals->content, true) 
+                    : []);
+            
+            $systolic = $content['blood_pressure_systolic'] ?? 0;
+            $diastolic = $content['blood_pressure_diastolic'] ?? 0;
+            
+            $vitalsData = [
+                'date' => $latestVitals->created_at,
+                'blood_pressure' => "{$systolic}/{$diastolic}",
+                'heart_rate' => $content['heart_rate'] ?? null,
+                'temperature' => ($content['temperature'] ?? '') . '°' . 
+                                ($content['temperature_unit'] ?? 'C'),
+                'respiratory_rate' => $content['respiratory_rate'] ?? null,
+                'oxygen_saturation' => $content['oxygen_saturation'] ?? null,
+                'recorded_by' => $latestVitals->creator->name ?? 'Unknown',
+                'alerts' => $this->checkVitalSignsAlerts($content)
+            ];
+        }
+        
+        // Build emergency contact from user profile FIRST, then override with medical card if exists
+        $emergencyContact = [
+            'name' => $patient->emergency_contact_name ?? 'Not recorded',
+            'phone' => $patient->emergency_contact_phone ?? 'Not recorded',
+            'relationship' => 'Emergency Contact', // Default since field doesn't exist in users table
+            'email' => '' // Default since field doesn't exist in users table
+        ];
+        
+        // Override with medical card emergency contact if it exists and has data
+        if ($patient->medicalCard && !empty($patient->medicalCard->emergency_contact)) {
+            $cardEmergencyContact = is_array($patient->medicalCard->emergency_contact) 
+                ? $patient->medicalCard->emergency_contact 
+                : json_decode($patient->medicalCard->emergency_contact, true);
+            
+            if (is_array($cardEmergencyContact)) {
+                $emergencyContact = array_merge($emergencyContact, $cardEmergencyContact);
+            }
+        }
+        
+        // Build allergies list - prioritize user profile, then medical card
+        $allergiesList = [];
+        if (!empty($patient->allergies)) {
+            $allergiesList = $this->parseArrayField($patient->allergies);
+        } elseif ($patient->medicalCard && !empty($patient->medicalCard->allergies)) {
+            $allergiesList = $this->parseArrayField($patient->medicalCard->allergies);
+        }
+        
+        // Build medical history - prioritize user profile, then medical card
+        $medicalHistoryList = [];
+        if (!empty($patient->medical_history)) {
+            $medicalHistoryList = $this->parseArrayField($patient->medical_history);
+        } elseif ($patient->medicalCard && !empty($patient->medicalCard->previous_conditions)) {
+            $medicalHistoryList = $this->parseArrayField($patient->medicalCard->previous_conditions);
+        }
+        
+        // Build comprehensive medical card data
+        $medicalCardData = [
+            'blood_type' => 'Unknown', // Not in users table, would need to be added
+            'emergency_contact' => $emergencyContact,
+            'allergies' => $allergiesList,
+            'current_medications' => $patient->medicalCard 
+                ? $this->parseArrayField($patient->medicalCard->current_medications) 
+                : [],
+            'previous_conditions' => $medicalHistoryList,
+            'family_history' => $patient->medicalCard 
+                ? $this->parseArrayField($patient->medicalCard->family_history) 
+                : [],
+            'insurance_info' => $patient->medicalCard && !empty($patient->medicalCard->insurance_info)
+                ? (is_array($patient->medicalCard->insurance_info) 
+                    ? $patient->medicalCard->insurance_info 
+                    : json_decode($patient->medicalCard->insurance_info, true))
+                : null,
+            'has_known_allergies' => (bool)($patient->has_known_allergies ?? false),
+            'allergies_uncertain' => (bool)($patient->allergies_uncertain ?? false),
+            'addictions' => $patient->addictions ?? 'None'
+        ];
+        
+        // Calculate age if date_of_birth exists
+        $age = null;
+        if ($patient->date_of_birth) {
+            $age = \Carbon\Carbon::parse($patient->date_of_birth)->age;
+        }
+        
+        return response()->json([
+            'student' => [
+                'id' => $patient->id,
+                'name' => $patient->name,
+                'student_id' => $patient->student_id ?? 'N/A',
+                'staff_no' => $patient->staff_no ?? null,
+                'email' => $patient->email ?? 'Not recorded',
+                'phone' => $patient->phone ?? 'Not recorded',
+                'date_of_birth' => $patient->date_of_birth ?? 'Not recorded',
+                'age' => $age,
+                'gender' => $patient->gender ?? 'Not specified',
+                'department' => $patient->department ?? 'Not recorded',
+            ],
+            'medical_card' => $medicalCardData,
+            'latest_vitals' => $vitalsData,
+        ]);
+    } catch (\Exception $e) {
+        \Log::error('Error loading medical card: ' . $e->getMessage());
+        \Log::error('Stack trace: ' . $e->getTraceAsString());
+        return response()->json([
+            'message' => 'Failed to load medical card',
+            'error' => $e->getMessage()
+        ], 500);
+    }
+}
+
+/**
+ * Helper method to parse array fields that might be stored as JSON strings
+ */
+private function parseArrayField($field): array
+{
+    if (empty($field)) {
+        return [];
+    }
+    
+    // If it's already an array, return it
+    if (is_array($field)) {
+        return $field;
+    }
+    
+    // If it's a JSON string, decode it
+    if (is_string($field)) {
+        // Try to decode as JSON first
+        $decoded = json_decode($field, true);
+        if (json_last_error() === JSON_ERROR_NONE && is_array($decoded)) {
+            return $decoded;
+        }
+        
+        // If not JSON, treat as comma-separated string
+        return array_filter(array_map('trim', explode(',', $field)));
+    }
+    
+    return [];
+}
+
+    /**
+     * Get prescribed medications (from doctors) that need administration
+     */
+    public function getPrescribedMedications(Request $request): JsonResponse
+    {
+        try {
+            // Get medications prescribed by doctors that are pending administration
+            $medications = MedicalRecord::where('type', 'medication')
+                ->with(['patient', 'doctor', 'creator'])
+                ->whereJsonContains('content->status', 'pending')
+                ->orWhereJsonContains('content->status', 'prescribed')
+                ->orderBy('created_at', 'desc')
+                ->get()
+                ->map(function($record) {
+                    return [
+                        'id' => $record->id,
+                        'patient_id' => $record->patient_id,
+                        'patient_name' => $record->patient->name,
+                        'medication_name' => $record->content['medication_name'],
+                        'dosage' => $record->content['dosage'],
+                        'route' => $record->content['route'],
+                        'frequency' => $record->content['frequency'] ?? 'as_prescribed',
+                        'prescribing_doctor' => $record->doctor ? $record->doctor->name : 'Unknown',
+                        'prescribed_date' => $record->created_at,
+                        'status' => $record->content['status'] ?? 'pending',
+                        'notes' => $record->notes,
+                    ];
+                });
+            
+            return response()->json([
+                'medications' => $medications,
+                'total' => $medications->count(),
+                'pending' => $medications->where('status', 'pending')->count(),
+            ]);
+        } catch (\Exception $e) {
+            \Log::error('Error loading prescribed medications: ' . $e->getMessage());
+            return response()->json([
+                'message' => 'Failed to load medications',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Administer a prescribed medication
+     */
+    public function administerPrescribedMedication(Request $request, $medicationId): JsonResponse
+    {
+        try {
+            $validated = $request->validate([
+                'administered_by' => 'required|string',
+                'administered_at' => 'required|date',
+                'notes' => 'nullable|string|max:500'
+            ]);
+            
+            $medication = MedicalRecord::findOrFail($medicationId);
+            
+            // Update medication status to administered
+            $content = $medication->content;
+            $content['status'] = 'administered';
+            $content['administered_by'] = $validated['administered_by'];
+            $content['administered_at'] = $validated['administered_at'];
+            if (!empty($validated['notes'])) {
+                $content['administration_notes'] = $validated['notes'];
+            }
+            
+            $medication->content = $content;
+            $medication->save();
+            
+            // Broadcast update
+            try {
+                broadcast(new \App\Events\DashboardStatsUpdated('clinical-staff', [
+                    'medications_administered_today' => MedicalRecord::where('type', 'medication')
+                        ->whereJsonContains('content->status', 'administered')
+                        ->whereDate('updated_at', now())->count(),
+                ]));
+            } catch (\Exception $e) {
+                \Log::warning('Failed to broadcast: ' . $e->getMessage());
+            }
+            
+            return response()->json([
+                'message' => 'Medication administered successfully',
+                'medication' => $medication->load(['patient', 'doctor', 'creator'])
+            ]);
+        } catch (\Exception $e) {
+            \Log::error('Error administering medication: ' . $e->getMessage());
+            return response()->json([
+                'message' => 'Failed to administer medication',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Record minor treatment (for headaches, minor injuries, etc.)
+     */
+    public function recordMinorTreatment(Request $request, $patientId): JsonResponse
+    {
+        try {
+            $validated = $request->validate([
+                'medication_name' => 'required|string|max:255',
+                'dosage' => 'required|string|max:100',
+                'route' => 'required|in:oral,topical,injection,inhalation,other',
+                'reason' => 'required|string|max:500',
+                'notes' => 'nullable|string|max:1000',
+            ]);
+
+            $patient = User::findOrFail($patientId);
+            
+            // Create medical record for minor treatment
+            $content = [
+                'medication_name' => $validated['medication_name'],
+                'dosage' => $validated['dosage'],
+                'route' => $validated['route'],
+                'reason' => $validated['reason'],
+                'treatment_type' => 'minor_treatment',
+                'status' => 'administered',
+                'administered_by' => $request->user()->name,
+                'administered_at' => now(),
+            ];
+            
+            if (!empty($validated['notes'])) {
+                $content['notes'] = $validated['notes'];
+            }
+            
+            $record = MedicalRecord::create([
+                'patient_id' => $patientId,
+                'doctor_id' => null, // Minor treatments don't require doctor
+                'type' => 'medication',
+                'content' => $content,
+                'diagnosis' => 'Minor Treatment: ' . $validated['reason'],
+                'treatment' => $validated['medication_name'] . ' - ' . $validated['dosage'],
+                'notes' => $validated['notes'] ?? null,
+                'visit_date' => now()->format('Y-m-d'),
+                'created_by' => $request->user()->id
+            ]);
+            
+            // Broadcast update
+            try {
+                broadcast(new \App\Events\DashboardStatsUpdated('clinical-staff', [
+                    'minor_treatments_today' => MedicalRecord::where('type', 'medication')
+                        ->whereJsonContains('content->treatment_type', 'minor_treatment')
+                        ->whereDate('created_at', now())->count(),
+                ]));
+            } catch (\Exception $e) {
+                \Log::warning('Failed to broadcast: ' . $e->getMessage());
+            }
+            
+            return response()->json([
+                'message' => 'Minor treatment recorded successfully',
+                'record' => $record->load(['patient', 'creator']),
+            ], 201);
+        } catch (\Exception $e) {
+            \Log::error('Error recording minor treatment: ' . $e->getMessage());
+            return response()->json([
+                'message' => 'Failed to record treatment',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Get all medications (prescribed + administered minor treatments)
+     */
+    public function getAllMedications(Request $request): JsonResponse
+    {
+        try {
+            $query = MedicalRecord::where('type', 'medication')
+                ->with(['patient', 'doctor', 'creator']);
+            
+            // Filter by status if provided
+            if ($request->has('status')) {
+                $query->whereJsonContains('content->status', $request->status);
+            }
+            
+            // Filter by date range
+            if ($request->has('date_from')) {
+                $query->whereDate('created_at', '>=', $request->date_from);
+            }
+            
+            if ($request->has('date_to')) {
+                $query->whereDate('created_at', '<=', $request->date_to);
+            }
+            
+            $medications = $query->orderBy('created_at', 'desc')
+                ->get()
+                ->map(function($record) {
+                    return [
+                        'id' => $record->id,
+                        'patient_id' => $record->patient_id,
+                        'patient_name' => $record->patient->name,
+                        'medication_name' => $record->content['medication_name'],
+                        'dosage' => $record->content['dosage'],
+                        'route' => $record->content['route'],
+                        'treatment_type' => $record->content['treatment_type'] ?? 'prescribed',
+                        'status' => $record->content['status'] ?? 'unknown',
+                        'prescribing_doctor' => $record->doctor ? $record->doctor->name : 'Clinical Staff',
+                        'administered_by' => $record->content['administered_by'] ?? null,
+                        'administered_at' => $record->content['administered_at'] ?? null,
+                        'date' => $record->created_at,
+                        'notes' => $record->notes,
+                    ];
+                });
+            
+            return response()->json([
+                'medications' => $medications,
+                'summary' => [
+                    'total' => $medications->count(),
+                    'pending' => $medications->where('status', 'pending')->count(),
+                    'administered' => $medications->where('status', 'administered')->count(),
+                    'minor_treatments' => $medications->where('treatment_type', 'minor_treatment')->count(),
+                ]
+            ]);
+        } catch (\Exception $e) {
+            \Log::error('Error loading all medications: ' . $e->getMessage());
+            return response()->json([
+                'message' => 'Failed to load medications',
+                'error' => $e->getMessage()
+            ], 500);
+        }
     }
 }

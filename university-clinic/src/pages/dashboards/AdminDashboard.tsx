@@ -886,19 +886,6 @@ const StatCard: React.FC<StatCardProps> = ({ title, value, icon: Icon, color, su
                 </p>
               )}
             </div>
-            <div className="col-md-4">
-              <div className="d-flex flex-column align-items-end">
-                <ProfileAvatar size={120} className="opacity-90" />
-                {!!profileAvatar && (
-                  <button
-                    className="btn btn-outline-light mt-3"
-                    onClick={handlePhotoRemove}
-                  >{/*
-                    <Trash2 size={16} /> Remove*/}
-                  </button>
-                )}
-              </div>
-            </div>
           </div>
         </div>
       </div>

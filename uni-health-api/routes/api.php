@@ -172,6 +172,12 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::put('/appointments/{appointment}/reschedule', [StudentController::class, 'rescheduleAppointment']);
         Route::put('/appointments/{appointment}/cancel', [StudentController::class, 'cancelAppointment']);
         Route::get('/doctors/availability', [StudentController::class, 'getDoctorAvailability']);
+
+        // Profile Management - ADD THESE LINES
+        Route::get('/profile', [StudentController::class, 'getProfile']);
+        Route::put('/profile', [StudentController::class, 'updateProfile']);
+        Route::post('/profile/avatar', [StudentController::class, 'uploadAvatar']);
+        Route::delete('/profile/avatar', [StudentController::class, 'removeAvatar']);
     });
 
     // Doctor-specific routes
@@ -197,6 +203,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::put('/appointments/{id}/confirm', [DoctorController::class, 'confirmAppointment']);
         Route::put('/appointments/{id}/reschedule', [DoctorController::class, 'rescheduleAppointment']);
         Route::put('/appointments/{id}/complete', [DoctorController::class, 'completeAppointment']);
+        Route::delete('/appointments/{id}/cancel', [DoctorController::class, 'cancelAppointment']);
         
         // Prescriptions
         Route::get('/prescriptions', [DoctorController::class, 'getPrescriptions']);
@@ -206,6 +213,8 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::put('/availability', [DoctorController::class, 'updateAvailability']);
         Route::get('/schedule', [DoctorController::class, 'getSchedule']);
         Route::get('/statistics', [DoctorController::class, 'getStatistics']);
+
+        Route::get('/urgent-requests', [DoctorController::class, 'getUrgentRequests']);
     });
 
     // Academic Staff routes
@@ -231,6 +240,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::put('/profile', [AcademicStaffController::class, 'updateProfile']);
         Route::post('/profile/avatar', [AcademicStaffController::class, 'uploadAvatar']);
         Route::delete('/profile/avatar', [AcademicStaffController::class, 'removeAvatar']);
+
     });
 
     // Clinical Staff routes
@@ -238,9 +248,9 @@ Route::middleware('auth:sanctum')->group(function () {
         // Dashboard
         Route::get('/dashboard', [ClinicalStaffController::class, 'dashboard']);
         
-        // Clinic Settings
-        Route::get('/clinic-settings', [ClinicSettingsController::class, 'getSettings']);
-        Route::post('/clinic-settings', [ClinicSettingsController::class, 'saveSettings']);
+        // Clinic Settings no need for this rn
+        //Route::get('/clinic-settings', [ClinicSettingsController::class, 'getSettings']);
+        //Route::post('/clinic-settings', [ClinicSettingsController::class, 'saveSettings']);
         
         // Appointments
         Route::get('/appointments', [ClinicalStaffController::class, 'getAppointments']);
@@ -266,7 +276,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/patients', [ClinicalStaffController::class, 'getPatients']);
         Route::put('/patients/{id}', [ClinicalStaffController::class, 'updatePatient']);
         Route::post('/patients/{id}/vitals', [ClinicalStaffController::class, 'updateVitalSigns']);
-        Route::get('/patients/{id}/vital-signs/history', [ClinicalStaffController::class, 'getVitalSignsHistory']);
+        //Route::get('/patients/{id}/vital-signs/history', [ClinicalStaffController::class, 'getVitalSignsHistory']);
         Route::post('/patients/{id}/medications', [ClinicalStaffController::class, 'recordMedication']);
         Route::get('/patients/{id}/medical-card', [ClinicalStaffController::class, 'getMedicalCard']);
         Route::post('/patients/{id}/medical-card', [ClinicalStaffController::class, 'updateMedicalCard']);
@@ -293,6 +303,33 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/student-requests/{id}/assign', [ClinicalStaffController::class, 'assignStudentRequest']);
         Route::post('/student-requests/{id}/approve', [ClinicalStaffController::class, 'approveStudentRequest']);
         Route::post('/student-requests/{id}/reject', [ClinicalStaffController::class, 'rejectStudentRequest']);
+
+        Route::get('patients/{patientId}/medical-card', [ClinicalStaffController::class, 'getPatientMedicalCard']);
+        
+        // Vitals History Route (already exists, but ensure it's here)
+        Route::get('patients/{patientId}/vitals-history', [ClinicalStaffController::class, 'getVitalSignsHistory']);
+        //Route::get('patients/{patientId}/vital-signs/history', [ClinicalStaffController::class, 'getVitalSignsHistory']);
+        
+        // Medication Management Routes
+        Route::get('medications/prescribed', [ClinicalStaffController::class, 'getPrescribedMedications']);
+        Route::get('medications/all', [ClinicalStaffController::class, 'getAllMedications']);
+        Route::post('medications/{medicationId}/administer', [ClinicalStaffController::class, 'administerPrescribedMedication']);
+        
+        // Minor Treatment Routes
+        Route::post('patients/{patientId}/minor-treatment', [ClinicalStaffController::class, 'recordMinorTreatment']);
+
+        // Medical Records Routes
+        Route::get('patients/{patientId}/medical-records', [ClinicalStaffController::class, 'getPatientMedicalRecords']);
+        Route::post('patients/{patientId}/medical-records', [ClinicalStaffController::class, 'createMedicalRecord']);
+        Route::put('medical-records/{recordId}', [ClinicalStaffController::class,       'updateMedicalRecord']);
+        Route::delete('medical-records/{recordId}', [ClinicalStaffController::class, 'deleteMedicalRecord']); 
+
+        // ADD THESE PROFILE ROUTES:
+    Route::get('/profile', [ClinicalStaffController::class, 'getProfile']);
+    Route::post('/profile', [ClinicalStaffController::class, 'updateProfile']);
+    Route::post('/profile/avatar', [ClinicalStaffController::class, 'uploadAvatar']);
+    Route::delete('/profile/avatar', [ClinicalStaffController::class, 'removeAvatar']);
+          
     });
 
     // Admin routes
@@ -341,7 +378,14 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/users', [SuperAdminController::class, 'index']);
         Route::post('/users', [SuperAdminController::class, 'store']);
         Route::delete('/users/{id}', [SuperAdminController::class, 'destroy']);
+
+        Route::get('/dashboard-stats', [SuperAdminController::class, 'getDashboardStats']);
     });
+
+    Route::middleware('role:clinical_staff|superadmin')->prefix('clinical')->group(function () {
+    Route::get('/clinic-settings', [ClinicSettingsController::class, 'getSettings']);
+    Route::post('/clinic-settings', [ClinicSettingsController::class, 'saveSettings']);
+});
     
     // Real-time endpoints
     Route::prefix('realtime')->group(function () {

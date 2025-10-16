@@ -25,6 +25,18 @@ interface User {
   department?: string;
   bio?: string;
   avatar_url?: string;
+  date_of_birth?: string;                    // ✅ ADD
+  emergency_contact_name?: string;           // ✅ ADD
+  emergency_contact_phone?: string;          // ✅ ADD
+  emergency_contact_relationship?: string;   // ✅ ADD
+  emergency_contact_email?: string;          // ✅ ADD
+  blood_type?: string;                       // ✅ ADD
+  gender?: string;                           // ✅ ADD
+  allergies?: string;                        // ✅ ADD
+  has_known_allergies?: boolean;             // ✅ ADD
+  allergies_uncertain?: boolean;             // ✅ ADD
+  addictions?: string;                       // ✅ ADD
+  medical_history?: string;                  // ✅ ADD
 }
 
 interface Doctor {
@@ -66,6 +78,7 @@ interface AppointmentForm {
   date: string;
   time: string;
   reason: string;
+  urgency: 'normal' | 'high' | 'urgent';  // ✅ ADD THIS LINE
 }
 
 interface RescheduleForm {
@@ -112,7 +125,19 @@ const AcademicStaffDashboard: React.FC<AcademicStaffDashboardProps> = ({ user, o
     phone: user.phone || '',
     department: user.department || '',
     bio: user.bio || '',
-    avatar_url: user.avatar_url || null
+    avatar_url: user.avatar_url || null,
+    date_of_birth: '',                         // ✅ ADD
+    emergency_contact_name: '',                // ✅ ADD
+    emergency_contact_phone: '',               // ✅ ADD
+    emergency_contact_relationship: '',        // ✅ ADD
+    emergency_contact_email: '',               // ✅ ADD
+    blood_type: 'Unknown',                     // ✅ ADD
+    gender: '',                                // ✅ ADD
+    allergies: '',                             // ✅ ADD
+    has_known_allergies: false,                // ✅ ADD
+    allergies_uncertain: false,                // ✅ ADD
+    addictions: '',                            // ✅ ADD
+    medical_history: ''                        // ✅ ADD
   });
   const [profileLoading, setProfileLoading] = useState<boolean>(false);
   const [profileSaving, setProfileSaving] = useState<boolean>(false);
@@ -120,11 +145,12 @@ const AcademicStaffDashboard: React.FC<AcademicStaffDashboardProps> = ({ user, o
   
   // Form states
   const [appointmentForm, setAppointmentForm] = useState<AppointmentForm>({
-    doctor_id: '',
-    date: '',
-    time: '',
-    reason: ''
-  });
+  doctor_id: '',
+  date: '',
+  time: '',
+  reason: '',
+  urgency: 'normal'  // ✅ ADD THIS LINE
+});
   
   const [rescheduleForm, setRescheduleForm] = useState<RescheduleForm>({
     appointmentId: '',
@@ -148,9 +174,16 @@ const AcademicStaffDashboard: React.FC<AcademicStaffDashboardProps> = ({ user, o
   };
 
   // Available time slots
-  const timeSlots = [
+  const timeSlots: string[] = [
     '09:00', '09:30', '10:00', '10:30', '11:00', '11:30',
-    '14:00', '14:30', '15:00', '15:30', '16:00', '16:30'
+    '12:00', '12:30', '13:00', '13:30', '14:00', '14:30',
+    '15:00', '15:30', '16:00', '16:30'
+  ];
+
+  const urgencyLevels = [
+    { value: 'normal', label: 'Normal', color: 'text-success', description: 'Regular appointment' },
+    { value: 'high', label: 'High', color: 'text-warning', description: 'Needs attention soon' },
+    { value: 'urgent', label: 'Urgent', color: 'text-danger', description: 'Requires immediate care' }
   ];
 
   // Get dashboard statistics
@@ -232,6 +265,21 @@ const AcademicStaffDashboard: React.FC<AcademicStaffDashboardProps> = ({ user, o
     
     if (response.ok) {
       const data = await response.json();
+      
+      // Format date properly for input[type="date"]
+      let formattedDate = '';
+      if (data.date_of_birth) {
+        try {
+          // Handle both YYYY-MM-DD and other date formats
+          const dateObj = new Date(data.date_of_birth);
+          if (!isNaN(dateObj.getTime())) {
+            formattedDate = dateObj.toISOString().split('T')[0]; // YYYY-MM-DD
+          }
+        } catch (e) {
+          console.error('Date parsing error:', e);
+        }
+      }
+      
       setUserProfile({
         name: data.name || '',
         email: data.email || '',
@@ -239,7 +287,19 @@ const AcademicStaffDashboard: React.FC<AcademicStaffDashboardProps> = ({ user, o
         phone: data.phone || '',
         department: data.department || '',
         bio: data.bio || '',
-        avatar_url: data.avatar_url || null // Ensure this is properly set
+        avatar_url: data.avatar_url || null,
+        date_of_birth: formattedDate,
+        emergency_contact_name: data.emergency_contact_name || '',
+        emergency_contact_phone: data.emergency_contact_phone || '',
+        emergency_contact_relationship: data.emergency_contact_relationship || '',
+        emergency_contact_email: data.emergency_contact_email || '',
+        blood_type: data.blood_type || 'Unknown',
+        gender: data.gender || '',
+        allergies: data.allergies || '',
+        has_known_allergies: data.has_known_allergies || false,
+        allergies_uncertain: data.allergies_uncertain || false,
+        addictions: data.addictions || '',
+        medical_history: data.medical_history || ''
       });
     } else {
       console.error('Failed to fetch profile:', response.status);
@@ -257,24 +317,41 @@ const AcademicStaffDashboard: React.FC<AcademicStaffDashboardProps> = ({ user, o
     e?.preventDefault();
     setProfileSaving(true);
     try {
+      // Prepare payload with only non-empty values
+      const payload: Record<string, any> = {
+        name: userProfile.name,
+        phone: userProfile.phone || null,
+        department: userProfile.department || null,
+        bio: userProfile.bio || null,
+        date_of_birth: userProfile.date_of_birth || null,
+        emergency_contact_name: userProfile.emergency_contact_name || null,
+        emergency_contact_phone: userProfile.emergency_contact_phone || null,
+        emergency_contact_relationship: userProfile.emergency_contact_relationship || null,
+        emergency_contact_email: userProfile.emergency_contact_email || null,
+        blood_type: userProfile.blood_type || 'Unknown',
+        gender: userProfile.gender || null,
+        allergies: userProfile.allergies || null,
+        has_known_allergies: Boolean(userProfile.has_known_allergies),
+        allergies_uncertain: Boolean(userProfile.allergies_uncertain),
+        addictions: userProfile.addictions || null,
+        medical_history: userProfile.medical_history || null
+      };
+
       const response = await fetch(`${API_BASE_URL}/api/academic-staff/profile`, {
         method: 'PUT',
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('token')}`,
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify({
-          name: userProfile.name,
-          phone: userProfile.phone,
-          department: userProfile.department,
-          bio: userProfile.bio
-        })
+        body: JSON.stringify(payload)
       });
 
       if (response.ok) {
         showMessage('success', 'Profile updated successfully!');
       } else {
-        showMessage('error', 'Failed to update profile');
+        const errorData = await response.json();
+        console.error('Profile update error:', errorData);
+        showMessage('error', errorData.message || 'Failed to update profile');
       }
     } catch (error) {
       console.error('Error saving profile:', error);
@@ -529,14 +606,23 @@ if (!allowedTypes.includes(file.type)) {
           'Authorization': `Bearer ${localStorage.getItem('token')}`,
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify(appointmentForm)
+        body: JSON.stringify({
+          ...appointmentForm,
+          urgency: appointmentForm.urgency  // ✅ This will now be included
+        })
       });
 
       const data = await response.json();
 
       if (response.ok) {
         showMessage('success', data.message);
-        setAppointmentForm({ doctor_id: '', date: '', time: '', reason: '' });
+        setAppointmentForm({ 
+          doctor_id: '', 
+          date: '', 
+          time: '', 
+          reason: '',
+          urgency: 'normal'  // ✅ Reset to default
+        });
         setAvailableSlots([]);
         if (activeTab === 'appointments') {
           fetchAppointments();
@@ -585,6 +671,61 @@ if (!allowedTypes.includes(file.type)) {
     } finally {
       setLoading(false);
     }
+  };
+
+  // Add these utility functions near the top of your component, after imports
+const formatDate = (dateString: string): string => {
+  try {
+    const date = new Date(dateString);
+    return date.toLocaleDateString('en-US', {
+      month: '2-digit',
+      day: '2-digit',
+      year: 'numeric'
+    });
+  } catch (error) {
+    return dateString;
+  }
+};
+
+const formatTime = (timeString: string): string => {
+  try {
+    // Handle both HH:mm format and ISO datetime format
+    let date: Date;
+    if (timeString.includes('T')) {
+      // ISO format like "2025-10-16T11:00:00.000000Z"
+      date = new Date(timeString);
+    } else {
+      // HH:mm format like "11:00"
+      const [hours, minutes] = timeString.split(':');
+      date = new Date();
+      date.setHours(parseInt(hours), parseInt(minutes), 0);
+    }
+    
+    return date.toLocaleTimeString('en-US', {
+      hour: 'numeric',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: true
+    });
+  } catch (error) {
+    return timeString;
+  }
+};
+
+  // Add these helper functions
+  const isWeekday = (dateString: string): boolean => {
+    const date = new Date(dateString);
+    const day = date.getDay();
+    return day >= 1 && day <= 5;
+  };
+
+  const getDateClosureReason = (dateString: string): string => {
+    const date = new Date(dateString);
+    const day = date.getDay();
+    
+    if (day === 0) return 'Clinic is closed on Sundays';
+    if (day === 6) return 'Clinic is closed on Saturdays';
+    return 'Clinic is not operating on this date';
   };
 
   const handleCancelAppointment = async (appointmentId: string): Promise<void> => {
@@ -1196,7 +1337,7 @@ const getCancelDisabledReason = (status: string): string => {
                           <span className="opacity-75">{user.phone}</span>
                         </div>
                       )}
-                    </div>
+                    </div> {/*
                     <div className="col-md-4 text-end">
                       <div className="d-flex justify-content-end">
                         {userProfile.avatar_url ? (
@@ -1220,7 +1361,7 @@ const getCancelDisabledReason = (status: string): string => {
                           </div>
                         )}
                       </div>
-                    </div>
+                    </div> */}
                   </div>
                 </div>
               </div>
@@ -1396,10 +1537,11 @@ const getCancelDisabledReason = (status: string): string => {
                 <h6 className="mb-1 fw-semibold">Dr. {appointment.doctor}</h6>
                 <div className="d-flex align-items-center text-muted small">
                   <Calendar size={14} className="me-1" />
-                  {new Date(appointment.date).toLocaleDateString()}
+                  {formatDate(appointment.date)}
                   <Clock size={14} className="ms-3 me-1" />
-                  {appointment.time}
+                  {formatTime(appointment.time)}
                 </div>
+
                 <small className="text-muted">{appointment.reason}</small>
               </div>
               <span className={`${getStatusBadge(appointment.status)} small`}>
@@ -1499,143 +1641,268 @@ const getCancelDisabledReason = (status: string): string => {
 
         {/* Schedule Appointment Tab - UNCHANGED */}
         {activeTab === 'schedule' && (
-          <div className="row">
-            <div className="col-md-8">
-              <div className="card shadow-sm">
-                <div className="card-header" style={{ backgroundColor: universityTheme.primary }}>
-                  <h3 className="card-title text-white mb-0 d-flex align-items-center">
-                    <Calendar size={24} className="me-2" />
-                    Schedule New Appointment
-                  </h3>
-                </div>
-                <div className="card-body p-4">
-                  <form onSubmit={handleScheduleAppointment}>
-                    <div className="row g-4">
-                      <div className="col-12">
-                        <label className="form-label fw-semibold">Select Doctor (Optional)</label>
-                        <select 
-                          className="form-select form-select-lg"
-                          value={appointmentForm.doctor_id}
-                          onChange={(e) => handleAppointmentFormChange('doctor_id', e.target.value)}
-                        >
-                          <option value="">Any available doctor</option>
-                          {doctors.map(doctor => (
-                            <option key={doctor.id} value={doctor.id}>
-                              Dr. {doctor.name} - {doctor.specialization}
-                            </option>
-                          ))}
-                        </select>
-                        <div className="form-text">Leave blank to be assigned to any available doctor</div>
-                      </div>
-
-                      <div className="col-md-6">
-                        <label className="form-label fw-semibold">Appointment Date <span className="text-danger">*</span></label>
-                        <input 
-                          type="date"
-                          className="form-control form-control-lg"
-                          value={appointmentForm.date}
-                          onChange={(e) => handleAppointmentFormChange('date', e.target.value)}
-                          min={getMinDate()}
-                          required
-                        />
-                      </div>
-
-                      <div className="col-md-6">
-                        <label className="form-label fw-semibold">Available Time Slots <span className="text-danger">*</span></label>
-                        <select 
-                          className="form-select form-select-lg"
-                          value={appointmentForm.time}
-                          onChange={(e) => handleAppointmentFormChange('time', e.target.value)}
-                          required
-                          disabled={!appointmentForm.date}
-                        >
-                          <option value="">
-                            {!appointmentForm.date ? 'Select date first' : 'Choose a time slot...'}
-                          </option>
-                          {availableSlots.map(slot => (
-                            <option key={slot} value={slot}>{slot}</option>
-                          ))}
-                        </select>
-                      </div>
-
-                      <div className="col-12">
-                        <label className="form-label fw-semibold">Reason for Visit <span className="text-danger">*</span></label>
-                        <textarea 
-                          className="form-control"
-                          rows={4}
-                          value={appointmentForm.reason}
-                          onChange={(e) => handleAppointmentFormChange('reason', e.target.value)}
-                          placeholder="Describe your health concerns or reason for the appointment..."
-                          maxLength={500}
-                          required
-                          style={{ resize: 'none' }}
-                        />
-                        <div className="form-text">{appointmentForm.reason ? appointmentForm.reason.length : 0}/500 characters</div>
-                      </div>
-
-                      <div className="col-12">
-                        <button 
-                          type="submit" 
-                          className="btn btn-primary btn-lg w-100 py-3"
-                          disabled={loading}
-                          style={{ 
-                            backgroundColor: loading ? '#6c757d' : universityTheme.primary,
-                            border: 'none',
-                            borderRadius: '0.5rem'
-                          }}
-                        >
-                          {loading ? (
-                            <>
-                              <span className="spinner-border spinner-border-sm me-2" role="status"></span>
-                              Scheduling...
-                            </>
-                          ) : (
-                            <>
-                              <Calendar size={20} className="me-2" />
-                              Schedule Appointment
-                            </>
-                          )}
-                        </button>
-                      </div>
-                    </div>
-                  </form>
-
-                  {/* Doctor Cards */}
-                  {doctors.length > 0 && (
-                    <div className="mt-5">
-                      <h5 className="mb-3 fw-semibold">Available Doctors</h5>
-                      <div className="row g-3">
-                        {doctors.map((doctor) => (
-                          <div key={doctor.id} className="col-md-6">
-                            <div className="card h-100 shadow-sm border-0" style={{ borderRadius: '1rem' }}>
-                              <div className="card-body text-center p-3">
-                                <div className="mb-2">{getSpecialtyIcon(doctor.specialization)}</div>
-                                <h6 className="card-title fw-bold mb-1">Dr. {doctor.name}</h6>
-                                <p className="card-text text-muted small mb-2">{doctor.specialization}</p>
-                                {doctor.phone && (
-                                  <div className="d-flex justify-content-center align-items-center">
-                                    <Phone size={14} className="me-1 text-muted" />
-                                    <small className="text-muted">{doctor.phone}</small>
-                                  </div>
-                                )}
-                              </div>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
+  <div className="row">
+    <div className="col-md-8">
+      <div className="card shadow-sm border-0" style={{ borderRadius: '1rem' }}>
+        <div className="card-header border-0" style={{ 
+          backgroundColor: universityTheme.primary,
+          borderRadius: '1rem 1rem 0 0',
+          padding: '1.5rem'
+        }}>
+          <h3 className="mb-0 fw-bold text-white d-flex align-items-center">
+            <Calendar size={24} className="me-2" />
+            Request New Appointment
+          </h3>
+        </div>
+        <div className="card-body p-4">
+          <form onSubmit={handleScheduleAppointment}>
+            <div className="row g-4">
+              
+              {/* Select Doctor and Urgency Level - Side by Side */}
+              <div className="col-md-6">
+                <label className="form-label fw-semibold">
+                  Select Doctor (Optional)
+                </label>
+                <select 
+                  className="form-select form-select-lg"
+                  value={appointmentForm.doctor_id}
+                  onChange={(e) => handleAppointmentFormChange('doctor_id', e.target.value)}
+                  style={{
+                    borderRadius: '0.75rem',
+                    border: '2px solid #e9ecef',
+                    padding: '0.875rem 1rem'
+                  }}
+                >
+                  <option value="">Any available doctor</option>
+                  {doctors.map(doctor => (
+                    <option key={doctor.id} value={doctor.id}>
+                      Dr. {doctor.name} - {doctor.specialization}
+                    </option>
+                  ))}
+                </select>
+                <div className="form-text mt-2">
+                  Leave blank to be assigned to any available doctor
                 </div>
               </div>
+
+              <div className="col-md-6">
+                <label className="form-label fw-semibold">
+                  Urgency Level <span className="text-danger">*</span>
+                </label>
+                <div className="d-flex gap-2">
+                  {urgencyLevels.map((level) => (
+                    <div key={level.value} className="flex-grow-1">
+                      <input
+                        type="radio"
+                        className="btn-check"
+                        name="urgency"
+                        id={`urgency-${level.value}`}
+                        autoComplete="off"
+                        checked={appointmentForm.urgency === level.value}
+                        onChange={() => setAppointmentForm({
+                          ...appointmentForm, 
+                          urgency: level.value as 'normal' | 'high' | 'urgent'
+                        })}
+                      />
+                      <label
+                        className="btn w-100"
+                        htmlFor={`urgency-${level.value}`}
+                        style={{
+                          borderRadius: '0.75rem',
+                          border: '2px solid',
+                          borderColor: appointmentForm.urgency === level.value 
+                            ? (level.value === 'normal' ? '#28a745' : level.value === 'high' ? '#ffc107' : '#dc3545')
+                            : '#e9ecef',
+                          backgroundColor: appointmentForm.urgency === level.value 
+                            ? (level.value === 'normal' ? '#28a745' : level.value === 'high' ? '#ffc107' : '#dc3545')
+                            : 'white',
+                          color: appointmentForm.urgency === level.value ? 'white' : '#6c757d',
+                          padding: '0.875rem 0.5rem',
+                          fontWeight: 600,
+                          transition: 'all 0.2s ease',
+                          cursor: 'pointer'
+                        }}
+                      >
+                        {level.label}
+                      </label>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Date - with clinic hours validation */}
+              <div className="col-md-6">
+                <label className="form-label fw-semibold">
+                  Date <span className="text-danger">*</span>
+                </label>
+                <input 
+                  type="date"
+                  className={`form-control form-control-lg ${
+                    appointmentForm.date && !isWeekday(appointmentForm.date) ? 'is-invalid' : ''
+                  }`}
+                  value={appointmentForm.date}
+                  onChange={(e) => {
+                    const selectedDate = e.target.value;
+                    
+                    // Check if date is a weekday
+                    if (selectedDate && !isWeekday(selectedDate)) {
+                      showMessage('error', getDateClosureReason(selectedDate) + '. Please select a weekday (Monday-Friday).');
+                      return;
+                    }
+                    
+                    handleAppointmentFormChange('date', selectedDate);
+                  }}
+                  min={getMinDate()}
+                  required
+                  style={{
+                    borderRadius: '0.75rem',
+                    border: '2px solid #e9ecef',
+                    padding: '0.875rem 1rem'
+                  }}
+                />
+                {appointmentForm.date && !isWeekday(appointmentForm.date) && (
+                  <div className="invalid-feedback d-block">
+                    {getDateClosureReason(appointmentForm.date)}. Please select a weekday.
+                  </div>
+                )}
+                <small className="form-text text-muted">
+                  Clinic operates Monday-Friday, 9:00 AM - 5:00 PM
+                </small>
+              </div>
+
+              <div className="col-md-6">
+                <label className="form-label fw-semibold">
+                  Time <span className="text-danger">*</span>
+                </label>
+                <select 
+                  className="form-select form-select-lg"
+                  value={appointmentForm.time}
+                  onChange={(e) => handleAppointmentFormChange('time', e.target.value)}
+                  required
+                  disabled={!appointmentForm.date}
+                  style={{
+                    borderRadius: '0.75rem',
+                    border: '2px solid #e9ecef',
+                    padding: '0.875rem 1rem'
+                  }}
+                >
+                  <option value="">
+                    {!appointmentForm.date ? 'Select date first' : 'Select a time slot'}
+                  </option>
+                  {availableSlots.map(slot => (
+                    <option key={slot} value={slot}>{slot}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Reason for Appointment - Full Width */}
+              <div className="col-12">
+                <label className="form-label fw-semibold">
+                  Reason for Appointment <span className="text-danger">*</span>
+                </label>
+                <textarea 
+                  className="form-control"
+                  rows={4}
+                  value={appointmentForm.reason}
+                  onChange={(e) => handleAppointmentFormChange('reason', e.target.value)}
+                  placeholder="Describe your health concerns or reason for the appointment..."
+                  maxLength={500}
+                  required
+                  style={{ 
+                    resize: 'none',
+                    borderRadius: '0.75rem',
+                    border: '2px solid #e9ecef',
+                    padding: '0.875rem 1rem'
+                  }}
+                />
+                <div className="form-text">
+                  {appointmentForm.reason ? appointmentForm.reason.length : 0}/500 characters
+                </div>
+              </div>
+
+              {/* Submit Button */}
+              <div className="col-12">
+                <button 
+                  type="submit" 
+                  className="btn btn-lg w-100"
+                  disabled={loading}
+                  style={{ 
+                    backgroundColor: loading ? '#6c757d' : universityTheme.primary,
+                    border: 'none',
+                    borderRadius: '0.75rem',
+                    padding: '1rem',
+                    fontWeight: 600,
+                    color: 'white',
+                    transition: 'all 0.3s ease'
+                  }}
+                  onMouseEnter={(e) => {
+                    if (!loading) {
+                      e.currentTarget.style.backgroundColor = universityTheme.secondary;
+                      e.currentTarget.style.transform = 'translateY(-2px)';
+                      e.currentTarget.style.boxShadow = '0 4px 12px rgba(220, 53, 69, 0.3)';
+                    }
+                  }}
+                  onMouseLeave={(e) => {
+                    if (!loading) {
+                      e.currentTarget.style.backgroundColor = universityTheme.primary;
+                      e.currentTarget.style.transform = 'translateY(0)';
+                      e.currentTarget.style.boxShadow = 'none';
+                    }
+                  }}
+                >
+                  {loading ? (
+                    <>
+                      <span className="spinner-border spinner-border-sm me-2" role="status"></span>
+                      Scheduling...
+                    </>
+                  ) : (
+                    <>
+                      <Calendar size={20} className="me-2" />
+                      Schedule Appointment
+                    </>
+                  )}
+                </button>
+              </div>
             </div>
-            
-            <div className="col-md-4">
-  <ClinicHoursCard />
-  <AppointmentTipsCard />
-  <EmergencyContactsCard />
-</div>
-          </div>
-        )}
+          </form>
+
+          {/* Doctor Cards - Keep existing */}
+          {doctors.length > 0 && (
+            <div className="mt-5">
+              <h5 className="mb-3 fw-semibold">Available Doctors</h5>
+              <div className="row g-3">
+                {doctors.map((doctor) => (
+                  <div key={doctor.id} className="col-md-6">
+                    <div className="card h-100 shadow-sm border-0" style={{ borderRadius: '1rem' }}>
+                      <div className="card-body text-center p-3">
+                        <div className="mb-2">{getSpecialtyIcon(doctor.specialization)}</div>
+                        <h6 className="card-title fw-bold mb-1">Dr. {doctor.name}</h6>
+                        <p className="card-text text-muted small mb-2">{doctor.specialization}</p>
+                        {doctor.phone && (
+                          <div className="d-flex justify-content-center align-items-center">
+                            <Phone size={14} className="me-1 text-muted" />
+                            <small className="text-muted">{doctor.phone}</small>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+    
+    {/* Right Sidebar - Keep existing */}
+    <div className="col-md-4">
+      <ClinicHoursCard />
+      <AppointmentTipsCard />
+      <EmergencyContactsCard />
+    </div>
+  </div>
+)}
 
         {activeTab === 'appointments' && (
           <div className="card shadow-sm border-0" style={{ borderRadius: '1rem' }}>
@@ -1790,11 +2057,11 @@ const getCancelDisabledReason = (status: string): string => {
                               </td>
                               <td>
                                 <div className="d-flex flex-column">
-                                  <span className="fw-semibold">{new Date(appointment.date).toLocaleDateString()}</span>
+                                  <span className="fw-semibold">{formatDate(appointment.date)}</span>
                                 </div>
                               </td>
                               <td>
-                                <small className="text-muted">{appointment.time}</small>
+                                <small className="text-muted">{formatTime(appointment.time)}</small>
                               </td>
                               <td>
                                 <div className="text-truncate" style={{ maxWidth: '200px' }} title={appointment.reason}>
@@ -1967,6 +2234,210 @@ const getCancelDisabledReason = (status: string): string => {
                           <option value="Nursing">Nursing</option>
                           <option value="Architecture">Architecture</option>
                         </select>
+                      </div>
+                      {/* Add after the existing fields like phone, department, bio */}
+
+                      {/* Date of Birth */}
+                      <div className="col-12 col-md-6">
+                        <label className="form-label fw-semibold">Date of Birth</label>
+                        <input
+                          type="date"
+                          className="form-control"
+                          value={userProfile.date_of_birth}
+                          onChange={(e) => setUserProfile({ ...userProfile, date_of_birth: e.target.value })}
+                          max={new Date(new Date().setFullYear(new Date().getFullYear() - 18)).toISOString().split('T')[0]}
+                        />
+                        <div className="form-text">Must be at least 18 years old</div>
+                      </div>
+
+                      {/* Gender */}
+                      <div className="col-12 col-md-6">
+                        <label className="form-label fw-semibold">Gender</label>
+                        <select
+                          className="form-select"
+                          value={userProfile.gender}
+                          onChange={(e) => setUserProfile({ ...userProfile, gender: e.target.value })}
+                        >
+                          <option value="">Select gender</option>
+                          <option value="male">Male</option>
+                          <option value="female">Female</option>
+                          <option value="other">Other</option>
+                          <option value="prefer_not_to_say">Prefer not to say</option>
+                        </select>
+                      </div>
+
+                      {/* Blood Type */}
+                      <div className="col-12 col-md-6">
+                        <label className="form-label fw-semibold">Blood Type</label>
+                        <select
+                          className="form-select"
+                          value={userProfile.blood_type}
+                          onChange={(e) => setUserProfile({ ...userProfile, blood_type: e.target.value })}
+                        >
+                          <option value="">Select blood type</option>
+                          <option value="A+">A+</option>
+                          <option value="A-">A-</option>
+                          <option value="B+">B+</option>
+                          <option value="B-">B-</option>
+                          <option value="AB+">AB+</option>
+                          <option value="AB-">AB-</option>
+                          <option value="O+">O+</option>
+                          <option value="O-">O-</option>
+                          <option value="Unknown">Unknown</option>
+                        </select>
+                      </div>
+
+                      {/* Medical Information Section Header */}
+                      <div className="col-12 mt-3">
+                        <h6 className="fw-bold text-primary">
+                          <Stethoscope size={18} className="me-2" />
+                          Medical Information
+                        </h6>
+                        <hr />
+                      </div>
+
+                      {/* Allergies */}
+                      <div className="col-12">
+                        <label className="form-label fw-semibold">Allergies</label>
+                        <div className="mb-2">
+                          <div className="form-check">
+                            <input 
+                              className="form-check-input" 
+                              type="checkbox" 
+                              id="hasKnownAllergies"
+                              checked={userProfile.has_known_allergies}
+                              onChange={() => setUserProfile({
+                                ...userProfile,
+                                has_known_allergies: !userProfile.has_known_allergies,
+                                allergies_uncertain: false,
+                                allergies: !userProfile.has_known_allergies ? userProfile.allergies : ''
+                              })}
+                            />
+                            <label className="form-check-label" htmlFor="hasKnownAllergies">
+                              I have known allergies
+                            </label>
+                          </div>
+                          <div className="form-check">
+                            <input 
+                              className="form-check-input" 
+                              type="checkbox" 
+                              id="allergiesUncertain"
+                              checked={userProfile.allergies_uncertain}
+                              onChange={() => setUserProfile({
+                                ...userProfile,
+                                allergies_uncertain: !userProfile.allergies_uncertain,
+                                has_known_allergies: false,
+                                allergies: ''
+                              })}
+                            />
+                            <label className="form-check-label" htmlFor="allergiesUncertain">
+                              I'm not sure if I have allergies
+                            </label>
+                          </div>
+                        </div>
+                        {userProfile.has_known_allergies && (
+                          <textarea
+                            className="form-control"
+                            rows={2}
+                            value={userProfile.allergies}
+                            onChange={(e) => setUserProfile({ ...userProfile, allergies: e.target.value })}
+                            placeholder="List all known allergies (e.g., penicillin, nuts, etc.)"
+                          />
+                        )}
+                      </div>
+
+                      {/* Addictions */}
+                      <div className="col-12 col-md-6">
+                        <label className="form-label fw-semibold">Addictions (if any)</label>
+                        <input
+                          type="text"
+                          className="form-control"
+                          value={userProfile.addictions}
+                          onChange={(e) => setUserProfile({ ...userProfile, addictions: e.target.value })}
+                          placeholder="e.g., smoking, alcohol, etc."
+                        />
+                      </div>
+
+                      {/* Medical History */}
+                      <div className="col-12">
+                        <label className="form-label fw-semibold">Medical History</label>
+                        <textarea
+                          className="form-control"
+                          rows={3}
+                          value={userProfile.medical_history}
+                          onChange={(e) => setUserProfile({ ...userProfile, medical_history: e.target.value })}
+                          placeholder="Any past medical conditions, surgeries, or chronic illnesses"
+                          maxLength={1000}
+                        />
+                        <div className="form-text">{userProfile.medical_history ? userProfile.medical_history.length : 0}/1000 characters</div>
+                      </div>
+
+                      {/* Emergency Contact Section Header */}
+                      <div className="col-12 mt-3">
+                        <h6 className="fw-bold text-danger">
+                          <Phone size={18} className="me-2" />
+                          Emergency Contact Information
+                        </h6>
+                        <hr />
+                      </div>
+
+                      {/* Emergency Contact Name */}
+                      <div className="col-12 col-md-6">
+                        <label className="form-label fw-semibold">Emergency Contact Name</label>
+                        <input
+                          type="text"
+                          className="form-control"
+                          value={userProfile.emergency_contact_name}
+                          onChange={(e) => setUserProfile({ ...userProfile, emergency_contact_name: e.target.value })}
+                          placeholder="Full name"
+                        />
+                      </div>
+
+                      {/* Emergency Contact Phone */}
+                      <div className="col-12 col-md-6">
+                        <label className="form-label fw-semibold">Emergency Contact Phone</label>
+                        <PhoneInput
+                          country={'tr'}
+                          value={userProfile.emergency_contact_phone}
+                          onChange={(phone) => setUserProfile({ ...userProfile, emergency_contact_phone: phone })}
+                          placeholder="Enter phone number"
+                          inputProps={{
+                            className: 'form-control',
+                            required: false
+                          }}
+                          containerClass="phone-input-container w-100"
+                        />
+                      </div>
+
+                      {/* Emergency Contact Relationship */}
+                      <div className="col-12 col-md-6">
+                        <label className="form-label fw-semibold">Relationship</label>
+                        <select
+                          className="form-select"
+                          value={userProfile.emergency_contact_relationship}
+                          onChange={(e) => setUserProfile({ ...userProfile, emergency_contact_relationship: e.target.value })}
+                        >
+                          <option value="">Select relationship</option>
+                          <option value="spouse">Spouse</option>
+                          <option value="parent">Parent</option>
+                          <option value="sibling">Sibling</option>
+                          <option value="child">Child</option>
+                          <option value="friend">Friend</option>
+                          <option value="colleague">Colleague</option>
+                          <option value="other">Other</option>
+                        </select>
+                      </div>
+
+                      {/* Emergency Contact Email */}
+                      <div className="col-12 col-md-6">
+                        <label className="form-label fw-semibold">Emergency Contact Email</label>
+                        <input
+                          type="email"
+                          className="form-control"
+                          value={userProfile.emergency_contact_email}
+                          onChange={(e) => setUserProfile({ ...userProfile, emergency_contact_email: e.target.value })}
+                          placeholder="Emergency contact email"
+                        />
                       </div>
                       <div className="col-12">
                         <label className="form-label fw-semibold">Bio</label>

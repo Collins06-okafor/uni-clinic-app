@@ -4,11 +4,26 @@ import {
   Users, Settings, Activity, Calendar, Building, 
   AlertTriangle, Trash2, Plus, Edit, RefreshCw,
   CalendarDays, Clock, CheckCircle, X, Save,
-  UserCog, LogOut, Globe, School, Eye, EyeOff
+  UserCog, LogOut, Globe, School, Eye, EyeOff,
+  TrendingUp, TrendingDown, FileText, Award
 } from 'lucide-react';
+import { Line, Bar, Doughnut } from 'react-chartjs-2';
+import {
+  Chart as ChartJS,
+  CategoryScale,
+  LinearScale,
+  PointElement,
+  LineElement,
+  BarElement,
+  ArcElement,
+  Title,
+  Tooltip,
+  Legend,
+} from 'chart.js';
 import api from "../../services/api";
 import { useTranslation } from 'react-i18next';
 import i18n from "../../services/i18n";
+import ClinicSettingsManager from '../../components/ClinicSettingsManager';
 
 // Type definitions
 interface User {
@@ -47,6 +62,18 @@ interface Holiday {
   academic_year?: number;
 }
 
+ChartJS.register(
+  CategoryScale,
+  LinearScale,
+  PointElement,
+  LineElement,
+  BarElement,
+  ArcElement,
+  Title,
+  Tooltip,
+  Legend
+);
+
 interface SuperAdminDashboardProps {
   user: { name?: string };
   onLogout: () => void;
@@ -65,6 +92,14 @@ const EnhancedSuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({ user,
   const [messageType, setMessageType] = useState<'success' | 'error'>('success');
   const [editingDepartment, setEditingDepartment] = useState<Department | null>(null);
   const [editingHoliday, setEditingHoliday] = useState<Holiday | null>(null);
+
+  // NEW: KPI Dashboard States
+  const [kpiStats, setKpiStats] = useState<any>(null);
+  const [kpiLoading, setKpiLoading] = useState(false);
+  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
+  const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth() + 1);
+  const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
+  const [timeframe, setTimeframe] = useState('today'); // 'today', 'week', 'month'
 
   // Calendar source form
   const [calendarSourceForm, setCalendarSourceForm] = useState({
@@ -116,6 +151,23 @@ const EnhancedSuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({ user,
   const handleLogout = () => {
     if (onLogout) onLogout();
     navigate("/login", { replace: true });
+  };
+
+  // NEW: Fetch KPI Stats
+  const fetchKPIStats = async () => {
+    setKpiLoading(true);
+    try {
+      const response = await api.get(
+        `/superadmin/dashboard-stats?date=${selectedDate}&month=${selectedMonth}&year=${selectedYear}`
+      );
+      setKpiStats(response);
+    } catch (error: any) {
+      console.error('Error fetching KPI stats:', error);
+      setMessage('Failed to load dashboard statistics');
+      setMessageType('error');
+    } finally {
+      setKpiLoading(false);
+    }
   };
 
   // Fetch all data
@@ -429,6 +481,99 @@ const EnhancedSuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({ user,
     fetchData();
   }, []);
 
+   useEffect(() => {
+    fetchData();
+    fetchKPIStats();
+  }, []);
+
+  useEffect(() => {
+    if (activeTab === 'dashboard') {
+      fetchKPIStats();
+    }
+  }, [selectedDate, selectedMonth, selectedYear, activeTab]);
+
+  // NEW: Get current stats based on timeframe
+  const getCurrentStats = () => {
+    if (!kpiStats) return null;
+    
+    switch (timeframe) {
+      case 'today':
+        return kpiStats.daily_stats;
+      case 'week':
+        return kpiStats.weekly_stats;
+      case 'month':
+        return kpiStats.monthly_stats;
+      default:
+        return kpiStats.daily_stats;
+    }
+  };
+
+  // NEW: Chart Data Configurations
+  const getChartData = () => {
+    if (!kpiStats || !kpiStats.appointment_trends) return null;
+
+    const trendData = {
+      labels: kpiStats.appointment_trends.map((t: any) => t.date),
+      datasets: [
+        {
+          label: 'Completed',
+          data: kpiStats.appointment_trends.map((t: any) => t.completed || 0),
+          borderColor: 'rgb(34, 197, 94)',
+          backgroundColor: 'rgba(34, 197, 94, 0.1)',
+          tension: 0.4,
+        },
+        {
+          label: 'Cancelled',
+          data: kpiStats.appointment_trends.map((t: any) => t.cancelled || 0),
+          borderColor: 'rgb(239, 68, 68)',
+          backgroundColor: 'rgba(239, 68, 68, 0.1)',
+          tension: 0.4,
+        },
+        {
+          label: 'Scheduled',
+          data: kpiStats.appointment_trends.map((t: any) => t.scheduled || 0),
+          borderColor: 'rgb(59, 130, 246)',
+          backgroundColor: 'rgba(59, 130, 246, 0.1)',
+          tension: 0.4,
+        }
+      ]
+    };
+
+    const currentStats = getCurrentStats();
+    const statusData = {
+      labels: ['Completed', 'Scheduled', 'Cancelled', 'No Show', 'In Progress'],
+      datasets: [{
+        data: [
+          currentStats?.completed || 0,
+          currentStats?.scheduled || 0,
+          currentStats?.cancelled || 0,
+          currentStats?.no_show || 0,
+          currentStats?.in_progress || 0
+        ],
+        backgroundColor: [
+          'rgba(34, 197, 94, 0.8)',
+          'rgba(59, 130, 246, 0.8)',
+          'rgba(239, 68, 68, 0.8)',
+          'rgba(249, 115, 22, 0.8)',
+          'rgba(168, 85, 247, 0.8)',
+        ],
+        borderWidth: 2,
+      }]
+    };
+
+    return { trendData, statusData };
+  };
+
+  const chartOptions = {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: {
+        position: 'top' as const,
+      }
+    }
+  };
+
   const NavTab = ({ tabKey, icon: Icon, label, isActive, onClick }: {
   tabKey: string;
   icon: React.ComponentType<{ size?: number; className?: string }>;
@@ -472,6 +617,9 @@ const EnhancedSuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({ user,
     <span>{label}</span>
   </button>
 );
+
+  const currentStats = getCurrentStats();
+  const chartData = getChartData();
 
   return (
     <div className="min-vh-100" style={{ backgroundColor: '#f8f9fa' }}>
@@ -537,6 +685,13 @@ const EnhancedSuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({ user,
               icon={Calendar} 
               label={t('superadmin.academic_calendar')} 
               isActive={activeTab === 'holidays'}
+              onClick={setActiveTab}
+            />
+            <NavTab 
+              tabKey="settings" 
+              icon={Settings} 
+              label={t('nav.settings', 'Clinic Settings')} 
+              isActive={activeTab === 'settings'}
               onClick={setActiveTab}
             />
           </div>
@@ -685,66 +840,454 @@ const EnhancedSuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({ user,
         {/* Dashboard Tab */}
         {activeTab === 'dashboard' && (
           <>
+            {/* Date & Timeframe Selectors */}
             <div className="row mb-4">
               <div className="col-12">
-                <div className="card shadow-sm border-0" style={{ borderRadius: '1rem', background: universityTheme.gradient }}>
-                  <div className="card-body p-4 text-white">
-                    <h2 className="mb-2">{t('superadmin.system_overview')}</h2>
-                    <p className="mb-0 opacity-90">{t('superadmin.welcome_back', { name: user?.name || 'SuperAdmin' })}. {t('superadmin.system_overview_desc')}</p>
+                <div className="card shadow-sm border-0" style={{ borderRadius: '1rem' }}>
+                  <div className="card-body">
+                    <div className="row g-3 align-items-center">
+                      <div className="col-md-3">
+                        <label className="form-label fw-semibold">Select Date</label>
+                        <input
+                          type="date"
+                          className="form-control"
+                          value={selectedDate}
+                          onChange={(e) => setSelectedDate(e.target.value)}
+                        />
+                      </div>
+                      <div className="col-md-2">
+                        <label className="form-label fw-semibold">Month</label>
+                        <select
+                          className="form-select"
+                          value={selectedMonth}
+                          onChange={(e) => setSelectedMonth(parseInt(e.target.value))}
+                        >
+                          {Array.from({ length: 12 }, (_, i) => (
+                            <option key={i + 1} value={i + 1}>
+                              {new Date(2024, i).toLocaleString('default', { month: 'long' })}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <div className="col-md-2">
+                        <label className="form-label fw-semibold">Year</label>
+                        <select
+                          className="form-select"
+                          value={selectedYear}
+                          onChange={(e) => setSelectedYear(parseInt(e.target.value))}
+                        >
+                          {Array.from({ length: 5 }, (_, i) => {
+                            const year = new Date().getFullYear() - 2 + i;
+                            return <option key={year} value={year}>{year}</option>;
+                          })}
+                        </select>
+                      </div>
+                      <div className="col-md-5">
+                        <label className="form-label fw-semibold">View By</label>
+                        <div className="btn-group w-100" role="group">
+                          <button
+                            className={`btn ${timeframe === 'today' ? 'btn-primary' : 'btn-outline-primary'}`}
+                            onClick={() => setTimeframe('today')}
+                          >
+                            Today
+                          </button>
+                          <button
+                            className={`btn ${timeframe === 'week' ? 'btn-primary' : 'btn-outline-primary'}`}
+                            onClick={() => setTimeframe('week')}
+                          >
+                            This Week
+                          </button>
+                          <button
+                            className={`btn ${timeframe === 'month' ? 'btn-primary' : 'btn-outline-primary'}`}
+                            onClick={() => setTimeframe('month')}
+                          >
+                            This Month
+                          </button>
+                        </div>
+                      </div>
+                    </div>
                   </div>
                 </div>
               </div>
             </div>
 
-            <div className="row g-4">
-              <div className="col-md-3">
-                <div className="card border-0 shadow-sm h-100" style={{ borderRadius: '1rem' }}>
-                  <div className="card-body p-4 text-center">
-                    <Users size={30} color={universityTheme.primary} className="mb-3" />
-                    <h4 className="fw-bold">{users?.length || 0}</h4>
-                    <p className="text-muted mb-0">{t('superadmin.total_users')}</p>
-                    <small className="text-muted">
-                      {users?.filter((u: User) => u.role === 'doctor').length} {t('superadmin.doctors')}, {' '}
-                      {users?.filter((u: User) => u.role === 'admin').length} {t('superadmin.admins')}
-                    </small>
-                  </div>
+            {kpiLoading ? (
+              <div className="text-center py-5">
+                <div className="spinner-border text-primary" role="status">
+                  <span className="visually-hidden">Loading statistics...</span>
                 </div>
               </div>
-              <div className="col-md-3">
-                <div className="card border-0 shadow-sm h-100" style={{ borderRadius: '1rem' }}>
-                  <div className="card-body p-4 text-center">
-                    <Building size={30} color={universityTheme.secondary} className="mb-3" />
-                    <h4 className="fw-bold">{departments?.length || 0}</h4>
-                    <p className="text-muted mb-0">{t('superadmin.departments')}</p>
-                    <small className="text-muted">
-                      {departments?.filter((d: Department) => d.is_active).length} {t('superadmin.active')}
-                    </small>
+            ) : kpiStats && currentStats ? (
+              <>
+                {/* Main KPI Cards */}
+                <div className="row g-4 mb-4">
+                  <div className="col-md-3">
+                    <div className="card border-0 shadow-sm h-100">
+                      <div className="card-body text-center">
+                        <Calendar size={32} className="text-primary mb-2" />
+                        <h3 className="fw-bold mb-1">{currentStats.total_appointments || 0}</h3>
+                        <p className="text-muted mb-0">Total Appointments</p>
+                        <small className="text-muted">
+                          {timeframe === 'today' && 'Today'}
+                          {timeframe === 'week' && 'This Week'}
+                          {timeframe === 'month' && 'This Month'}
+                        </small>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="col-md-3">
+                    <div className="card border-0 shadow-sm h-100">
+                      <div className="card-body text-center">
+                        <CheckCircle size={32} className="text-success mb-2" />
+                        <h3 className="fw-bold mb-1">{currentStats.completed || 0}</h3>
+                        <p className="text-muted mb-0">Completed</p>
+                        <small className="text-success">
+                          {currentStats.completion_rate || 0}% completion rate
+                        </small>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="col-md-3">
+                    <div className="card border-0 shadow-sm h-100">
+                      <div className="card-body text-center">
+                        <X size={32} className="text-danger mb-2" />
+                        <h3 className="fw-bold mb-1">{currentStats.cancelled || 0}</h3>
+                        <p className="text-muted mb-0">Cancelled</p>
+                        <small className="text-danger">
+                          {currentStats.cancellation_rate || 0}% cancellation rate
+                        </small>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="col-md-3">
+                    <div className="card border-0 shadow-sm h-100">
+                      <div className="card-body text-center">
+                        <Activity size={32} className="text-info mb-2" />
+                        <h3 className="fw-bold mb-1">{currentStats.sessions_today || currentStats.in_progress || 0}</h3>
+                        <p className="text-muted mb-0">Active Sessions</p>
+                        <small className="text-info">Currently in progress</small>
+                      </div>
+                    </div>
                   </div>
                 </div>
-              </div>
-              <div className="col-md-3">
-                <div className="card border-0 shadow-sm h-100" style={{ borderRadius: '1rem' }}>
-                  <div className="card-body p-4 text-center">
-                    <Calendar size={30} color="#d97706" className="mb-3" />
-                    <h4 className="fw-bold">{holidays?.length || 0}</h4>
-                    <p className="text-muted mb-0">{t('superadmin.academic_holidays')}</p>
-                    <small className="text-muted">
-                      {holidays?.filter((h: Holiday) => h.is_active !== false).length} {t('superadmin.active')}
-                    </small>
+
+                {/* Status Breakdown Cards */}
+                <div className="row g-4 mb-4">
+                  <div className="col-md-2">
+                    <div className="card border-0 shadow-sm">
+                      <div className="card-body text-center py-3">
+                        <Clock size={24} className="text-warning mb-2" />
+                        <h5 className="fw-bold mb-0">{currentStats.scheduled || 0}</h5>
+                        <small className="text-muted">Scheduled</small>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="col-md-2">
+                    <div className="card border-0 shadow-sm">
+                      <div className="card-body text-center py-3">
+                        <CheckCircle size={24} className="text-primary mb-2" />
+                        <h5 className="fw-bold mb-0">{currentStats.confirmed || 0}</h5>
+                        <small className="text-muted">Confirmed</small>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="col-md-2">
+                    <div className="card border-0 shadow-sm">
+                      <div className="card-body text-center py-3">
+                        <Activity size={24} className="text-purple mb-2" />
+                        <h5 className="fw-bold mb-0">{currentStats.in_progress || 0}</h5>
+                        <small className="text-muted">In Progress</small>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="col-md-2">
+                    <div className="card border-0 shadow-sm">
+                      <div className="card-body text-center py-3">
+                        <AlertTriangle size={24} className="text-danger mb-2" />
+                        <h5 className="fw-bold mb-0">{currentStats.pending || 0}</h5>
+                        <small className="text-muted">Pending</small>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="col-md-2">
+                    <div className="card border-0 shadow-sm">
+                      <div className="card-body text-center py-3">
+                        <X size={24} className="text-secondary mb-2" />
+                        <h5 className="fw-bold mb-0">{currentStats.no_show || 0}</h5>
+                        <small className="text-muted">No Show</small>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="col-md-2">
+                    <div className="card border-0 shadow-sm">
+                      <div className="card-body text-center py-3">
+                        <TrendingUp size={24} className="text-success mb-2" />
+                        <h5 className="fw-bold mb-0">{currentStats.completion_rate || 0}%</h5>
+                        <small className="text-muted">Success Rate</small>
+                      </div>
+                    </div>
                   </div>
                 </div>
-              </div>
-              <div className="col-md-3">
-                <div className="card border-0 shadow-sm h-100" style={{ borderRadius: '1rem' }}>
-                  <div className="card-body p-4 text-center">
-                    <Activity size={30} color={universityTheme.accent} className="mb-3" />
-                    <h4 className="fw-bold">{users?.filter((currentUser: User) => currentUser.role === 'clinical_staff').length || 0}</h4>
-                    <p className="text-muted mb-0">{t('superadmin.clinical_staff')}</p>
-                    <small className="text-muted">{t('superadmin.healthcare_professionals')}</small>
+
+                {/* Prescription Stats */}
+                {kpiStats.prescription_stats && (
+                  <div className="row g-4 mb-4">
+                    <div className="col-md-3">
+                      <div className="card border-0 shadow-sm">
+                        <div className="card-body text-center">
+                          <FileText size={28} className="text-warning mb-2" />
+                          <h4 className="fw-bold mb-1">{kpiStats.prescription_stats.today || 0}</h4>
+                          <p className="text-muted mb-0 small">Prescriptions Today</p>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="col-md-3">
+                      <div className="card border-0 shadow-sm">
+                        <div className="card-body text-center">
+                          <FileText size={28} className="text-primary mb-2" />
+                          <h4 className="fw-bold mb-1">{kpiStats.prescription_stats.this_week || 0}</h4>
+                          <p className="text-muted mb-0 small">Prescriptions This Week</p>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="col-md-3">
+                      <div className="card border-0 shadow-sm">
+                        <div className="card-body text-center">
+                          <FileText size={28} className="text-success mb-2" />
+                          <h4 className="fw-bold mb-1">{kpiStats.prescription_stats.this_month || 0}</h4>
+                          <p className="text-muted mb-0 small">Prescriptions This Month</p>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="col-md-3">
+                      <div className="card border-0 shadow-sm">
+                        <div className="card-body text-center">
+                          <Award size={28} className="text-info mb-2" />
+                          <h4 className="fw-bold mb-1">{kpiStats.prescription_stats.total || 0}</h4>
+                          <p className="text-muted mb-0 small">Total Prescriptions</p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Charts Row */}
+                {chartData && (
+                  <div className="row g-4 mb-4">
+                    {/* Trend Chart */}
+                    <div className="col-md-8">
+                      <div className="card shadow-sm border-0" style={{ borderRadius: '1rem' }}>
+                        <div className="card-header bg-white border-0">
+                          <h6 className="fw-bold mb-0">Appointment Trends - {timeframe === 'month' ? 'Monthly' : 'Daily'} View</h6>
+                        </div>
+                        <div className="card-body">
+                          <div style={{ height: '300px' }}>
+                            <Line data={chartData.trendData} options={chartOptions} />
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Status Distribution */}
+                    <div className="col-md-4">
+                      <div className="card shadow-sm border-0" style={{ borderRadius: '1rem' }}>
+                        <div className="card-header bg-white border-0">
+                          <h6 className="fw-bold mb-0">Status Distribution</h6>
+                        </div>
+                        <div className="card-body">
+                          <div style={{ height: '300px' }}>
+                            <Doughnut 
+                              data={chartData.statusData} 
+                              options={{
+                                ...chartOptions,
+                                plugins: {
+                                  legend: {
+                                    position: 'bottom' as const,
+                                  }
+                                }
+                              }} 
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* System Health & Overall Stats */}
+                <div className="row g-4 mb-4">
+                  <div className="col-md-12">
+                    <div className="card shadow-sm border-0" style={{ borderRadius: '1rem', background: universityTheme.gradient }}>
+                      <div className="card-body p-4 text-white">
+                        <h5 className="mb-3">System Overview</h5>
+                        <div className="row">
+                          <div className="col-md-3">
+                            <div className="mb-2">
+                              <Users size={20} className="me-2" />
+                              <strong>Total Users:</strong> {kpiStats.overall_stats?.total_users || 0}
+                            </div>
+                            <div className="mb-2">
+                              <Users size={20} className="me-2" />
+                              <strong>Doctors:</strong> {kpiStats.overall_stats?.doctors || 0}
+                            </div>
+                          </div>
+                          <div className="col-md-3">
+                            <div className="mb-2">
+                              <Users size={20} className="me-2" />
+                              <strong>Clinical Staff:</strong> {kpiStats.overall_stats?.clinical_staff || 0}
+                            </div>
+                            <div className="mb-2">
+                              <Users size={20} className="me-2" />
+                              <strong>Students:</strong> {kpiStats.overall_stats?.students || 0}
+                            </div>
+                          </div>
+                          <div className="col-md-3">
+                            <div className="mb-2">
+                              <Calendar size={20} className="me-2" />
+                              <strong>Total Appointments:</strong> {kpiStats.overall_stats?.total_appointments || 0}
+                            </div>
+                            <div className="mb-2">
+                              <FileText size={20} className="me-2" />
+                              <strong>Total Prescriptions:</strong> {kpiStats.overall_stats?.total_prescriptions || 0}
+                            </div>
+                          </div>
+                          <div className="col-md-3">
+                            <div className="mb-2">
+                              <TrendingUp size={20} className="me-2" />
+                              <strong>Avg. per Day:</strong> {kpiStats.overall_stats?.average_appointments_per_day || 0}
+                            </div>
+                            <div className="mb-2">
+                              <Activity size={20} className="me-2" />
+                              <strong>Busiest Day:</strong> {kpiStats.overall_stats?.busiest_day_of_week || 'N/A'}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
                   </div>
                 </div>
-              </div>
-            </div>
+
+                {/* System Health Indicators */}
+                {kpiStats.system_health && (
+                  <div className="row g-4">
+                    <div className="col-md-12">
+                      <div className="card shadow-sm border-0" style={{ borderRadius: '1rem' }}>
+                        <div className="card-header bg-white border-0">
+                          <h6 className="fw-bold mb-0">System Health Indicators</h6>
+                        </div>
+                        <div className="card-body">
+                          <div className="row g-3">
+                            <div className="col-md-3">
+                              <div className="d-flex align-items-center">
+                                <Calendar size={24} className="text-primary me-3" />
+                                <div>
+                                  <div className="fw-bold">{kpiStats.system_health.appointments_today || 0}</div>
+                                  <small className="text-muted">Appointments Today</small>
+                                </div>
+                              </div>
+                            </div>
+                            <div className="col-md-3">
+                              <div className="d-flex align-items-center">
+                                <Clock size={24} className="text-warning me-3" />
+                                <div>
+                                  <div className="fw-bold">{kpiStats.system_health.upcoming_appointments || 0}</div>
+                                  <small className="text-muted">Upcoming Appointments</small>
+                                </div>
+                              </div>
+                            </div>
+                            <div className="col-md-3">
+                              <div className="d-flex align-items-center">
+                                <AlertTriangle size={24} className="text-danger me-3" />
+                                <div>
+                                  <div className="fw-bold">{kpiStats.system_health.overdue_appointments || 0}</div>
+                                  <small className="text-muted">Overdue Appointments</small>
+                                </div>
+                              </div>
+                            </div>
+                            <div className="col-md-3">
+                              <div className="d-flex align-items-center">
+                                <Users size={24} className="text-success me-3" />
+                                <div>
+                                  <div className="fw-bold">{kpiStats.system_health.active_doctors || 0}</div>
+                                  <small className="text-muted">Active Doctors</small>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </>
+            ) : (
+              // Fallback to old dashboard if no KPI data
+              <>
+                <div className="row mb-4">
+                  <div className="col-12">
+                    <div className="card shadow-sm border-0" style={{ borderRadius: '1rem', background: universityTheme.gradient }}>
+                      <div className="card-body p-4 text-white">
+                        <h2 className="mb-2">{t('superadmin.system_overview')}</h2>
+                        <p className="mb-0 opacity-90">{t('superadmin.welcome_back', { name: user?.name || 'SuperAdmin' })}. {t('superadmin.system_overview_desc')}</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="row g-4">
+                  <div className="col-md-3">
+                    <div className="card border-0 shadow-sm h-100" style={{ borderRadius: '1rem' }}>
+                      <div className="card-body p-4 text-center">
+                        <Users size={30} color={universityTheme.primary} className="mb-3" />
+                        <h4 className="fw-bold">{users?.length || 0}</h4>
+                        <p className="text-muted mb-0">{t('superadmin.total_users')}</p>
+                        <small className="text-muted">
+                          {users?.filter((u: User) => u.role === 'doctor').length} {t('superadmin.doctors')}, {' '}
+                          {users?.filter((u: User) => u.role === 'admin').length} {t('superadmin.admins')}
+                        </small>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="col-md-3">
+                    <div className="card border-0 shadow-sm h-100" style={{ borderRadius: '1rem' }}>
+                      <div className="card-body p-4 text-center">
+                        <Building size={30} color={universityTheme.secondary} className="mb-3" />
+                        <h4 className="fw-bold">{departments?.length || 0}</h4>
+                        <p className="text-muted mb-0">{t('superadmin.departments')}</p>
+                        <small className="text-muted">
+                          {departments?.filter((d: Department) => d.is_active).length} {t('superadmin.active')}
+                        </small>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="col-md-3">
+                    <div className="card border-0 shadow-sm h-100" style={{ borderRadius: '1rem' }}>
+                      <div className="card-body p-4 text-center">
+                        <Calendar size={30} color="#d97706" className="mb-3" />
+                        <h4 className="fw-bold">{holidays?.length || 0}</h4>
+                        <p className="text-muted mb-0">{t('superadmin.academic_holidays')}</p>
+                        <small className="text-muted">
+                          {holidays?.filter((h: Holiday) => h.is_active !== false).length} {t('superadmin.active')}
+                        </small>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="col-md-3">
+                    <div className="card border-0 shadow-sm h-100" style={{ borderRadius: '1rem' }}>
+                      <div className="card-body p-4 text-center">
+                        <Activity size={30} color={universityTheme.accent} className="mb-3" />
+                        <h4 className="fw-bold">{users?.filter((currentUser: User) => currentUser.role === 'clinical_staff').length || 0}</h4>
+                        <p className="text-muted mb-0">{t('superadmin.clinical_staff')}</p>
+                        <small className="text-muted">{t('superadmin.healthcare_professionals')}</small>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </>
+            )}
           </>
         )}
 
@@ -1442,6 +1985,7 @@ const EnhancedSuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({ user,
             </div>
           </>
         )}
+        {activeTab === 'settings' && <ClinicSettingsManager />}
       </div>
 
       <style>{`
@@ -1453,6 +1997,11 @@ const EnhancedSuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({ user,
           from { transform: rotate(0deg); }
           to { transform: rotate(360deg); }
         }
+
+        .text-purple {
+          color: #a855f7;
+        }
+          
       `}</style>
     </div>
   );

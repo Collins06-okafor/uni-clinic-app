@@ -54,6 +54,11 @@ class User extends Authenticatable
         'department_id',
         'staff_type',
         'is_available',
+        'emergency_contact_relationship',
+        'emergency_contact_email',
+        'blood_type',
+        'gender',
+        'address',
     ];
 
     /**
@@ -78,6 +83,7 @@ class User extends Authenticatable
     protected $casts = [
         'email_verified_at' => 'datetime',
         'password' => 'hashed',
+        'date_of_birth' => 'date:Y-m-d', //'date',
         'last_login' => 'datetime',
         'permissions' => 'array',
         'available_days' => 'array', // ✅ Add this
@@ -250,6 +256,21 @@ class User extends Authenticatable
         }
         
         return $this->forceDelete();
+    }
+
+    // Add these methods to your User model
+    public function archivedByDoctors()
+    {
+        return $this->belongsToMany(User::class, 'doctor_archived_patients', 'patient_id', 'doctor_id')
+                    ->withPivot('archive_reason', 'created_at', 'updated_at')
+                    ->withTimestamps();
+    }
+
+    public function archivedPatients()
+    {
+        return $this->belongsToMany(User::class, 'doctor_archived_patients', 'doctor_id', 'patient_id')
+                    ->withPivot('archive_reason', 'created_at', 'updated_at')
+                    ->withTimestamps();
     }
     
 

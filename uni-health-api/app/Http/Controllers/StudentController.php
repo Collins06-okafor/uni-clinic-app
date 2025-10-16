@@ -72,14 +72,12 @@ public function getProfile(Request $request): JsonResponse
     try {
         $user = $request->user();
         
-        // Ensure avatar_url is a full URL (same as AcademicStaffController)
+        // Ensure avatar_url is a full URL
         $avatarUrl = null;
         if ($user->avatar_url) {
-            // If it's already a full URL, use it as is
             if (filter_var($user->avatar_url, FILTER_VALIDATE_URL)) {
                 $avatarUrl = $user->avatar_url;
             } else {
-                // Convert relative path to full URL
                 $avatarUrl = url($user->avatar_url);
             }
         }
@@ -89,24 +87,29 @@ public function getProfile(Request $request): JsonResponse
             'name' => $user->name,
             'email' => $user->email,
             'department' => $user->department,
-            'avatar_url' => $avatarUrl, // This should now be a full URL or null
+            'phone_number' => $user->phone,
+            'avatar_url' => $avatarUrl,
+            'date_of_birth' => $user->date_of_birth,
+            'emergency_contact_name' => $user->emergency_contact_name,
+            'emergency_contact_phone' => $user->emergency_contact_phone,
+            'emergency_contact_relationship' => $user->emergency_contact_relationship,
+            'emergency_contact_email' => $user->emergency_contact_email,
+            'blood_type' => $user->blood_type ?? 'Unknown',
+            'gender' => $user->gender,
             'allergies' => $user->allergies,
             'has_known_allergies' => $user->has_known_allergies ?? false,
             'allergies_uncertain' => $user->allergies_uncertain ?? false,
             'addictions' => $user->addictions,
-            'phone_number' => $user->phone,
-            'date_of_birth' => $user->date_of_birth,
-            'emergency_contact_name' => $user->emergency_contact_name,
-            'emergency_contact_phone' => $user->emergency_contact_phone,
-            'medical_history' => $user->medical_history
+            'medical_history' => $user->medical_history,
         ]);
         
     } catch (\Exception $e) {
-        \Log::error('Get profile error: ' . $e->getMessage());
+        \Log::error('Profile fetch error: ' . $e->getMessage());
         
         return response()->json([
-            'message' => 'Profile not found'
-        ], 404);
+            'message' => 'Failed to fetch profile',
+            'error' => 'An unexpected error occurred'
+        ], 500);
     }
 }
 
@@ -115,7 +118,9 @@ private function isProfileComplete($user): bool
 {
     $requiredFields = [
         'name', 'email', 'department', 'phone', 
-        'date_of_birth', 'emergency_contact_name', 'emergency_contact_phone'
+        'date_of_birth', 'emergency_contact_name', 
+        'emergency_contact_phone', 'emergency_contact_relationship', // ADD
+        'emergency_contact_email', 'blood_type', 'gender'           // ADD
     ];
     
     foreach ($requiredFields as $field) {
@@ -128,7 +133,7 @@ private function isProfileComplete($user): bool
 }
 
 /**
- * Handle profile image upload
+ * Upload profile avatar
  */
 public function uploadAvatar(Request $request): JsonResponse
 {
@@ -142,34 +147,34 @@ public function uploadAvatar(Request $request): JsonResponse
         // Delete old avatar if exists
         if ($user->avatar_url) {
             $oldPath = str_replace('/storage/', '', $user->avatar_url);
-            $oldPath = str_replace(url('/storage/'), '', $user->avatar_url); // Handle full URLs too
+            $oldPath = str_replace(url('/storage/'), '', $user->avatar_url);
             
             if (\Storage::disk('public')->exists($oldPath)) {
                 \Storage::disk('public')->delete($oldPath);
             }
         }
 
-        // Store new avatar with consistent naming like AcademicStaffController
+        // Store new avatar
         $file = $request->file('avatar');
         $filename = $user->id . '_' . time() . '.' . $file->getClientOriginalExtension();
         $path = $file->storeAs('avatars', $filename, 'public');
         
-        // Create FULL URL for the avatar (same as AcademicStaffController)
+        // Create FULL URL for the avatar
         $avatarUrl = url('/storage/' . $path);
         
         // Update user record with FULL URL
         $user->update(['avatar_url' => $avatarUrl]);
 
         // Log for debugging
-        \Log::info('Student avatar uploaded', [
+        \Log::info('Avatar uploaded', [
             'user_id' => $user->id,
             'path' => $path,
             'full_url' => $avatarUrl
         ]);
 
         return response()->json([
-            'message' => 'Profile image uploaded successfully',
-            'avatar_url' => $avatarUrl // Return the full URL
+            'message' => 'Avatar uploaded successfully',
+            'avatar_url' => $avatarUrl
         ]);
 
     } catch (\Illuminate\Validation\ValidationException $e) {
@@ -178,7 +183,7 @@ public function uploadAvatar(Request $request): JsonResponse
             'errors' => $e->errors()
         ], 422);
     } catch (\Exception $e) {
-        \Log::error('Student avatar upload error: ' . $e->getMessage());
+        \Log::error('Avatar upload error: ' . $e->getMessage());
         
         return response()->json([
             'message' => 'Failed to upload avatar',
@@ -207,15 +212,15 @@ public function removeAvatar(Request $request): JsonResponse
             // Update user record
             $user->update(['avatar_url' => null]);
             
-            \Log::info('Student avatar removed', ['user_id' => $user->id]);
+            \Log::info('Avatar removed', ['user_id' => $user->id]);
         }
 
         return response()->json([
-            'message' => 'Profile photo removed successfully'
+            'message' => 'Avatar removed successfully'
         ]);
 
     } catch (\Exception $e) {
-        \Log::error('Student avatar removal error: ' . $e->getMessage());
+        \Log::error('Avatar removal error: ' . $e->getMessage());
         
         return response()->json([
             'message' => 'Failed to remove avatar',
@@ -225,98 +230,137 @@ public function removeAvatar(Request $request): JsonResponse
 }
 
 /**
- * Create or update user profile - Fixed version
+ * Check if a date is a valid clinic day
  */
-public function createOrUpdateProfile(Request $request): JsonResponse
+private function isClinicOpen(string $date): bool
+{
+    $dayOfWeek = \Carbon\Carbon::parse($date)->dayOfWeek;
+    
+    // Clinic is CLOSED on:
+    // 0 = Sunday
+    // 6 = Saturday
+    // Clinic is OPEN Monday-Friday (1-5)
+    
+    return $dayOfWeek >= 1 && $dayOfWeek <= 5;
+}
+
+/**
+ * Get the reason why clinic is closed on a specific date
+ */
+private function getClosureReason(string $date): string
+{
+    $dayOfWeek = \Carbon\Carbon::parse($date)->dayOfWeek;
+    
+    if ($dayOfWeek === 0) {
+        return 'Clinic is closed on Sundays';
+    }
+    
+    if ($dayOfWeek === 6) {
+        return 'Clinic is closed on Saturdays';
+    }
+    
+    return 'Clinic is not operating on this date';
+}
+
+/**
+ * Update own profile - Enhanced version (without bio)
+ */
+public function updateProfile(Request $request): JsonResponse
 {
     try {
-        $minBirthDate = now()->subYears(16)->toDateString();
+        $minBirthDate = now()->subYears(16)->toDateString(); // Students must be 16+
         
         $validated = $request->validate([
-            'student_id' => 'required|string|max:255',
-            'name' => 'required|string|max:255',
-            'email' => 'required|email|max:255',
-            'department' => 'required|string|max:255',
-            'phone_number' => 'required|string|max:20',
+            'name' => 'sometimes|string|max:255',
+            'phone_number' => 'sometimes|string|max:20|nullable',
+            'department' => 'sometimes|string|max:255|nullable',
             'date_of_birth' => [
-                'required',
+                'sometimes',
+                'nullable',
                 'date',
                 'before_or_equal:' . $minBirthDate
             ],
-            'emergency_contact_name' => 'required|string|max:255',
-            'emergency_contact_phone' => 'required|string|max:20',
-            'medical_history' => 'nullable|string',
-            'allergies' => 'nullable|string',
-            'has_known_allergies' => 'boolean',
-            'allergies_uncertain' => 'boolean',
-            'addictions' => 'nullable|string'
+            'emergency_contact_name' => 'sometimes|string|max:255|nullable',
+            'emergency_contact_phone' => 'sometimes|string|max:20|nullable',
+            'emergency_contact_relationship' => 'sometimes|string|max:100|nullable',
+            'emergency_contact_email' => 'sometimes|email|max:255|nullable',
+            'blood_type' => 'sometimes|nullable|in:A+,A-,B+,B-,AB+,AB-,O+,O-,Unknown',
+            'gender' => 'sometimes|nullable|in:male,female,other,prefer_not_to_say',
+            'allergies' => 'sometimes|string|nullable',
+            'has_known_allergies' => 'sometimes|boolean',
+            'allergies_uncertain' => 'sometimes|boolean',
+            'addictions' => 'sometimes|string|nullable',
+            'medical_history' => 'sometimes|string|max:1000|nullable',
         ], [
-            'date_of_birth.before_or_equal' => 'Students must be at least 16 years old to register.',
-            'date_of_birth.required' => 'Date of birth is required.',
-            'date_of_birth.date' => 'Please enter a valid date of birth.'
+            'date_of_birth.before_or_equal' => 'Students must be at least 16 years old.',
         ]);
 
-        // Additional age verification
-        $birthDate = \Carbon\Carbon::parse($validated['date_of_birth']);
-        $age = $birthDate->diffInYears(now());
-        
-        if ($age < 16) {
-            return response()->json([
-                'message' => 'Age requirement not met',
-                'errors' => [
-                    'date_of_birth' => ['Students must be at least 16 years old. Current age: ' . $age . ' years.']
-                ]
-            ], 422);
+        // Age verification if date_of_birth is being updated
+        if (isset($validated['date_of_birth'])) {
+            $birthDate = \Carbon\Carbon::parse($validated['date_of_birth']);
+            $age = $birthDate->diffInYears(now());
+            
+            if ($age < 16) {
+                return response()->json([
+                    'message' => 'Age requirement not met',
+                    'errors' => [
+                        'date_of_birth' => ['Students must be at least 16 years old. Current age: ' . $age . ' years.']
+                    ]
+                ], 422);
+            }
         }
-        
+
         $user = $request->user();
         
-        $user->update([
-            'student_id' => $validated['student_id'],
-            'name' => $validated['name'],
-            'email' => $validated['email'],
-            'department' => $validated['department'],
-            'phone' => $validated['phone_number'],
-            'date_of_birth' => $validated['date_of_birth'],
-            'emergency_contact_name' => $validated['emergency_contact_name'],
-            'emergency_contact_phone' => $validated['emergency_contact_phone'],
-            'medical_history' => $validated['medical_history'],
-            'allergies' => $validated['allergies'],
-            'has_known_allergies' => $validated['has_known_allergies'] ?? false,
-            'allergies_uncertain' => $validated['allergies_uncertain'] ?? false,
-            'addictions' => $validated['addictions']
-        ]);
+        // Map phone_number to phone field in database
+        if (isset($validated['phone_number'])) {
+            $validated['phone'] = $validated['phone_number'];
+            unset($validated['phone_number']);
+        }
+        
+        $user->update($validated);
 
         return response()->json([
-            'message' => 'Profile saved successfully',
+            'message' => 'Profile updated successfully',
             'user' => [
                 'student_id' => $user->student_id,
                 'name' => $user->name,
                 'email' => $user->email,
                 'department' => $user->department,
                 'phone_number' => $user->phone,
+                'avatar_url' => $user->avatar_url,
                 'date_of_birth' => $user->date_of_birth,
                 'emergency_contact_name' => $user->emergency_contact_name,
                 'emergency_contact_phone' => $user->emergency_contact_phone,
-                'medical_history' => $user->medical_history,
+                'emergency_contact_relationship' => $user->emergency_contact_relationship,
+                'emergency_contact_email' => $user->emergency_contact_email,
+                'blood_type' => $user->blood_type,
+                'gender' => $user->gender,
                 'allergies' => $user->allergies,
                 'has_known_allergies' => $user->has_known_allergies,
                 'allergies_uncertain' => $user->allergies_uncertain,
                 'addictions' => $user->addictions,
-                'avatar_url' => $user->avatar_url
+                'medical_history' => $user->medical_history,
             ]
         ]);
 
     } catch (\Illuminate\Validation\ValidationException $e) {
+        // Log validation errors for debugging
+        \Log::error('Profile update validation failed', [
+            'user_id' => $request->user()->id,
+            'errors' => $e->errors(),
+            'input' => $request->except(['password', 'avatar'])
+        ]);
+        
         return response()->json([
             'message' => 'Validation failed',
             'errors' => $e->errors()
         ], 422);
     } catch (\Exception $e) {
-        \Log::error('Profile save error: ' . $e->getMessage());
+        \Log::error('Profile update error: ' . $e->getMessage());
         
         return response()->json([
-            'message' => 'Failed to save profile',
+            'message' => 'Failed to update profile',
             'error' => 'An unexpected error occurred'
         ], 500);
     }
@@ -378,7 +422,7 @@ public function getAppointments(Request $request): JsonResponse
 }
 
 /**
- * Schedule a new appointment (Debug Version)
+ * Schedule a new appointment with clinic hours validation
  */
 public function scheduleAppointment(Request $request): JsonResponse
 {
@@ -397,6 +441,30 @@ public function scheduleAppointment(Request $request): JsonResponse
         \Log::info('Validation passed:', $validated);
 
         $validated['urgency'] = $validated['urgency'] ?? 'normal';
+
+        // ✅ NEW: Check if clinic is open on selected date
+        if (!$this->isClinicOpen($validated['date'])) {
+            return response()->json([
+                'message' => $this->getClosureReason($validated['date']),
+                'errors' => [
+                    'date' => [$this->getClosureReason($validated['date']) . '. Please select a weekday (Monday-Friday).']
+                ]
+            ], 422);
+        }
+
+        // ✅ NEW: Validate time is within clinic hours (9:00 AM - 5:00 PM)
+        $selectedTime = \Carbon\Carbon::parse($validated['time']);
+        $clinicOpen = \Carbon\Carbon::parse('09:00');
+        $clinicClose = \Carbon\Carbon::parse('17:00');
+        
+        if ($selectedTime->lt($clinicOpen) || $selectedTime->gte($clinicClose)) {
+            return response()->json([
+                'message' => 'Selected time is outside clinic hours',
+                'errors' => [
+                    'time' => ['Clinic hours are 9:00 AM - 5:00 PM. Please select a time within operating hours.']
+                ]
+            ], 422);
+        }
 
         // If doctor_id provided, verify the doctor exists
         if (!empty($validated['doctor_id'])) {

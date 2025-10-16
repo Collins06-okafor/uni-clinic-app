@@ -12,6 +12,8 @@ use App\Models\Prescription;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Log; // <- ADD THIS TOO
+use Illuminate\Support\Facades\Schema; // Add this line
+
 
 class DoctorController extends Controller
 {
@@ -222,70 +224,285 @@ public function completeAppointment(Request $request, $id): JsonResponse
     }
 }
 
+/**
+ * Get urgent appointment requests
+ */
+public function getUrgentRequests(Request $request): JsonResponse
+{
+    try {
+        $user = $request->user();
+        
+        // Get appointments marked as urgent that are NOT completed or cancelled
+        $urgentAppointments = Appointment::where('doctor_id', $user->id)
+            ->where('priority', 'urgent')
+            ->whereIn('status', ['scheduled', 'confirmed']) // Only show scheduled or confirmed
+            ->whereNotIn('status', ['completed', 'cancelled']) // Explicitly exclude completed/cancelled
+            ->with('patient:id,name,email,phone')
+            ->orderBy('date', 'asc')
+            ->orderBy('time', 'asc')
+            ->get();
+        
+        // Format for frontend
+        $urgentRequests = $urgentAppointments->map(function ($appointment) {
+            return [
+                'id' => $appointment->id,
+                'patient_id' => $appointment->patient_id,
+                'patient_name' => $appointment->patient->name ?? 'Unknown',
+                'reason' => $appointment->reason,
+                'date' => $appointment->date,
+                'time' => $appointment->time,
+                'status' => $appointment->status,
+                'created_at' => $appointment->created_at->toISOString()
+            ];
+        });
+        
+        return response()->json([
+            'urgent_requests' => $urgentRequests,
+            'count' => $urgentRequests->count()
+        ]);
+        
+    } catch (\Exception $e) {
+        \Log::error('Error fetching urgent requests: ' . $e->getMessage());
+        return response()->json([
+            'urgent_requests' => [],
+            'count' => 0,
+            'error' => $e->getMessage()
+        ], 200); // Return 200 with empty array to prevent frontend errors
+    }
+}
+
+/**
+ * Cancel appointment and send back to clinical staff
+ */
+public function cancelAppointment(Request $request, $id): JsonResponse
+{
+    $validated = $request->validate([
+        'cancellation_reason' => 'required|string|max:500',
+        'send_to_clinical_staff' => 'boolean'
+    ]);
+
+    try {
+        DB::beginTransaction();
+
+        $appointment = Appointment::where('doctor_id', $request->user()->id)
+            ->findOrFail($id);
+
+        // Update appointment status
+        $appointment->update([
+            'status' => 'cancelled',
+            'cancellation_reason' => $validated['cancellation_reason'],
+            'cancelled_by' => $request->user()->id,
+            'cancelled_at' => now()
+        ]);
+
+        // Create notification for clinical staff
+        if ($validated['send_to_clinical_staff'] ?? true) {
+            // You can implement a notification system here
+            // For now, we'll just log it
+            \Log::info("Appointment {$id} cancelled by doctor, clinical staff notified");
+        }
+
+        DB::commit();
+
+        return response()->json([
+            'message' => 'Appointment cancelled successfully',
+            'appointment' => $appointment->load(['patient', 'doctor'])
+        ]);
+
+    } catch (\Exception $e) {
+        DB::rollBack();
+        \Log::error('Error cancelling appointment: ' . $e->getMessage());
+        return response()->json([
+            'message' => 'Failed to cancel appointment',
+            'error' => $e->getMessage()
+        ], 500);
+    }
+}
+
     /**
      * Get doctor's patient list
      */
-    public function getPatients(Request $request): JsonResponse
-    {
+public function getPatients(Request $request): JsonResponse
+{
+    try {
         $user = $request->user();
         $search = $request->get('search');
+        $showArchived = $request->boolean('show_archived', false);
         
         // Get patients who have appointments with this doctor
-        $patients = User::whereHas('appointments', function($query) use ($user) {
-                $query->where('doctor_id', $user->id);
+        $query = User::whereHas('appointments', function($query) use ($user) {
+                $query->where('appointments.doctor_id', $user->id);  // ← Add table prefix
             })
             ->with(['medicalRecords' => function($query) use ($user) {
-                $query->where('doctor_id', $user->id);
-            }])
-            ->when($search, function($query, $search) {
-                return $query->where(function($q) use ($search) {
-                    $q->where('name', 'like', "%{$search}%")
-                      ->orWhere('student_id', 'like', "%{$search}%")
-                      ->orWhere('staff_id', 'like', "%{$search}%");
-                });
-            })
-            ->paginate(10);
+                $query->where('medical_records.doctor_id', $user->id)  // ← Add table prefix
+                      ->latest()
+                      ->limit(5);
+            }]);
+        
+        // Filter archived patients if the pivot table exists
+        if (!$showArchived && Schema::hasTable('doctor_archived_patients')) {
+            $query->whereDoesntHave('archivedByDoctors', function($q) use ($user) {
+                $q->where('doctor_archived_patients.doctor_id', $user->id);  // ← Add table prefix
+            });
+        }
+        
+        // Search filter
+        if ($search) {
+            $query->where(function($q) use ($search) {
+                $q->where('users.name', 'like', "%{$search}%")  // ← Add table prefix
+                  ->orWhere('users.student_id', 'like', "%{$search}%")  // ← Add table prefix
+                  ->orWhere('users.staff_no', 'like', "%{$search}%")  // ← Add table prefix
+                  ->orWhere('users.email', 'like', "%{$search}%");  // ← Add table prefix
+            });
+        }
+
+        $patients = $query->select([
+            'users.id',  // ← Add table prefix
+            'users.name', 
+            'users.email', 
+            'users.role', 
+            'users.student_id', 
+            'users.staff_no',
+            'users.department', 
+            'users.phone'
+        ])->paginate(15);
 
         return response()->json([
             'patients' => $patients,
             'summary' => [
                 'total_patients' => $patients->total(),
                 'active' => $patients->count(),
-                'follow_up_required' => 0,
-                'emergency_cases' => 0,
+                'show_archived' => $showArchived
             ]
         ]);
+        
+    } catch (\Exception $e) {
+        Log::error('Error fetching patients: ' . $e->getMessage());
+        Log::error('Stack trace: ' . $e->getTraceAsString());
+        
+        return response()->json([
+            'message' => 'Failed to load patients',
+            'error' => $e->getMessage(),
+            'patients' => ['data' => []], 
+            'summary' => [
+                'total_patients' => 0,
+                'active' => 0,
+                'show_archived' => $showArchived
+            ]
+        ], 500);
     }
+}
 
-    /**
-     * Archive multiple patients
-     */
     public function archivePatients(Request $request): JsonResponse
     {
         $validated = $request->validate([
-            'patient_ids' => 'required|array',
-            'patient_ids.*' => 'integer|exists:users,id'
+            'patient_ids' => 'required|array|min:1',
+            'patient_ids.*' => 'required|integer|exists:users,id',
+            'archive_reason' => 'nullable|string|max:500'
         ]);
 
         try {
+            DB::beginTransaction();
+            
             $doctor = $request->user();
             
-            // Only archive patients assigned to this doctor
-            $archivedCount = User::whereIn('id', $validated['patient_ids'])
+            // Get patients who have appointments with this doctor
+            $patientsToArchive = User::whereIn('id', $validated['patient_ids'])
                 ->whereHas('appointments', function($query) use ($doctor) {
                     $query->where('doctor_id', $doctor->id);
                 })
-                ->update(['status' => 'archived']);
+                ->get();
+            
+            if ($patientsToArchive->isEmpty()) {
+                return response()->json([
+                    'message' => 'No patients found to archive',
+                    'archived_count' => 0
+                ], 400);
+            }
+            
+            $archivedCount = 0;
+            
+            
+            // APPROACH 2: Using pivot table (doctor-specific archiving)
+            // This allows different doctors to have different archived patient lists
+            foreach ($patientsToArchive as $patient) {
+                DB::table('doctor_archived_patients')->updateOrInsert(
+                    [
+                        'doctor_id' => $doctor->id,
+                        'patient_id' => $patient->id
+                    ],
+                    [
+                        'archive_reason' => $validated['archive_reason'] ?? null,
+                        'created_at' => now(),
+                        'updated_at' => now()
+                    ]
+                );
+                $archivedCount++;
+            }
+            
+            DB::commit();
 
             return response()->json([
-                'message' => "{$archivedCount} patients archived successfully",
+                'message' => "{$archivedCount} patient(s) archived successfully",
                 'archived_count' => $archivedCount
             ]);
             
         } catch (\Exception $e) {
-            Log::error('Error archiving patients: ' . $e->getMessage());
+            DB::rollBack();
+            \Log::error('Error archiving patients: ' . $e->getMessage());
+            \Log::error('Stack trace: ' . $e->getTraceAsString());
+            
             return response()->json([
                 'message' => 'Failed to archive patients',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Unarchive patients
+     */
+    public function unarchivePatients(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'patient_ids' => 'required|array|min:1',
+            'patient_ids.*' => 'required|integer|exists:users,id'
+        ]);
+
+        try {
+            DB::beginTransaction();
+            
+            $doctor = $request->user();
+            
+            // APPROACH 1: Using status column
+            /*
+            User::whereIn('id', $validated['patient_ids'])
+                ->update([
+                    'status' => 'active',
+                    'archived_at' => null,
+                    'archived_by' => null
+                ]);
+            */
+            
+            // APPROACH 2: Using pivot table
+            DB::table('doctor_archived_patients')
+                ->where('doctor_id', $doctor->id)
+                ->whereIn('patient_id', $validated['patient_ids'])
+                ->delete();
+            
+            DB::commit();
+
+            return response()->json([
+                'message' => 'Patients unarchived successfully',
+                'unarchived_count' => count($validated['patient_ids'])
+            ]);
+            
+        } catch (\Exception $e) {
+            DB::rollBack();
+            \Log::error('Error unarchiving patients: ' . $e->getMessage());
+            
+            return response()->json([
+                'message' => 'Failed to unarchive patients',
                 'error' => $e->getMessage()
             ], 500);
         }
@@ -303,8 +520,9 @@ public function completeAppointment(Request $request, $id): JsonResponse
             'name' => $user->name,
             'email' => $user->email,
             'phone' => $user->phone ?? '',
+            'address' => $user->address ?? '',  // ADD THIS LINE
             'department' => $user->department ?? '',
-            'bio' => $user->bio ?? '',
+            // REMOVE: 'bio' => $user->bio ?? '',
             'avatar_url' => $user->avatar_url ? url($user->avatar_url) : null,
             'specialization' => $user->specialization ?? '',
             'medical_license_number' => $user->medical_license_number ?? '',
@@ -330,8 +548,9 @@ public function completeAppointment(Request $request, $id): JsonResponse
         $validator = Validator::make($request->all(), [
             'name' => 'required|string|max:255',
             'phone' => 'nullable|string|max:20',
+            'address' => 'nullable|string|max:500',  // ADD THIS LINE
             'department' => 'nullable|string|max:100',
-            'bio' => 'nullable|string|max:1000',
+            // REMOVE: 'bio' => 'nullable|string|max:1000',
             'specialization' => 'nullable|string|max:255',
             'medical_license_number' => 'nullable|string|max:100',
             'staff_no' => 'nullable|string|max:50',
@@ -462,7 +681,7 @@ public function completeAppointment(Request $request, $id): JsonResponse
         $user = $request->user();
         $status = $validated['status'] ?? 'all';
 
-        $query = Appointment::with(['patient:id,name,student_id', 'doctor:id,name'])
+        $query = Appointment::with(['patient:id,name,student_id,email,phone,department', 'doctor:id,name']) // ← Add phone here
             ->where('doctor_id', $user->id)
             ->orderBy('date', 'desc')
             ->orderBy('time');
@@ -477,11 +696,18 @@ public function completeAppointment(Request $request, $id): JsonResponse
             'appointments' => $appointments->map(function ($appointment) {
                 return [
                     'id' => $appointment->id,
-                    'date' => $appointment->date, // This should be just "2025-10-07"
-                    'time' => $appointment->time, // This should be just "10:00:00" or "10:00"
+                    'date' => $appointment->date,
+                    'time' => $appointment->time,
                     'status' => $appointment->status,
                     'reason' => $appointment->reason,
-                    'patient' => $appointment->patient ? $appointment->patient->only(['id', 'name', 'student_id']) : null,
+                    'patient' => $appointment->patient ? [
+                        'id' => $appointment->patient->id,
+                        'name' => $appointment->patient->name,
+                        'student_id' => $appointment->patient->student_id,
+                        'email' => $appointment->patient->email,
+                        'phone' => $appointment->patient->phone,  // ← Make sure this is included
+                        'department' => $appointment->patient->department
+                    ] : null,
                     'doctor' => $appointment->doctor ? $appointment->doctor->only(['id', 'name']) : null
                 ];
             }),
@@ -494,7 +720,6 @@ public function completeAppointment(Request $request, $id): JsonResponse
             ]
         ]);
     }
-
     /**
  * Update appointment status (enhanced to handle completion reports)
  */

@@ -22,6 +22,8 @@ interface WalkInPatient {
   status: 'waiting' | 'scheduled' | 'confirmed' | 'in_progress' | 'completed' | 'called';
   has_walked_in?: boolean;
   appointment_id?: string;
+  approved_time?: string;  // Add this line
+  created_at?: string;     // Add this line
 }
 
 interface WalkInPatientManagementProps {
@@ -54,6 +56,79 @@ const WalkInPatientManagement: React.FC<WalkInPatientManagementProps> = ({
 
   const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://127.0.0.1:8000";
   const AUTH_TOKEN = localStorage.getItem('auth_token') || '16|iTGQGrMabQfgjprXw6xM01KTAmJc7AQ78qglIs4xd5fa9378';
+
+  // Helper function to format date
+  const formatDate = (dateString?: string): string => {
+    if (!dateString) return 'Not set';
+    
+    try {
+      const date = new Date(dateString);
+      return date.toLocaleDateString('en-US', {
+        weekday: 'short',
+        month: 'short',
+        day: 'numeric',
+        year: 'numeric'
+      });
+    } catch (error) {
+      console.error('Error formatting date:', error);
+      return 'Invalid date';
+    }
+  };
+
+// Helper function to format time
+const formatTime = (timeString?: string): string => {
+  if (!timeString) return 'Not set';
+  try {
+    if (timeString.includes('T')) {
+      const date = new Date(timeString);
+      if (isNaN(date.getTime())) return 'Invalid time';
+      return date.toLocaleTimeString('en-US', {
+        hour: 'numeric',
+        minute: '2-digit',
+        hour12: true
+      });
+    }
+    
+    if (timeString.includes(':')) {
+      const [hours, minutes] = timeString.split(':');
+      const hour = parseInt(hours, 10);
+      if (hour < 0 || hour > 23 || isNaN(hour)) return 'Invalid time';
+      const ampm = hour >= 12 ? 'PM' : 'AM';
+      const displayHour = hour % 12 || 12;
+      return `${displayHour}:${minutes} ${ampm}`;
+    }
+    
+    return 'Invalid time';
+  } catch (error) {
+    return 'Invalid time';
+  }
+};
+
+// Helper function to get correct approved time
+const getApprovedTime = (patient: WalkInPatient): string => {
+  if (patient.type === 'approved_request') {
+    return patient.approved_time || patient.created_at || patient.walk_in_time;
+  }
+  return patient.walk_in_time;
+};
+
+  // Helper function to format datetime
+  const formatDateTime = (dateTimeString: string): string => {
+    try {
+      const date = new Date(dateTimeString);
+      return date.toLocaleString('en-US', {
+        month: 'short',
+        day: 'numeric',
+        hour: 'numeric',
+        minute: '2-digit',
+        hour12: true
+      });
+    } catch (error) {
+      console.error('Error formatting datetime:', error);
+      return 'Invalid date/time';
+    }
+  };
+  
 
   const fetchWalkInPatients = async () => {
     try {
@@ -382,19 +457,17 @@ const WalkInPatientManagement: React.FC<WalkInPatientManagementProps> = ({
                             </span>
                             <div className="d-flex align-items-center">
                               <Calendar size={14} className="text-primary me-1" />
-                              <strong>
-                                {patient.scheduled_date && new Date(patient.scheduled_date).toLocaleDateString('en-US', {
-                                  month: 'short',
-                                  day: 'numeric'
-                                })} at {patient.scheduled_time || 'Not set'}
-                              </strong>
+                              <div>
+                                <div className="fw-bold">
+                                  {formatDate(patient.scheduled_date)}
+                                </div>
+                                <div className="text-muted small">
+                                  {formatTime(patient.scheduled_time)}
+                                </div>
+                              </div>
                             </div>
                             <small className="text-muted">
-                              Approved: {new Date(patient.walk_in_time).toLocaleTimeString('en-US', {
-                                hour: 'numeric',
-                                minute: '2-digit',
-                                hour12: true
-                              })}
+                              Approved: {formatTime(getApprovedTime(patient))}
                             </small>
                           </div>
                         ) : (
@@ -404,12 +477,18 @@ const WalkInPatientManagement: React.FC<WalkInPatientManagementProps> = ({
                             </span>
                             <div className="d-flex align-items-center">
                               <Clock size={14} className="text-muted me-1" />
-                              {new Date(patient.walk_in_time).toLocaleTimeString('en-US', {
-                                hour: 'numeric',
-                                minute: '2-digit',
-                                hour12: true
-                              })}
+                              <div>
+                                <div className="fw-bold">
+                                  {formatDate(patient.walk_in_time)}
+                                </div>
+                                <div className="text-muted small">
+                                  {formatTime(patient.walk_in_time)}
+                                </div>
+                              </div>
                             </div>
+                            <small className="text-muted">
+                              Checked in: {formatTime(patient.walk_in_time)}
+                            </small>
                           </div>
                         )}
                       </td>
@@ -618,21 +697,14 @@ const WalkInPatientManagement: React.FC<WalkInPatientManagementProps> = ({
                         <p className="fs-6">
                           <span className="badge bg-info me-2">Scheduled Appointment</span>
                           <Calendar size={16} className="me-1" />
-                          {selectedPatient.scheduled_date && new Date(selectedPatient.scheduled_date).toLocaleDateString()} at {selectedPatient.scheduled_time}
-                        </p>
-                      </div>
-                      <div className="col-md-6">
-                        <label className="form-label text-muted">Assigned Doctor</label>
-                        <p className="fs-6">
-                          <Stethoscope size={16} className="text-primary me-1" />
-                          {selectedPatient.doctor_name || 'Not assigned'}
+                          {formatDate(selectedPatient.scheduled_date)} at {formatTime(selectedPatient.scheduled_time)}
                         </p>
                       </div>
                     </>
                   ) : (
                     <div className="col-md-6">
                       <label className="form-label text-muted">Check-in Time</label>
-                      <p className="fs-6">{new Date(selectedPatient.walk_in_time).toLocaleString()}</p>
+                      <p className="fs-6">{formatDateTime(selectedPatient.walk_in_time)}</p>
                     </div>
                   )}
                   
