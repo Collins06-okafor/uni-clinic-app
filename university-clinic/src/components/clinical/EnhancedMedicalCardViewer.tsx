@@ -89,6 +89,10 @@ const EnhancedMedicalCardViewer: React.FC<MedicalCardViewerProps> = ({
 
   const latestVitals = vitalsHistory[0];
 
+  // Get patient data (works for both students and academic staff)
+  const patient = medicalCard?.student || medicalCard?.staff;
+  const isStaff = !!medicalCard?.staff;
+
   return (
     <div className="modal fade show d-block" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
       <div className="modal-dialog modal-xl modal-dialog-scrollable">
@@ -97,10 +101,13 @@ const EnhancedMedicalCardViewer: React.FC<MedicalCardViewerProps> = ({
             <div className="text-white">
               <h4 className="modal-title mb-1">
                 <User size={24} className="me-2" />
-                Medical Card - {medicalCard?.student?.name}
+                Medical Card - {patient?.name}
               </h4>
               <small className="opacity-75">
-                Student ID: {medicalCard?.student?.student_id} | Department: {medicalCard?.student?.department}
+                {isStaff 
+                  ? `Staff No: ${patient?.staff_no} | Department: ${patient?.department}`
+                  : `Student ID: ${patient?.student_id} | Department: ${patient?.department}`
+                }
               </small>
             </div>
             <button
@@ -158,35 +165,41 @@ const EnhancedMedicalCardViewer: React.FC<MedicalCardViewerProps> = ({
                       <div className="col-md-6">
                         <dl className="row mb-0">
                           <dt className="col-sm-5">Full Name:</dt>
-                          <dd className="col-sm-7">{medicalCard?.student?.name}</dd>
+                          <dd className="col-sm-7">{patient?.name}</dd>
 
                           <dt className="col-sm-5">Date of Birth:</dt>
-                          <dd className="col-sm-7">{medicalCard?.student?.date_of_birth || 'Not recorded'}</dd>
+                          <dd className="col-sm-7">
+                            {patient?.date_of_birth || 'Not recorded'}
+                          </dd>
 
                           <dt className="col-sm-5">Blood Type:</dt>
                           <dd className="col-sm-7">
                             <span className="badge bg-danger">
-                              {medicalCard?.medical_card?.blood_type || 'Unknown'}
+                              {medicalCard?.medical_card?.blood_type || patient?.blood_type || 'Unknown'}
                             </span>
                           </dd>
 
                           <dt className="col-sm-5">Gender:</dt>
-                          <dd className="col-sm-7">{medicalCard?.student?.gender || 'Not specified'}</dd>
+                          <dd className="col-sm-7">
+                            {patient?.gender || 'Not specified'}
+                          </dd>
                         </dl>
                       </div>
                       <div className="col-md-6">
                         <dl className="row mb-0">
-                          <dt className="col-sm-5">Student ID:</dt>
-                          <dd className="col-sm-7">{medicalCard?.student?.student_id}</dd>
+                          <dt className="col-sm-5">{isStaff ? 'Staff No:' : 'Student ID:'}</dt>
+                          <dd className="col-sm-7">
+                            {isStaff ? patient?.staff_no : patient?.student_id}
+                          </dd>
 
                           <dt className="col-sm-5">Department:</dt>
-                          <dd className="col-sm-7">{medicalCard?.student?.department}</dd>
+                          <dd className="col-sm-7">{patient?.department}</dd>
 
                           <dt className="col-sm-5">Email:</dt>
-                          <dd className="col-sm-7">{medicalCard?.student?.email}</dd>
+                          <dd className="col-sm-7">{patient?.email}</dd>
 
                           <dt className="col-sm-5">Phone:</dt>
-                          <dd className="col-sm-7">{medicalCard?.student?.phone || 'Not recorded'}</dd>
+                          <dd className="col-sm-7">{patient?.phone || 'Not recorded'}</dd>
                         </dl>
                       </div>
                     </div>
@@ -207,12 +220,14 @@ const EnhancedMedicalCardViewer: React.FC<MedicalCardViewerProps> = ({
                         <dl className="row mb-0">
                           <dt className="col-sm-5">Name:</dt>
                           <dd className="col-sm-7">
-                            {medicalCard?.medical_card?.emergency_contact?.name || 'Not recorded'}
+                            {medicalCard?.medical_card?.emergency_contact?.name || 
+                             patient?.emergency_contact_name || 'Not recorded'}
                           </dd>
 
                           <dt className="col-sm-5">Relationship:</dt>
                           <dd className="col-sm-7">
-                            {medicalCard?.medical_card?.emergency_contact?.relationship || 'Not recorded'}
+                            {medicalCard?.medical_card?.emergency_contact?.relationship ||
+                             patient?.emergency_contact_relationship || 'Not recorded'}
                           </dd>
                         </dl>
                       </div>
@@ -220,12 +235,14 @@ const EnhancedMedicalCardViewer: React.FC<MedicalCardViewerProps> = ({
                         <dl className="row mb-0">
                           <dt className="col-sm-5">Phone:</dt>
                           <dd className="col-sm-7">
-                            {medicalCard?.medical_card?.emergency_contact?.phone || 'Not recorded'}
+                            {medicalCard?.medical_card?.emergency_contact?.phone ||
+                             patient?.emergency_contact_phone || 'Not recorded'}
                           </dd>
 
                           <dt className="col-sm-5">Email:</dt>
                           <dd className="col-sm-7">
-                            {medicalCard?.medical_card?.emergency_contact?.email || 'Not recorded'}
+                            {medicalCard?.medical_card?.emergency_contact?.email ||
+                             patient?.emergency_contact_email || 'Not recorded'}
                           </dd>
                         </dl>
                       </div>
@@ -248,7 +265,7 @@ const EnhancedMedicalCardViewer: React.FC<MedicalCardViewerProps> = ({
                         <p className="text-muted">
                           {medicalCard?.medical_card?.allergies?.length > 0
                             ? medicalCard.medical_card.allergies.join(', ')
-                            : 'No known allergies'}
+                            : patient?.allergies || 'No known allergies'}
                         </p>
 
                         <h6 className="text-primary mt-3">Current Medications</h6>
@@ -263,7 +280,7 @@ const EnhancedMedicalCardViewer: React.FC<MedicalCardViewerProps> = ({
                         <p className="text-muted">
                           {medicalCard?.medical_card?.previous_conditions?.length > 0
                             ? medicalCard.medical_card.previous_conditions.join(', ')
-                            : 'No previous conditions recorded'}
+                            : patient?.medical_history || 'No previous conditions recorded'}
                         </p>
 
                         <h6 className="text-primary mt-3">Family History</h6>
@@ -274,6 +291,13 @@ const EnhancedMedicalCardViewer: React.FC<MedicalCardViewerProps> = ({
                         </p>
                       </div>
                     </div>
+                    
+                    {patient?.addictions && (
+                      <div className="mt-3">
+                        <h6 className="text-primary">Addictions</h6>
+                        <p className="text-muted">{patient.addictions}</p>
+                      </div>
+                    )}
                   </div>
                 </div>
 

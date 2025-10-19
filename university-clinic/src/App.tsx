@@ -13,6 +13,8 @@ import ProtectedRoute from './components/ProtectedRoute';
 import { fetchUser } from './services/auth';
 import type { User } from './types/user';
 import './transitions.css';
+import ForgotPasswordPage from './components/ForgotPasswordPage';
+import ResetPasswordPage from './components/ResetPasswordPage';
 
 // Define the common props interface for all dashboard components
 interface DashboardProps {
@@ -227,6 +229,9 @@ function App() {
           />
           
           <Route path="*" element={<Navigate to="/" replace />} />
+
+          <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+          <Route path="/reset-password" element={<ResetPasswordPage />} />
         </Routes>
       </div>
     </div>

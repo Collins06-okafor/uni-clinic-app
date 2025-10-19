@@ -2007,31 +2007,155 @@ public function uploadMedicalDocument(Request $request, $patientId)
 /**
  * Get medical card information
  */
+/**
+ * Get medical card information - FIXED VERSION
+ */
 public function getMedicalCard($studentId): JsonResponse
 {
-    $student = User::with(['medicalCard', 'medicalDocuments'])
-        ->findOrFail($studentId);
+    try {
+        // Load patient with all relationships
+        $patient = User::with(['medicalCard', 'medicalDocuments'])->findOrFail($studentId);
         
-    return response()->json([
-        'student' => [
-            'id' => $student->id,
-            'name' => $student->name,
-            'student_id' => $student->student_id,
-            'department' => $student->department,
-        ],
-        'medical_card' => $student->medicalCard,
-        'documents' => $student->medicalDocuments->map(function($doc) {
-            return [
-                'id' => $doc->id,
-                'type' => $doc->type,
-                'description' => $doc->description,
-                'date' => $doc->document_date,
-                'uploaded_at' => $doc->created_at,
-                'uploaded_by' => $doc->uploader->name,
-                'download_url' => route('medical.download', $doc->id),
-            ];
-        }),
-    ]);
+        \Log::info('Loading medical card for patient', [
+            'patient_id' => $studentId,
+            'has_medical_card' => !is_null($patient->medicalCard),
+        ]);
+        
+        // Format date of birth properly
+        $dateOfBirth = null;
+        if ($patient->date_of_birth) {
+            try {
+                $dateOfBirth = \Carbon\Carbon::parse($patient->date_of_birth)->format('Y-m-d');
+            } catch (\Exception $e) {
+                \Log::warning("Could not parse date of birth for patient {$studentId}");
+                $dateOfBirth = $patient->date_of_irth; // Keep original if parsing fails
+            }
+        }
+        
+        // Calculate age
+        $age = null;
+        if ($patient->date_of_birth) {
+            try {
+                $age = \Carbon\Carbon::parse($patient->date_of_birth)->age;
+            } catch (\Exception $e) {
+                \Log::warning("Could not calculate age for patient {$studentId}");
+            }
+        }
+        
+        // Build emergency contact from user fields
+        $emergencyContact = [
+            'name' => $patient->emergency_contact_name ?? 'Not recorded',
+            'phone' => $patient->emergency_contact_phone ?? 'Not recorded',
+            'relationship' => $patient->emergency_contact_relationship ?? 'Not specified',
+            'email' => $patient->emergency_contact_email ?? 'Not recorded'
+        ];
+        
+        // Override with medical card if it has data
+        if ($patient->medicalCard && !empty($patient->medicalCard->emergency_contact)) {
+            $cardEmergencyContact = is_array($patient->medicalCard->emergency_contact) 
+                ? $patient->medicalCard->emergency_contact 
+                : json_decode($patient->medicalCard->emergency_contact, true);
+            
+            if (is_array($cardEmergencyContact)) {
+                $emergencyContact = array_merge($emergencyContact, array_filter($cardEmergencyContact));
+            }
+        }
+        
+        // Parse allergies
+        $allergiesList = [];
+        $hasKnownAllergies = (bool)($patient->has_known_allergies ?? false);
+        $allergiesUncertain = (bool)($patient->allergies_uncertain ?? false);
+        
+        if ($hasKnownAllergies && !empty($patient->allergies)) {
+            $allergiesList = $this->parseArrayField($patient->allergies);
+        } elseif ($patient->medicalCard && !empty($patient->medicalCard->allergies)) {
+            $allergiesList = $this->parseArrayField($patient->medicalCard->allergies);
+        }
+        
+        // Parse medical history
+        $medicalHistoryList = [];
+        if (!empty($patient->medical_history)) {
+            $medicalHistoryList = $this->parseArrayField($patient->medical_history);
+        } elseif ($patient->medicalCard && !empty($patient->medicalCard->previous_conditions)) {
+            $medicalHistoryList = $this->parseArrayField($patient->medicalCard->previous_conditions);
+        }
+        
+        // Get blood type
+        $bloodType = $patient->blood_type ?? 
+                     ($patient->medicalCard->blood_type ?? 'Unknown');
+        
+        // Build comprehensive medical card data
+        $medicalCardData = [
+            'blood_type' => $bloodType,
+            'emergency_contact' => $emergencyContact,
+            'allergies' => $allergiesList,
+            'has_known_allergies' => $hasKnownAllergies,
+            'allergies_uncertain' => $allergiesUncertain,
+            'current_medications' => $patient->medicalCard 
+                ? $this->parseArrayField($patient->medicalCard->current_medications) 
+                : [],
+            'previous_conditions' => $medicalHistoryList,
+            'family_history' => $patient->medicalCard 
+                ? $this->parseArrayField($patient->medicalCard->family_history) 
+                : [],
+            'insurance_info' => $patient->medicalCard && !empty($patient->medicalCard->insurance_info)
+                ? (is_array($patient->medicalCard->insurance_info) 
+                    ? $patient->medicalCard->insurance_info 
+                    : json_decode($patient->medicalCard->insurance_info, true))
+                : null,
+            'addictions' => $patient->addictions ?? 'None recorded',
+        ];
+        
+        // Determine if patient is staff or student
+        $isStaff = $patient->role === 'academic_staff';
+        
+        return response()->json([
+            'student' => [
+                'id' => $patient->id,
+                'name' => $patient->name ?? 'Not recorded',
+                'role' => $patient->role ?? 'student',
+                'student_id' => $patient->student_id ?? null,
+                'staff_no' => $patient->staff_no ?? null,
+                'email' => $patient->email ?? 'Not recorded',
+                'phone' => $patient->phone ?? 'Not recorded',
+                'date_of_birth' => $dateOfBirth,
+                'age' => $age,
+                'gender' => $patient->gender ?? 'Not specified',
+                'department' => $patient->department ?? 'Not recorded',
+                'bio' => $patient->bio ?? null,
+                
+                // Include all medical fields directly
+                'blood_type' => $bloodType,
+                'allergies' => $patient->allergies,
+                'has_known_allergies' => $hasKnownAllergies,
+                'allergies_uncertain' => $allergiesUncertain,
+                'addictions' => $patient->addictions,
+                'medical_history' => $patient->medical_history,
+                'emergency_contact_name' => $patient->emergency_contact_name,
+                'emergency_contact_phone' => $patient->emergency_contact_phone,
+                'emergency_contact_relationship' => $patient->emergency_contact_relationship,
+                'emergency_contact_email' => $patient->emergency_contact_email,
+            ],
+            'medical_card' => $medicalCardData,
+            'documents' => $patient->medicalDocuments->map(function($doc) {
+                return [
+                    'id' => $doc->id,
+                    'type' => $doc->type,
+                    'description' => $doc->description,
+                    'date' => $doc->document_date,
+                    'uploaded_at' => $doc->created_at,
+                    'uploaded_by' => $doc->uploader->name ?? 'Unknown',
+                ];
+            }),
+        ]);
+    } catch (\Exception $e) {
+        \Log::error('Error loading medical card: ' . $e->getMessage());
+        \Log::error('Stack trace: ' . $e->getTraceAsString());
+        return response()->json([
+            'message' => 'Failed to load medical card',
+            'error' => $e->getMessage()
+        ], 500);
+    }
 }
 
 
@@ -2243,10 +2367,12 @@ public function storeMedicalCard(Request $request, $userId)
         }
     }
 
+    
     /**
-     * Get patient's medical card with complete user data
-     */
-    public function getPatientMedicalCard(Request $request, $patientId): JsonResponse
+ * Get patient's medical card with complete user data
+ * FIXED: Now properly retrieves all patient information for both students and academic staff
+ */
+public function getPatientMedicalCard(Request $request, $patientId): JsonResponse
 {
     try {
         // Load patient with all relationships
@@ -2254,13 +2380,8 @@ public function storeMedicalCard(Request $request, $userId)
         
         \Log::info('Loading medical card for patient', [
             'patient_id' => $patientId,
+            'role' => $patient->role,
             'has_medical_card' => !is_null($patient->medicalCard),
-            'emergency_contact_name' => $patient->emergency_contact_name,
-            'emergency_contact_phone' => $patient->emergency_contact_phone,
-            'allergies' => $patient->allergies,
-            'date_of_birth' => $patient->date_of_birth,
-            'email' => $patient->email,
-            'phone' => $patient->phone,
         ]);
         
         // Get latest vitals
@@ -2273,7 +2394,6 @@ public function storeMedicalCard(Request $request, $userId)
         // Prepare vitals data if exists
         $vitalsData = null;
         if ($latestVitals) {
-            // Handle JSON content properly
             $content = is_array($latestVitals->content) 
                 ? $latestVitals->content 
                 : (is_string($latestVitals->content) 
@@ -2296,34 +2416,37 @@ public function storeMedicalCard(Request $request, $userId)
             ];
         }
         
-        // Build emergency contact from user profile FIRST, then override with medical card if exists
+        // ✅ FIX: Build emergency contact from ALL available user fields
         $emergencyContact = [
             'name' => $patient->emergency_contact_name ?? 'Not recorded',
             'phone' => $patient->emergency_contact_phone ?? 'Not recorded',
-            'relationship' => 'Emergency Contact', // Default since field doesn't exist in users table
-            'email' => '' // Default since field doesn't exist in users table
+            'relationship' => $patient->emergency_contact_relationship ?? 'Not specified',
+            'email' => $patient->emergency_contact_email ?? 'Not recorded'
         ];
         
-        // Override with medical card emergency contact if it exists and has data
+        // Override with medical card if it has data
         if ($patient->medicalCard && !empty($patient->medicalCard->emergency_contact)) {
             $cardEmergencyContact = is_array($patient->medicalCard->emergency_contact) 
                 ? $patient->medicalCard->emergency_contact 
                 : json_decode($patient->medicalCard->emergency_contact, true);
             
             if (is_array($cardEmergencyContact)) {
-                $emergencyContact = array_merge($emergencyContact, $cardEmergencyContact);
+                $emergencyContact = array_merge($emergencyContact, array_filter($cardEmergencyContact));
             }
         }
         
-        // Build allergies list - prioritize user profile, then medical card
+        // ✅ FIX: Build allergies list
         $allergiesList = [];
-        if (!empty($patient->allergies)) {
+        $hasKnownAllergies = (bool)($patient->has_known_allergies ?? false);
+        $allergiesUncertain = (bool)($patient->allergies_uncertain ?? false);
+        
+        if ($hasKnownAllergies && !empty($patient->allergies)) {
             $allergiesList = $this->parseArrayField($patient->allergies);
         } elseif ($patient->medicalCard && !empty($patient->medicalCard->allergies)) {
             $allergiesList = $this->parseArrayField($patient->medicalCard->allergies);
         }
         
-        // Build medical history - prioritize user profile, then medical card
+        // ✅ FIX: Build medical history
         $medicalHistoryList = [];
         if (!empty($patient->medical_history)) {
             $medicalHistoryList = $this->parseArrayField($patient->medical_history);
@@ -2331,11 +2454,17 @@ public function storeMedicalCard(Request $request, $userId)
             $medicalHistoryList = $this->parseArrayField($patient->medicalCard->previous_conditions);
         }
         
+        // ✅ FIX: Get blood type
+        $bloodType = $patient->blood_type ?? 
+                     ($patient->medicalCard->blood_type ?? 'Unknown');
+        
         // Build comprehensive medical card data
         $medicalCardData = [
-            'blood_type' => 'Unknown', // Not in users table, would need to be added
+            'blood_type' => $bloodType,
             'emergency_contact' => $emergencyContact,
             'allergies' => $allergiesList,
+            'has_known_allergies' => $hasKnownAllergies,
+            'allergies_uncertain' => $allergiesUncertain,
             'current_medications' => $patient->medicalCard 
                 ? $this->parseArrayField($patient->medicalCard->current_medications) 
                 : [],
@@ -2348,29 +2477,50 @@ public function storeMedicalCard(Request $request, $userId)
                     ? $patient->medicalCard->insurance_info 
                     : json_decode($patient->medicalCard->insurance_info, true))
                 : null,
-            'has_known_allergies' => (bool)($patient->has_known_allergies ?? false),
-            'allergies_uncertain' => (bool)($patient->allergies_uncertain ?? false),
-            'addictions' => $patient->addictions ?? 'None'
+            'addictions' => $patient->addictions ?? 'None recorded',
+            'chronic_conditions' => $patient->chronic_conditions ?? 'None recorded'
         ];
         
-        // Calculate age if date_of_birth exists
+        // ✅ FIX: Calculate age properly
         $age = null;
+        $dateOfBirth = $patient->date_of_birth ?? 'Not recorded';
+        
         if ($patient->date_of_birth) {
-            $age = \Carbon\Carbon::parse($patient->date_of_birth)->age;
+            try {
+                $age = \Carbon\Carbon::parse($patient->date_of_birth)->age;
+            } catch (\Exception $e) {
+                \Log::warning("Could not parse date of birth for patient {$patientId}");
+            }
+        }
+        
+        // ✅ FIX: Handle student_id vs staff_no based on role
+        $identificationNumber = null;
+        $identificationType = null;
+        
+        if ($patient->role === 'academic_staff') {
+            $identificationNumber = $patient->staff_no ?? 'Not recorded';
+            $identificationType = 'Staff Number';
+        } else {
+            $identificationNumber = $patient->student_id ?? 'Not recorded';
+            $identificationType = 'Student ID';
         }
         
         return response()->json([
             'student' => [
                 'id' => $patient->id,
-                'name' => $patient->name,
-                'student_id' => $patient->student_id ?? 'N/A',
+                'name' => $patient->name ?? 'Not recorded',
+                'role' => $patient->role ?? 'student',
+                'identification_type' => $identificationType,
+                'identification_number' => $identificationNumber,
+                'student_id' => $patient->student_id ?? null,
                 'staff_no' => $patient->staff_no ?? null,
                 'email' => $patient->email ?? 'Not recorded',
                 'phone' => $patient->phone ?? 'Not recorded',
-                'date_of_birth' => $patient->date_of_birth ?? 'Not recorded',
+                'date_of_birth' => $dateOfBirth,
                 'age' => $age,
                 'gender' => $patient->gender ?? 'Not specified',
                 'department' => $patient->department ?? 'Not recorded',
+                'bio' => $patient->bio ?? null,
             ],
             'medical_card' => $medicalCardData,
             'latest_vitals' => $vitalsData,
@@ -2386,7 +2536,7 @@ public function storeMedicalCard(Request $request, $userId)
 }
 
 /**
- * Helper method to parse array fields that might be stored as JSON strings
+ * Helper method to parse array fields
  */
 private function parseArrayField($field): array
 {
@@ -2394,21 +2544,18 @@ private function parseArrayField($field): array
         return [];
     }
     
-    // If it's already an array, return it
     if (is_array($field)) {
-        return $field;
+        return array_filter($field);
     }
     
-    // If it's a JSON string, decode it
     if (is_string($field)) {
-        // Try to decode as JSON first
         $decoded = json_decode($field, true);
         if (json_last_error() === JSON_ERROR_NONE && is_array($decoded)) {
-            return $decoded;
+            return array_filter($decoded);
         }
         
-        // If not JSON, treat as comma-separated string
-        return array_filter(array_map('trim', explode(',', $field)));
+        $items = preg_split('/[,\n\r]+/', $field);
+        return array_filter(array_map('trim', $items));
     }
     
     return [];
@@ -2417,45 +2564,49 @@ private function parseArrayField($field): array
     /**
      * Get prescribed medications (from doctors) that need administration
      */
-    public function getPrescribedMedications(Request $request): JsonResponse
-    {
-        try {
-            // Get medications prescribed by doctors that are pending administration
-            $medications = MedicalRecord::where('type', 'medication')
-                ->with(['patient', 'doctor', 'creator'])
-                ->whereJsonContains('content->status', 'pending')
-                ->orWhereJsonContains('content->status', 'prescribed')
-                ->orderBy('created_at', 'desc')
-                ->get()
-                ->map(function($record) {
-                    return [
-                        'id' => $record->id,
-                        'patient_id' => $record->patient_id,
-                        'patient_name' => $record->patient->name,
-                        'medication_name' => $record->content['medication_name'],
-                        'dosage' => $record->content['dosage'],
-                        'route' => $record->content['route'],
-                        'frequency' => $record->content['frequency'] ?? 'as_prescribed',
-                        'prescribing_doctor' => $record->doctor ? $record->doctor->name : 'Unknown',
-                        'prescribed_date' => $record->created_at,
-                        'status' => $record->content['status'] ?? 'pending',
-                        'notes' => $record->notes,
-                    ];
-                });
-            
-            return response()->json([
-                'medications' => $medications,
-                'total' => $medications->count(),
-                'pending' => $medications->where('status', 'pending')->count(),
-            ]);
-        } catch (\Exception $e) {
-            \Log::error('Error loading prescribed medications: ' . $e->getMessage());
-            return response()->json([
-                'message' => 'Failed to load medications',
-                'error' => $e->getMessage()
-            ], 500);
-        }
+public function getPrescribedMedications(Request $request): JsonResponse
+{
+    try {
+        // Get medications that need to be administered
+        $medications = Medication::with(['patient', 'creator'])
+            ->where('status', 'active')
+            ->orderBy('created_at', 'desc')
+            ->get()
+            ->map(function($medication) {
+                return [
+                    'id' => $medication->id,
+                    'patient_id' => $medication->patient_id,
+                    'patient_name' => $medication->patient ? $medication->patient->name : 'Unknown',
+                    'medication_name' => $medication->name,
+                    'generic_name' => $medication->generic_name,
+                    'dosage' => $medication->dosage,
+                    'route' => 'oral', // You may need to add this field to your medications table
+                    'frequency' => $medication->frequency,
+                    'prescribing_doctor' => $medication->creator ? $medication->creator->name : 'Unknown',
+                    'prescribed_date' => $medication->created_at,
+                    'start_date' => $medication->start_date,
+                    'end_date' => $medication->end_date,
+                    'status' => $medication->status,
+                    'instructions' => $medication->instructions,
+                    'notes' => $medication->instructions,
+                ];
+            });
+        
+        return response()->json([
+            'medications' => $medications,
+            'total' => $medications->count(),
+            'pending' => $medications->where('status', 'active')->count(),
+        ]);
+    } catch (\Exception $e) {
+        \Log::error('Error loading prescribed medications: ' . $e->getMessage());
+        \Log::error('Stack trace: ' . $e->getTraceAsString());
+        return response()->json([
+            'message' => 'Failed to load medications',
+            'error' => $e->getMessage(),
+            'medications' => []
+        ], 500);
     }
+}
 
     /**
      * Administer a prescribed medication
@@ -2506,6 +2657,7 @@ private function parseArrayField($field): array
             ], 500);
         }
     }
+    
 
     /**
      * Record minor treatment (for headaches, minor injuries, etc.)

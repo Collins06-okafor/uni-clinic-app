@@ -363,6 +363,20 @@
   transform: translateY(-1px);
 }
 
+/* Forgot Password Link */
+.forgot-password-link {
+  color: #dc2626;
+  text-decoration: none;
+  font-size: 14px;
+  font-weight: 500;
+  transition: color 0.3s ease;
+}
+
+.forgot-password-link:hover {
+  color: #991b1b;
+  text-decoration: underline;
+}
+
 /* ===== LANGUAGE SWITCHER STYLES ===== */
 
 /* Language Switcher Container */

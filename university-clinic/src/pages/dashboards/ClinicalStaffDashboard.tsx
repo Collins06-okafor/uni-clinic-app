@@ -3420,7 +3420,10 @@ const AppointmentsTab: React.FC = () => {
                       type="text"
                       className="form-control"
                       value={userProfile.name}
-                      onChange={(e) => setUserProfile({ ...userProfile, name: e.target.value })}
+                      onChange={(e) => {
+  const value = e.target.value;
+  setUserProfile(prev => ({ ...prev, name: value }));
+}}
                       required
                       placeholder="Enter your full name"
                     />

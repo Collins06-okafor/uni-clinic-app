@@ -60,27 +60,47 @@ const MedicationManagement: React.FC<MedicationManagementProps> = ({
   }, []);
 
   const loadPrescribedMedications = async () => {
-    try {
-      setLoading(true);
-      const response = await fetch(`${apiBaseUrl}/api/clinical/medications/prescribed`, {
-        headers: {
-          'Authorization': `Bearer ${authToken}`,
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-        }
-      });
+  try {
+    setLoading(true);
+    console.log('🔍 Fetching medications from:', `${apiBaseUrl}/api/clinical/medications/prescribed`);
+    console.log('🔑 Auth token:', authToken ? 'Present' : 'Missing');
+    
+    const response = await fetch(`${apiBaseUrl}/api/clinical/medications/prescribed`, {
+      headers: {
+        'Authorization': `Bearer ${authToken}`,
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+      }
+    });
 
-      if (!response.ok) throw new Error('Failed to load medications');
-
-      const data = await response.json();
-      setPrescribedMeds(data.medications || []);
-    } catch (error) {
-      console.error('Error loading medications:', error);
-      setMessage({ type: 'error', text: 'Failed to load medications' });
-    } finally {
-      setLoading(false);
+    console.log('📡 Response status:', response.status);
+    
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('❌ Error response:', errorText);
+      throw new Error(`Failed to load medications: ${response.status}`);
     }
-  };
+
+    const data = await response.json();
+    console.log('✅ Medications loaded:', data);
+    
+    setPrescribedMeds(data.medications || []);
+    
+    if (data.medications && data.medications.length > 0) {
+      setMessage({ type: 'success', text: `Loaded ${data.medications.length} medications` });
+      setTimeout(() => setMessage({ type: '', text: '' }), 2000);
+    }
+  } catch (error) {
+    console.error('❌ Error loading medications:', error);
+    setMessage({ 
+      type: 'error', 
+      text: `Failed to load medications: ${(error as Error).message}` 
+    });
+    setTimeout(() => setMessage({ type: '', text: '' }), 5000);
+  } finally {
+    setLoading(false);
+  }
+};
 
   const administerMedication = async (medicationId: string | number) => {
     try {
@@ -283,7 +303,7 @@ const MedicationManagement: React.FC<MedicationManagementProps> = ({
                               <th>Prescribed By</th>
                               <th>Date</th>
                               <th>Status</th>
-                              <th>Action</th>
+                              {/*<th>Action</th>*/}
                             </tr>
                           </thead>
                           <tbody>

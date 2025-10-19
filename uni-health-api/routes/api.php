@@ -33,6 +33,13 @@ Route::prefix('auth')->group(function () {
     Route::post('/verify-email', [AuthController::class, 'verifyEmail']);
 });
 
+// Password reset routes (required for Laravel's built-in functionality)
+Route::get('/reset-password/{token}', function (string $token) {
+    return response()->json([
+        'token' => $token
+    ]);
+})->name('password.reset');
+
 Route::post('/language/set', [LanguageController::class, 'setLanguage']);
 Route::get('/public/clinic-settings', [ClinicSettingsController::class, 'getSettings']);
 

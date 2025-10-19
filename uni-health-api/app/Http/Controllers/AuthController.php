@@ -11,6 +11,7 @@ use Illuminate\Support\Facades\Mail;
 use Illuminate\Validation\ValidationException;
 use App\Mail\PatientRegistrationConfirmation;
 use App\Services\NotificationService;
+use Illuminate\Support\Facades\Validator; 
 
 class AuthController extends Controller
 {
@@ -253,49 +254,73 @@ public function login(Request $request)
      * Send password reset link
      */
     public function forgotPassword(Request $request)
-    {
-        $request->validate([
-            'email' => 'required|email|exists:users,email',
-        ]);
+        {
+            $validator = Validator::make($request->all(), [
+                'email' => 'required|email|exists:users,email'
+            ]);
 
-        $status = Password::sendResetLink($request->only('email'));
+            if ($validator->fails()) {
+                return response()->json([
+                    'message' => 'Validation failed',
+                    'errors' => $validator->errors()
+                ], 400);
+            }
 
-        if ($status === Password::RESET_LINK_SENT) {
-            return response()->json(['message' => 'Password reset link sent to your email']);
+            $status = Password::sendResetLink(
+                $request->only('email')
+            );
+
+            if ($status === Password::RESET_LINK_SENT) {
+                return response()->json([
+                    'message' => 'Password reset link sent to your email'
+                ], 200);
+            }
+
+            return response()->json([
+                'message' => 'Unable to send reset link. Please try again.'
+            ], 400);
         }
-
-        throw ValidationException::withMessages([
-            'email' => [__($status)],
-        ]);
-    }
-
     /**
      * Reset password
      */
     public function resetPassword(Request $request)
     {
-        $request->validate([
+        $validator = Validator::make($request->all(), [
             'token' => 'required',
             'email' => 'required|email',
             'password' => 'required|min:8|confirmed',
         ]);
 
+        if ($validator->fails()) {
+            return response()->json([
+                'message' => 'Validation failed',
+                'errors' => $validator->errors()
+            ], 400);
+        }
+
         $status = Password::reset(
             $request->only('email', 'password', 'password_confirmation', 'token'),
             function ($user, $password) {
                 $user->forceFill([
-                    'password' => bcrypt($password)
-                ])->save();
+                    'password' => Hash::make($password)
+                ])->setRememberToken(Str::random(60));
+
+                $user->save();
+
+                event(new PasswordReset($user));
             }
         );
 
         if ($status === Password::PASSWORD_RESET) {
-            return response()->json(['message' => 'Password reset successfully']);
+            return response()->json([
+                'message' => 'Password reset successfully'
+            ], 200);
         }
 
-        throw ValidationException::withMessages([
-            'email' => [__($status)],
-        ]);
+        return response()->json([
+            'message' => 'Failed to reset password. The token may be invalid or expired.',
+            'status' => $status
+        ], 400);
     }
 
 /**

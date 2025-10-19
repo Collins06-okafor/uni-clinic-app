@@ -183,4 +183,67 @@ export const updateProfile = async (profileData: Partial<User>): Promise<User> =
   }
 };
 
+export const requestPasswordReset = async (email: string): Promise<void> => {
+  try {
+    console.log('Requesting password reset for:', email);
+    const response: AxiosResponse<{ message: string }> = await apiClient.post('/auth/forgot-password', { email });
+    console.log('Password reset request successful:', response.data);
+    return;
+  } catch (error: any) {
+    console.error('Password reset request error:', error);
+    console.error('Error response data:', error.response?.data); // ADD THIS LINE
+    console.error('Error status:', error.response?.status); // ADD THIS LINE
+    
+    if (error.response?.data) {
+      const errorData: ApiError = error.response.data;
+      if (errorData.message) {
+        throw new Error(errorData.message);
+      }
+      if (errorData.errors) {
+        // Handle validation errors
+        const firstError = Object.values(errorData.errors)[0];
+        if (Array.isArray(firstError)) {
+          throw new Error(firstError[0]);
+        }
+        throw new Error(firstError as string);
+      }
+    }
+    
+    throw new Error('Failed to send password reset email. Please try again.');
+  }
+};
+
+export const resetPassword = async (token: string, email: string, password: string): Promise<void> => {
+  try {
+    console.log('Resetting password with token');
+    const response: AxiosResponse<{ message: string }> = await apiClient.post('/auth/reset-password', {
+      token,
+      email,
+      password,
+      password_confirmation: password,
+    });
+    console.log('Password reset successful:', response.data);
+    return;
+  } catch (error: any) {
+    console.error('Password reset error:', error);
+    console.error('Error response data:', error.response?.data);
+    
+    if (error.response?.data) {
+      const errorData: ApiError = error.response.data;
+      if (errorData.message) {
+        throw new Error(errorData.message);
+      }
+      if (errorData.errors) {
+        const firstError = Object.values(errorData.errors)[0];
+        if (Array.isArray(firstError)) {
+          throw new Error(firstError[0]);
+        }
+        throw new Error(firstError as string);
+      }
+    }
+    
+    throw new Error('Failed to reset password. The link may have expired.');
+  }
+};
+
 export default apiClient;

@@ -17,11 +17,29 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [rememberMe, setRememberMe] = useState(false);
 
   // Check if user is already authenticated
   useEffect(() => {
     if (isAuthenticated()) {
       navigate('/dashboard');
+    }
+    
+    // Load remembered credentials if they exist
+    const rememberedEmail = localStorage.getItem('rememberedEmail');
+    const rememberedPassword = localStorage.getItem('rememberedPassword');
+    
+    if (rememberedEmail && rememberedPassword) {
+      setEmail(rememberedEmail);
+      // Decrypt password (simple base64 for demo - use better encryption in production)
+      try {
+        setPassword(atob(rememberedPassword));
+        setRememberMe(true);
+      } catch (e) {
+        // If decryption fails, clear stored data
+        localStorage.removeItem('rememberedEmail');
+        localStorage.removeItem('rememberedPassword');
+      }
     }
   }, [navigate]);
 
@@ -37,6 +55,17 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
       
       if (response.token) {
         console.log('Login successful, refreshing user data');
+        
+        // Handle Remember Me
+        if (rememberMe) {
+          localStorage.setItem('rememberedEmail', email);
+          // Simple base64 encoding (use better encryption in production)
+          localStorage.setItem('rememberedPassword', btoa(password));
+        } else {
+          // Clear remembered credentials if unchecked
+          localStorage.removeItem('rememberedEmail');
+          localStorage.removeItem('rememberedPassword');
+        }
         
         try {
           await onLoginSuccess();
@@ -66,10 +95,9 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
               navigate('/superadmin/dashboard', { replace: true });
               break;
             default:
-              navigate('/dashboard', { replace: true }); // fallback
+              navigate('/dashboard', { replace: true });
           }
         } else {
-          // Fallback if role is not available in response
           navigate('/dashboard', { replace: true });
         }
       } else {
@@ -85,11 +113,9 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
 
   return (
     <div className="wehealth-container">
-      {/* Language Switcher - positioned absolutely in top right */}
       <LanguageSwitcher className="language-switcher" />
 
       <div className="wehealth-card">
-        {/* Left Panel - Login Form */}
         <div className="login-panel">
           <div className="logo-section">
             <img src="/logo6.png" alt="Final International University" className="brand-logo" />
@@ -100,7 +126,6 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
             <h3 className="form-title">{t('login.title')}</h3>
             <p className="form-subtitle">{t('login.subtitle')}</p>
 
-            {/* Error Alert */}
             {error && (
               <div className="error-alert">
                 <i className="fas fa-exclamation-circle"></i>
@@ -144,10 +169,18 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
 
               <div className="form-options">
                 <label className="checkbox-container">
-                  <input type="checkbox" />
+                  <input 
+                    type="checkbox" 
+                    checked={rememberMe}
+                    onChange={(e) => setRememberMe(e.target.checked)}
+                  />
                   <span className="checkmark"></span>
                   {t('login.remember_me')}
                 </label>
+                
+                <Link to="/forgot-password" className="forgot-password-link">
+                  {t('login.forgot_password')}
+                </Link>
               </div>
 
               <button type="submit" disabled={loading} className="login-button">
@@ -156,15 +189,10 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
                 )}
                 {loading ? t('login.signing_in') : t('login.sign_in')}
               </button>
-
-              {/*<Link to="/forgot-password" className="forgot-password">
-                {t('login.forgot_password')}
-              </Link>*/}
             </form>
           </div>
         </div>
 
-        {/* Right Panel - Doctor Image and Info */}
         <div className="doctor-panel">
           <div className="doctor-section">
             <div className="doctor-image-container">
