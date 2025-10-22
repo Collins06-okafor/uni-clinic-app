@@ -36,6 +36,7 @@ interface Appointment {
   time: string;
   reason: string;
   status: 'scheduled' | 'confirmed' | 'completed' | 'cancelled';
+  priority?: 'normal' | 'high' | 'urgent'; // ADD THIS LINE
   patient?: Patient;
 }
 
@@ -255,6 +256,8 @@ const EnhancedDoctorDashboard: React.FC<EnhancedDoctorDashboardProps> = ({ user,
    const { t, i18n } = useTranslation();
 
   const [activeTab, setActiveTab] = useState<string>('dashboard');
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);  // ADD THIS
+  const [sidebarOpen, setSidebarOpen] = useState(false); 
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [patients, setPatients] = useState<Patient[]>([]);
   const [prescriptions, setPrescriptions] = useState<Prescription[]>([]);
@@ -272,6 +275,7 @@ const EnhancedDoctorDashboard: React.FC<EnhancedDoctorDashboardProps> = ({ user,
 const [patientPrescriptions, setPatientPrescriptions] = useState<Prescription[]>([]);
 const [showPatientHistory, setShowPatientHistory] = useState<boolean>(false);
 const [selectedPrescription, setSelectedPrescription] = useState<Prescription | null>(null);
+
 // Add this state at the top with your other states (around line 300)
 const [showArchivedPatients, setShowArchivedPatients] = useState<boolean>(false);
 const [cancellationForm, setCancellationForm] = useState<CancellationForm>({
@@ -1210,6 +1214,15 @@ const archiveSelectedPatients = async (): Promise<void> => {
     setLoading(false);
   };
 
+  const getPriorityBadge = (priority: string): string => {
+  const badges: Record<string, string> = {
+    urgent: 'badge bg-danger',
+    high: 'badge bg-warning text-dark',
+    normal: 'badge bg-info'
+  };
+  return badges[priority] || 'badge bg-secondary';
+};
+
   const getStatusColor = (status: string): string => {
   const statusColors = {
     active: '#28a745',
@@ -1266,6 +1279,7 @@ const fetchPatientPrescriptions = async (patientId: number): Promise<void> => {
     console.error('Error fetching patient prescriptions:', error);
   }
 };
+
 
   // Fixed prescription medication handler
   const updateMedicationField = (index: number, field: keyof Medication, value: string) => {
@@ -1540,7 +1554,7 @@ const generateTimeSlots = (): string[] => {
   return slots;
 };
 
-// Replace the static timeSlots array with:
+// Replace the static timeSlots array with dynamic generation
 const timeSlots = generateTimeSlots();
 
 // Function to validate appointment conflicts
@@ -2525,8 +2539,9 @@ const AppointmentsTab = () => (
 
     {/* Card Body */}
     <div className="card-body p-2 p-md-4">
-      {/* Filters */}
+      {/* Filters - NOW INCLUDING PRIORITY */}
       <div className="d-flex flex-wrap gap-1 mb-3">
+        {/* Status Filters */}
         {[
           { value: 'all', label: 'All', count: appointments.length },
           { value: 'scheduled', label: 'Scheduled', count: appointments.filter(a => a.status === 'scheduled').length },
@@ -2549,7 +2564,45 @@ const AppointmentsTab = () => (
             {filter.label} ({filter.count})
           </button>
         ))}
+        
+        {/* Priority Filters */}
+        <div className="dropdown">
+          <button 
+            className="btn btn-outline-secondary btn-sm dropdown-toggle" 
+            type="button" 
+            data-bs-toggle="dropdown"
+            style={{ fontSize: '0.75rem' }}
+          >
+            Priority: {appointmentFilter.priority === 'all' ? 'All' : appointmentFilter.priority.toUpperCase()}
+          </button>
+          <ul className="dropdown-menu">
+            {[
+              { value: 'all', label: 'All Priorities' },
+              { value: 'normal', label: 'Normal' },
+              { value: 'high', label: 'High' },
+              { value: 'urgent', label: 'Urgent' }
+            ].map(priority => (
+              <li key={priority.value}>
+                <button 
+                  className="dropdown-item"
+                  onClick={() => {
+                    setAppointmentFilter({ ...appointmentFilter, priority: priority.value });
+                    const filtered = appointments.filter(apt => {
+                      const statusMatch = appointmentFilter.status === 'all' || apt.status === appointmentFilter.status;
+                      const priorityMatch = priority.value === 'all' || (apt.priority || 'normal') === priority.value;
+                      return statusMatch && priorityMatch;
+                    });
+                    setFilteredAppointments(filtered);
+                  }}
+                >
+                  {priority.label}
+                </button>
+              </li>
+            ))}
+          </ul>
+        </div>
       </div>
+      
 
       {/* Mobile card layout */}
       <div className="d-block d-lg-none">
@@ -2561,9 +2614,14 @@ const AppointmentsTab = () => (
                   <h6 className="mb-1 fw-semibold">{appointment.patient?.name}</h6>
                   <small className="text-muted">{appointment.patient?.student_id}</small>
                 </div>
-                <span className={`${getStatusBadgeClass(appointment.status)} small`}>
-                  {t(`status.${appointment.status}`)}
-                </span>
+                <div className="d-flex flex-column gap-1 align-items-end">
+                  <span className={`${getStatusBadgeClass(appointment.status)} small`}>
+                    {t(`status.${appointment.status}`)}
+                  </span>
+                  <span className={`${getPriorityBadge(appointment.priority || 'normal')} small`}>
+                    {(appointment.priority || 'normal').toUpperCase()}
+                  </span>
+                </div>
               </div>
               
               <div className="mb-2">
@@ -2610,16 +2668,17 @@ const AppointmentsTab = () => (
         ))}
       </div>
 
-       {/* Desktop table layout */}
+      {/* Desktop table layout */}
       <div className="d-none d-lg-block">
         <div className="table-responsive">
           <table className="table table-hover align-middle">
             <thead>
               <tr>
                 <th style={{ width: '25%' }}>{t('common.patient')}</th>
-                <th style={{ width: '15%' }}>Date</th>
-                <th style={{ width: '12%' }}>Time</th>
-                <th style={{ width: '25%' }}>{t('appointments.reason')}</th>
+                <th style={{ width: '12%' }}>Date</th>
+                <th style={{ width: '10%' }}>Time</th>
+                <th style={{ width: '20%' }}>{t('appointments.reason')}</th>
+                <th style={{ width: '10%' }}>Priority</th>
                 <th style={{ width: '13%' }}>{t('common.status')}</th>
                 <th style={{ width: '10%' }} className="text-center">{t('common.actions')}</th>
               </tr>
@@ -2670,6 +2729,12 @@ const AppointmentsTab = () => (
                     <div className="text-truncate" style={{ maxWidth: '200px' }} title={appointment.reason}>
                       {appointment.reason}
                     </div>
+                  </td>
+                  
+                  <td>
+                    <span className={getPriorityBadge(appointment.priority || 'normal')}>
+                      {(appointment.priority || 'normal').toUpperCase()}
+                    </span>
                   </td>
                   
                   <td>
@@ -3064,453 +3129,328 @@ const AppointmentsTab = () => (
     gradient: 'linear-gradient(135deg, #af1e1eff 0%, #c33939ff 100%)'
   };
 
+  
+
   // Navigation
   // Updated Navigation Component for DoctorDashboard.tsx with white background and user dropdown
 
-const Navigation = () => (
-  <nav 
-    className="navbar navbar-expand-lg navbar-light"
-    style={{
-      background: 'white',
-      border: 'none',
-      borderBottom: 'none',
-      boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
-      position: 'fixed',
-      top: 0,
-      left: 0,
-      right: 0,
-      zIndex: 1030,
-      minHeight: '70px', // Reduced height for mobile
-      padding: '0.5rem 1rem' // Better mobile padding
-    }}
-  >
-    <div className="container-fluid px-2 px-md-3">
-      {/* Logo - Mobile optimized */}
-      <div 
-        className="navbar-brand me-2"
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          color: '#333',
-          fontSize: '0.9rem' // Smaller on mobile
-        }}
-      >
-        <img
-          src="/logo6.png"
-          alt="Final International University"
+// Professional Sidebar Component for Doctor Dashboard
+const Sidebar = () => {
+  const menuItems = [
+    { id: 'dashboard', icon: BarChart3, label: t('nav.overview', 'Overview') },
+    { id: 'appointments', icon: Calendar, label: t('nav.appointments', 'Appointments') },
+    { id: 'patients', icon: Users, label: t('nav.patients', 'Patients') },
+    { id: 'prescriptions', icon: Pill, label: t('nav.prescriptions', 'Prescriptions') },
+    { id: 'profile', icon: User, label: t('nav.profile', 'Profile') },
+  ];
+
+  return (
+    <>
+      {/* Mobile Overlay */}
+      {sidebarOpen && window.innerWidth < 768 && (
+        <div
           style={{
-            width: '35px', // Smaller logo on mobile
-            height: '35px',
-            borderRadius: '6px',
-            objectFit: 'cover',
-            marginRight: '8px'
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: 'rgba(0, 0, 0, 0.6)',
+            zIndex: 1040,
+            backdropFilter: 'blur(2px)',
           }}
-          className="d-none d-sm-block" // Hide on very small screens
+          onClick={() => setSidebarOpen(false)}
         />
-        <div>
-          <h5 
-            style={{
-              color: '#333',
-              fontWeight: 600,
-              margin: 0,
-              fontSize: 'clamp(0.9rem, 2.5vw, 1.25rem)', // Responsive font size
-              lineHeight: 1.2
-            }}
-            className="d-none d-md-block" // Hide brand text on mobile
-          >
-            {t('login.brand_name')}
-          </h5>
-          <small 
-            style={{
-              color: '#666',
-              fontSize: 'clamp(0.7rem, 2vw, 0.85rem)'
-            }}
-            className="d-none d-lg-block" // Hide subtitle on tablet and below
-          >
-            {t('nav.medical_portal')}
-          </small>
-        </div>
-      </div>
+      )}
 
-      {/* Mobile menu toggle */}
-      <button 
-        className="navbar-toggler border-0 p-1" 
-        type="button" 
-        data-bs-toggle="collapse" 
-        data-bs-target="#navbarContent"
-        aria-controls="navbarContent" 
-        aria-expanded="false" 
-        aria-label="Toggle navigation"
+      {/* Sidebar */}
+      <div
         style={{
-          boxShadow: 'none',
-          outline: 'none'
-        }}
-      >
-        <span className="navbar-toggler-icon"></span>
-      </button>
-
-      {/* Navigation Menu */}
-      <div className="collapse navbar-collapse" id="navbarContent">
-        <ul 
-        className="navbar-nav mx-auto mb-0" 
-        style={{ 
+          position: 'fixed',
+          top: 0,
+          left: window.innerWidth < 768 ? (sidebarOpen ? 0 : '-300px') : 0,
+          bottom: 0,
+          width: sidebarCollapsed && window.innerWidth >= 768 ? '85px' : '280px',
+          background: '#1a1d29',
+          boxShadow: '4px 0 24px rgba(0, 0, 0, 0.12)',
+          transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+          zIndex: 1050,
           display: 'flex',
-          alignItems: 'center',
-          gap: '8px' // Consistent gap between nav items
+          flexDirection: 'column',
+          overflow: 'hidden',
         }}
       >
-          <li className="nav-item">
-            <button
-              className={`nav-link btn ${activeTab === 'dashboard' ? 'active' : ''}`}
-              onClick={() => setActiveTab('dashboard')}
-              style={{
-                color: activeTab === 'dashboard' ? '#dc3545' : '#666',
-                background: activeTab === 'dashboard' ? 'rgba(220, 53, 69, 0.1)' : 'none',
-                border: 'none',
-                padding: '8px 16px',
-                borderRadius: '8px',
-                transition: 'all 0.3s ease',
-                margin: '0 4px',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '6px',
-                minWidth: '120px', // Ensure consistent button width
-                fontWeight: activeTab === 'dashboard' ? 600 : 'normal',
-                justifyContent: 'center'
-              }}
-              onMouseEnter={(e) => {
-                if (activeTab !== 'dashboard') {
-                  e.currentTarget.style.color = '#dc3545';
-                  e.currentTarget.style.background = 'rgba(220, 53, 69, 0.05)';
-                }
-              }}
-              onMouseLeave={(e) => {
-                if (activeTab !== 'dashboard') {
-                  e.currentTarget.style.color = '#666';
-                  e.currentTarget.style.background = 'none';
-                }
-              }}
-            >
-              <BarChart3 size={16} className="me-1" />
-              {t('nav.overview')}
-            </button>
-          </li>
-          <li className="nav-item">
-            <button
-              className={`nav-link btn ${activeTab === 'appointments' ? 'active' : ''}`}
-              onClick={() => setActiveTab('appointments')}
-              style={{
-                color: activeTab === 'appointments' ? '#dc3545' : '#666',
-                background: activeTab === 'appointments' ? 'rgba(220, 53, 69, 0.1)' : 'none',
-                border: 'none',
-                padding: '8px 16px',
-                borderRadius: '8px',
-                transition: 'all 0.3s ease',
-                margin: '0 4px',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '6px',
-                minWidth: '120px',
-                justifyContent: 'center',
-                fontWeight: activeTab === 'appointments' ? 600 : 'normal'
-              }}
-              onMouseEnter={(e) => {
-                if (activeTab !== 'appointments') {
-                  e.currentTarget.style.color = '#dc3545';
-                  e.currentTarget.style.background = 'rgba(220, 53, 69, 0.05)';
-                }
-              }}
-              onMouseLeave={(e) => {
-                if (activeTab !== 'appointments') {
-                  e.currentTarget.style.color = '#666';
-                  e.currentTarget.style.background = 'none';
-                }
-              }}
-            >
-              <Calendar size={16} className="me-1" />
-              {t('nav.appointments')}
-            </button>
-          </li>
-          <li className="nav-item">
-            <button
-              className={`nav-link btn ${activeTab === 'patients' ? 'active' : ''}`}
-              onClick={() => setActiveTab('patients')}
-              style={{
-                color: activeTab === 'patients' ? '#dc3545' : '#666',
-                background: activeTab === 'patients' ? 'rgba(220, 53, 69, 0.1)' : 'none',
-                border: 'none',
-                padding: '8px 16px',
-                borderRadius: '8px',
-                transition: 'all 0.3s ease',
-                margin: '0 4px',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '6px',
-                minWidth: '120px',
-                justifyContent: 'center',
-                fontWeight: activeTab === 'patients' ? 600 : 'normal'
-              }}
-              onMouseEnter={(e) => {
-                if (activeTab !== 'patients') {
-                  e.currentTarget.style.color = '#dc3545';
-                  e.currentTarget.style.background = 'rgba(220, 53, 69, 0.05)';
-                }
-              }}
-              onMouseLeave={(e) => {
-                if (activeTab !== 'patients') {
-                  e.currentTarget.style.color = '#666';
-                  e.currentTarget.style.background = 'none';
-                }
-              }}
-            >
-              <Users size={16} className="me-1" />
-              {t('nav.patients')}
-            </button>
-          </li>
-          <li className="nav-item">
-            <button
-              className={`nav-link btn ${activeTab === 'prescriptions' ? 'active' : ''}`}
-              onClick={() => setActiveTab('prescriptions')}
-              style={{
-                color: activeTab === 'prescriptions' ? '#dc3545' : '#666',
-                background: activeTab === 'prescriptions' ? 'rgba(220, 53, 69, 0.1)' : 'none',
-                border: 'none',
-                padding: '8px 16px',
-                borderRadius: '8px',
-                transition: 'all 0.3s ease',
-                margin: '0 4px',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '6px',
-                minWidth: '120px',
-                justifyContent: 'center',
-                fontWeight: activeTab === 'prescriptions' ? 600 : 'normal'
-              }}
-              onMouseEnter={(e) => {
-                if (activeTab !== 'prescriptions') {
-                  e.currentTarget.style.color = '#dc3545';
-                  e.currentTarget.style.background = 'rgba(220, 53, 69, 0.05)';
-                }
-              }}
-              onMouseLeave={(e) => {
-                if (activeTab !== 'prescriptions') {
-                  e.currentTarget.style.color = '#666';
-                  e.currentTarget.style.background = 'none';
-                }
-              }}
-            >
-              <Pill size={16} className="me-1" />
-              {t('nav.medications')}
-            </button>
-          </li>
-          <li className="nav-item">
-  <button
-    className={`nav-link btn ${activeTab === 'profile' ? 'active' : ''}`}
-    onClick={() => setActiveTab('profile')}
-    style={{
-      color: activeTab === 'profile' ? '#dc3545' : '#666',
-      background: activeTab === 'profile' ? 'rgba(220, 53, 69, 0.1)' : 'none',
-      border: 'none',
-      padding: '8px 16px',
-      borderRadius: '8px',
-      transition: 'all 0.3s ease',
-      margin: '0 4px',
-      display: 'flex',
-      alignItems: 'center',
-      gap: '6px',
-      minWidth: '120px',
-      justifyContent: 'center',
-      fontWeight: activeTab === 'profile' ? 600 : 'normal'
-    }}
-  >
-    <Settings size={16} className="me-1" />
-    Profile
-  </button>
-</li>
-        </ul>
-        
-        {/* Right side: User Dropdown with Language inside */}
-<div className="d-flex align-items-center ms-auto">
-  {/* User Profile Dropdown */}
-  <div className="dropdown">
-    <button 
-      className="btn btn-light dropdown-toggle d-flex align-items-center" 
-      data-bs-toggle="dropdown"
-      style={{ 
-        borderRadius: '25px',
-        border: '2px solid #e0e0e0',
-        padding: '8px 16px',
-        background: 'white',
-        color: '#333'
-      }}
-      onMouseEnter={(e) => {
-        e.currentTarget.style.background = '#f8f9fa';
-        e.currentTarget.style.borderColor = '#d0d0d0';
-      }}
-      onMouseLeave={(e) => {
-        e.currentTarget.style.background = 'white';
-        e.currentTarget.style.borderColor = '#e0e0e0';
-      }}
-    >
-      <div 
-        className="rounded-circle me-2 d-flex align-items-center justify-content-center"
-        style={{
-          width: '32px',
-          height: '32px',
-          backgroundColor: doctorProfile.avatar_url ? 'transparent' : '#dc3545',
-          color: 'white',
-          overflow: 'hidden'
-        }}
-      >
-        {doctorProfile.avatar_url ? (
-          <img 
-            src={doctorProfile.avatar_url}
-            alt="Profile" 
-            style={{
-              width: '32px',
-              height: '32px',
-              borderRadius: '50%',
-              objectFit: 'cover'
-            }}
-          />
-        ) : (
-          <User size={18} />
-        )}
-      </div>
-      {/* Removed name display */}
-    </button>
-    <ul 
-      className="dropdown-menu dropdown-menu-end" 
-      style={{ 
-        minWidth: '280px',
-        border: 'none',
-        boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
-        borderRadius: '12px',
-        padding: '8px 0'
-      }}
-    >
-      {/* User Info Header */}
-      <li 
-        className="dropdown-header"
-        style={{
-          padding: '16px 20px 16px 20px',
-          backgroundColor: '#f8f9fa',
-          borderBottom: '1px solid #e9ecef',
-          marginBottom: '8px',
-          borderTopLeftRadius: '12px',
-          borderTopRightRadius: '12px'
-        }}
-      >
-        <div className="d-flex align-items-center">
-          <div 
-            className="rounded-circle me-3 d-flex align-items-center justify-content-center"
-            style={{
-              width: '40px',
-              height: '40px',
-              backgroundColor: doctorProfile.avatar_url ? 'transparent' : '#dc3545',
-              color: 'white',
-              overflow: 'hidden'
-            }}
-          >
-            {doctorProfile.avatar_url ? (
-              <img 
-                src={doctorProfile.avatar_url}
-                alt="Profile" 
+        {/* Header */}
+        <div
+          style={{
+            padding: sidebarCollapsed && window.innerWidth >= 768 ? '24px 16px' : '24px',
+            borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            background: 'linear-gradient(135deg, #1e2230 0%, #1a1d29 100%)',
+            minHeight: '80px',
+          }}
+        >
+          {!(sidebarCollapsed && window.innerWidth >= 768) ? (
+            <div style={{ display: 'flex', alignItems: 'center', flex: 1 }}>
+              <div
                 style={{
-                  width: '40px',
-                  height: '40px',
-                  borderRadius: '50%',
-                  objectFit: 'cover'
+                  width: '48px',
+                  height: '48px',
+                  borderRadius: '12px',
+                  background: 'linear-gradient(135deg, #dc3545 0%, #c82333 100%)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  marginRight: '14px',
+                  boxShadow: '0 4px 12px rgba(220, 53, 69, 0.3)',
+                  overflow: 'hidden',
                 }}
-              />
-            ) : (
-              <User size={20} />
-            )}
-          </div>
-          <div>
-            <div className="fw-semibold">Dr. {user.name}</div>
-            <small className="text-muted">{user.email}</small>
-            <div>
-              <small className="text-muted">{t('dashboard.specialization')}: {user.specialization}</small>
+              >
+                <img
+                  src="/logo6.png"
+                  alt="FIU Logo"
+                  style={{
+                    width: '32px',
+                    height: '32px',
+                    objectFit: 'cover',
+                  }}
+                />
+              </div>
+              <div>
+                <h6 style={{ color: '#ffffff', margin: 0, fontSize: '1.05rem', fontWeight: 700 }}>
+                  FIU Medical
+                </h6>
+                <small style={{ color: 'rgba(255, 255, 255, 0.6)', fontSize: '0.8rem', fontWeight: 500 }}>
+                  Doctor Portal
+                </small>
+              </div>
             </div>
-          </div>
+          ) : (
+            <div
+              style={{
+                width: '48px',
+                height: '48px',
+                borderRadius: '12px',
+                background: 'linear-gradient(135deg, #dc3545 0%, #c82333 100%)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                boxShadow: '0 4px 12px rgba(220, 53, 69, 0.3)',
+                margin: '0 auto',
+              }}
+            >
+              <img src="/logo6.png" alt="FIU Logo" style={{ width: '32px', height: '32px', objectFit: 'cover' }} />
+            </div>
+          )}
+
+          {window.innerWidth >= 768 && (
+            <button
+              onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+              style={{
+                background: 'linear-gradient(135deg, rgba(220, 53, 69, 0.15) 0%, rgba(200, 35, 51, 0.15) 100%)',
+                border: '1px solid rgba(220, 53, 69, 0.3)',
+                borderRadius: '10px',
+                width: '36px',
+                height: '36px',
+                color: '#dc3545',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                fontSize: '0.9rem',
+                fontWeight: 700,
+                boxShadow: '0 2px 8px rgba(220, 53, 69, 0.2)',
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.background = 'linear-gradient(135deg, rgba(220, 53, 69, 0.25) 0%, rgba(200, 35, 51, 0.25) 100%)';
+                e.currentTarget.style.transform = 'scale(1.05)';
+                e.currentTarget.style.boxShadow = '0 4px 12px rgba(220, 53, 69, 0.3)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.background = 'linear-gradient(135deg, rgba(220, 53, 69, 0.15) 0%, rgba(200, 35, 51, 0.15) 100%)';
+                e.currentTarget.style.transform = 'scale(1)';
+                e.currentTarget.style.boxShadow = '0 2px 8px rgba(220, 53, 69, 0.2)';
+              }}
+            >
+              {sidebarCollapsed ? '»' : '«'}
+            </button>
+          )}
         </div>
-      </li>
-      
-      {/* Language Selection */}
-      <li>
-        <h6 className="dropdown-header" style={{ padding: '12px 20px 8px 20px', margin: 0, color: '#6c757d', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-          Language
-        </h6>
-      </li>
-      <li>
-        <button 
-          className="dropdown-item d-flex align-items-center"
+
+        {/* Menu */}
+        <nav style={{ flex: 1, overflowY: 'auto', padding: sidebarCollapsed && window.innerWidth >= 768 ? '16px 8px' : '20px 16px' }}>
+          {!(sidebarCollapsed && window.innerWidth >= 768) && (
+            <div style={{ color: 'rgba(255, 255, 255, 0.5)', fontSize: '0.75rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '12px', paddingLeft: '12px' }}>
+              Main Menu
+            </div>
+          )}
+
+          {menuItems.map((item) => {
+            const Icon = item.icon;
+            const isActive = activeTab === item.id;
+
+            return (
+              <button
+                key={item.id}
+                onClick={() => {
+                  setActiveTab(item.id);
+                  if (window.innerWidth < 768) setSidebarOpen(false);
+                }}
+                style={{
+                  width: '100%',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: sidebarCollapsed && window.innerWidth >= 768 ? 'center' : 'space-between',
+                  padding: sidebarCollapsed && window.innerWidth >= 768 ? '14px' : '14px 16px',
+                  marginBottom: '6px',
+                  background: isActive ? 'linear-gradient(135deg, rgba(220, 53, 69, 0.15) 0%, rgba(200, 35, 51, 0.15) 100%)' : 'transparent',
+                  border: isActive ? '1px solid rgba(220, 53, 69, 0.3)' : '1px solid transparent',
+                  borderRadius: '10px',
+                  color: isActive ? '#dc3545' : 'rgba(255, 255, 255, 0.75)',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+                  fontSize: '0.95rem',
+                  fontWeight: isActive ? 600 : 500,
+                  position: 'relative',
+                }}
+                onMouseEnter={(e) => {
+                  if (!isActive) {
+                    e.currentTarget.style.background = 'rgba(255, 255, 255, 0.06)';
+                    e.currentTarget.style.color = '#ffffff';
+                    e.currentTarget.style.transform = 'translateX(4px)';
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  if (!isActive) {
+                    e.currentTarget.style.background = 'transparent';
+                    e.currentTarget.style.color = 'rgba(255, 255, 255, 0.75)';
+                    e.currentTarget.style.transform = 'translateX(0)';
+                  }
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center' }}>
+                  <Icon size={20} />
+                  {!(sidebarCollapsed && window.innerWidth >= 768) && (
+                    <span style={{ marginLeft: '14px' }}>{item.label}</span>
+                  )}
+                </div>
+                {isActive && (
+                  <div
+                    style={{
+                      position: 'absolute',
+                      left: 0,
+                      top: '50%',
+                      transform: 'translateY(-50%)',
+                      width: '4px',
+                      height: '60%',
+                      background: 'linear-gradient(180deg, #dc3545 0%, #c82333 100%)',
+                      borderRadius: '0 4px 4px 0',
+                    }}
+                  />
+                )}
+              </button>
+            );
+          })}
+        </nav>
+
+        {/* User Profile */}
+        <div
           style={{
-            padding: '12px 20px',
-            transition: 'background-color 0.2s ease'
+            padding: sidebarCollapsed && window.innerWidth >= 768 ? '16px 12px' : '20px',
+            borderTop: '1px solid rgba(255, 255, 255, 0.08)',
+            background: 'linear-gradient(180deg, transparent 0%, rgba(0, 0, 0, 0.2) 100%)',
           }}
-          onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f8f9fa'}
-          onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
-          onClick={() => i18n.changeLanguage('en')}
         >
-          <Globe size={16} className="me-3" />
-          <div className="flex-grow-1 d-flex justify-content-between align-items-center">
-            <span>🇺🇸 English</span>
-            {i18n.language === 'en' && (
-              <CheckCircle size={16} className="text-success" />
-            )}
-          </div>
-        </button>
-      </li>
-      <li>
-        <button 
-          className="dropdown-item d-flex align-items-center"
-          style={{
-            padding: '12px 20px',
-            transition: 'background-color 0.2s ease'
-          }}
-          onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f8f9fa'}
-          onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
-          onClick={() => i18n.changeLanguage('tr')}
-        >
-          <Globe size={16} className="me-3" />
-          <div className="flex-grow-1 d-flex justify-content-between align-items-center">
-            <span>🇹🇷 Türkçe</span>
-            {i18n.language === 'tr' && (
-              <CheckCircle size={16} className="text-success" />
-            )}
-          </div>
-        </button>
-      </li>
-      
-      <li><hr className="dropdown-divider" style={{ margin: '8px 0' }} /></li>
-      
-      {/* Logout */}
-      <li>
-        {onLogout && (
-          <button 
-            className="dropdown-item d-flex align-items-center text-danger" 
-            onClick={onLogout}
-            style={{
-              padding: '12px 20px',
-              transition: 'background-color 0.2s ease'
-            }}
-            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f8f9fa'}
-            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
-          >
-            <LogOut size={16} className="me-3" />
-            {t('nav.logout')}
-          </button>
-        )}
-      </li>
-    </ul>
-  </div>
-</div>
+          {!(sidebarCollapsed && window.innerWidth >= 768) ? (
+            <div className="dropdown dropup w-100">
+              <button
+                className="btn w-100 text-start"
+                data-bs-toggle="dropdown"
+                style={{
+                  background: 'rgba(255, 255, 255, 0.06)',
+                  border: '1px solid rgba(255, 255, 255, 0.1)',
+                  color: 'white',
+                  padding: '14px 16px',
+                  borderRadius: '12px',
+                  display: 'flex',
+                  alignItems: 'center',
+                }}
+              >
+                <div
+                  style={{
+                    width: '40px',
+                    height: '40px',
+                    borderRadius: '10px',
+                    background: 'linear-gradient(135deg, #dc3545 0%, #c82333 100%)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    marginRight: '12px',
+                    fontSize: '1.1rem',
+                    fontWeight: 700,
+                  }}
+                >
+                  {user?.name?.charAt(0).toUpperCase() || 'D'}
+                </div>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: '0.95rem', fontWeight: 600 }}>
+                    {user?.name || 'Doctor'}
+                  </div>
+                  <small style={{ opacity: 0.7, fontSize: '0.75rem' }}>
+                    {doctorProfile?.specialization || 'Medical Doctor'}
+                  </small>
+                </div>
+                <Settings size={18} style={{ opacity: 0.6 }} />
+              </button>
+
+              <ul className="dropdown-menu dropdown-menu-end">
+                <li><h6 className="dropdown-header">Language</h6></li>
+                <li>
+                  <button className="dropdown-item" onClick={() => i18n.changeLanguage('en')}>
+                    <Globe size={16} className="me-2" />
+                    🇺🇸 English
+                  </button>
+                </li>
+                <li>
+                  <button className="dropdown-item" onClick={() => i18n.changeLanguage('tr')}>
+                    <Globe size={16} className="me-2" />
+                    🇹🇷 Türkçe
+                  </button>
+                </li>
+                <li><hr className="dropdown-divider" /></li>
+                <li>
+                  <button className="dropdown-item text-danger" onClick={onLogout}>
+                    <LogOut size={16} className="me-2" />
+                    Logout
+                  </button>
+                </li>
+              </ul>
+            </div>
+          ) : (
+            <button
+              onClick={onLogout}
+              title="Logout"
+              style={{
+                width: '100%',
+                background: 'rgba(220, 53, 69, 0.15)',
+                border: '1px solid rgba(220, 53, 69, 0.3)',
+                color: '#dc3545',
+                padding: '12px',
+                borderRadius: '10px',
+                cursor: 'pointer',
+              }}
+            >
+              <LogOut size={20} />
+            </button>
+          )}
+        </div>
       </div>
-    </div>
-  </nav>
-);
+    </>
+  );
+};
 
   // Message Alert
   const MessageAlert = () => (
@@ -3528,8 +3468,53 @@ const Navigation = () => (
 
   // Main render
    return (
-    <div className="min-vh-100" style={{ backgroundColor: '#f8f9fa', paddingTop: '90px' }}>
-      <Navigation />
+  <div className="min-vh-100" style={{ backgroundColor: '#f8f9fa', display: 'flex' }}>
+    {/* Sidebar */}
+    <Sidebar />
+
+    {/* Mobile Header */}
+    <div
+      style={{
+        position: 'fixed',
+        top: 0,
+        left: 0,
+        right: 0,
+        height: '60px',
+        background: 'white',
+        boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+        display: window.innerWidth < 768 ? 'flex' : 'none',
+        alignItems: 'center',
+        padding: '0 20px',
+        zIndex: 1030,
+        paddingTop: '40px',
+      }}
+    >
+      <button
+        onClick={() => setSidebarOpen(!sidebarOpen)}
+        style={{
+          background: 'none',
+          border: 'none',
+          fontSize: '1.5rem',
+          cursor: 'pointer',
+          padding: '5px',
+        }}
+      >
+        ☰
+      </button>
+      <h6 style={{ margin: 0, marginLeft: '15px', fontWeight: 600 }}>
+        FIU Medical
+      </h6>
+    </div>
+
+    {/* Main Content Wrapper */}
+    <div
+      style={{
+        flex: 1,
+        marginLeft: window.innerWidth >= 768 ? (sidebarCollapsed ? '85px' : '280px') : '0',
+        paddingTop: window.innerWidth < 768 ? '60px' : '0',
+        transition: 'margin-left 0.3s ease',
+      }}
+    >
 
       {/* URGENT CASES ALERT BANNER */}
       {urgentRequests.length > 0 && (
@@ -4109,18 +4094,26 @@ const Navigation = () => (
               </div>
               
               <div className="row">
-                <div className="col-md-6 mb-3">
+                <div className="col-md-4 mb-3">
                   <label className="form-label fw-semibold text-muted small">DATE</label>
                   <div className="fw-semibold">
                     <Calendar size={16} className="me-2" />
                     {formatDate(selectedAppointment.date)}
                   </div>
                 </div>
-                <div className="col-md-6 mb-3">
+                <div className="col-md-4 mb-3">
                   <label className="form-label fw-semibold text-muted small">TIME</label>
                   <div className="fw-semibold">
                     <Clock size={16} className="me-2" />
                     {formatTime(selectedAppointment.time)}
+                  </div>
+                </div>
+                <div className="col-md-4 mb-3">
+                  <label className="form-label fw-semibold text-muted small">PRIORITY</label>
+                  <div>
+                    <span className={getPriorityBadge(selectedAppointment.priority || 'normal')}>
+                      {(selectedAppointment.priority || 'normal').toUpperCase()}
+                    </span>
                   </div>
                 </div>
               </div>
@@ -5334,7 +5327,7 @@ const Navigation = () => (
       </div>
     </div>
 
-    
+    </div>
   );
 };
 

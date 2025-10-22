@@ -287,26 +287,50 @@ public function cancelAppointment(Request $request, $id): JsonResponse
         $appointment = Appointment::where('doctor_id', $request->user()->id)
             ->findOrFail($id);
 
-        // Update appointment status
-        $appointment->update([
-            'status' => 'cancelled',
+        // Store original doctor info before updating
+        $originalDoctor = $appointment->doctor;
+
+        // Update appointment for reassignment
+        $updateData = [
+            'status' => 'pending', // Change to pending for clinical staff to reassign
             'cancellation_reason' => $validated['cancellation_reason'],
             'cancelled_by' => $request->user()->id,
-            'cancelled_at' => now()
-        ]);
+            'cancelled_at' => now(),
+            'needs_reassignment' => $validated['send_to_clinical_staff'] ?? true,
+        ];
+
+        // If sending to clinical staff, remove doctor assignment
+        if ($validated['send_to_clinical_staff'] ?? true) {
+            $updateData['doctor_id'] = null; // Unassign doctor
+        } else {
+            $updateData['status'] = 'cancelled'; // Fully cancel if not reassigning
+        }
+
+        $appointment->update($updateData);
 
         // Create notification for clinical staff
         if ($validated['send_to_clinical_staff'] ?? true) {
-            // You can implement a notification system here
-            // For now, we'll just log it
-            \Log::info("Appointment {$id} cancelled by doctor, clinical staff notified");
+            // Log for notification system
+            \Log::info("Appointment {$id} cancelled by Dr. {$originalDoctor->name}, sent to clinical staff for reassignment", [
+                'appointment_id' => $id,
+                'patient_id' => $appointment->patient_id,
+                'original_doctor_id' => $originalDoctor->id,
+                'cancellation_reason' => $validated['cancellation_reason'],
+                'priority' => $appointment->priority ?? 'normal'
+            ]);
+
+            // Trigger WebSocket event for real-time notification
+            event(new \App\Events\AppointmentNeedsReassignment($appointment));
         }
 
         DB::commit();
 
         return response()->json([
-            'message' => 'Appointment cancelled successfully',
-            'appointment' => $appointment->load(['patient', 'doctor'])
+            'message' => $validated['send_to_clinical_staff'] ?? true 
+                ? 'Appointment sent to clinical staff for reassignment' 
+                : 'Appointment cancelled successfully',
+            'appointment' => $appointment->load(['patient']),
+            'needs_reassignment' => $validated['send_to_clinical_staff'] ?? true
         ]);
 
     } catch (\Exception $e) {
@@ -681,7 +705,7 @@ public function getPatients(Request $request): JsonResponse
         $user = $request->user();
         $status = $validated['status'] ?? 'all';
 
-        $query = Appointment::with(['patient:id,name,student_id,email,phone,department', 'doctor:id,name']) // ← Add phone here
+        $query = Appointment::with(['patient:id,name,student_id,email,phone,department', 'doctor:id,name'])
             ->where('doctor_id', $user->id)
             ->orderBy('date', 'desc')
             ->orderBy('time');
@@ -699,13 +723,14 @@ public function getPatients(Request $request): JsonResponse
                     'date' => $appointment->date,
                     'time' => $appointment->time,
                     'status' => $appointment->status,
+                    'priority' => $appointment->priority ?? 'normal', // ADD THIS LINE
                     'reason' => $appointment->reason,
                     'patient' => $appointment->patient ? [
                         'id' => $appointment->patient->id,
                         'name' => $appointment->patient->name,
                         'student_id' => $appointment->patient->student_id,
                         'email' => $appointment->patient->email,
-                        'phone' => $appointment->patient->phone,  // ← Make sure this is included
+                        'phone' => $appointment->patient->phone,
                         'department' => $appointment->patient->department
                     ] : null,
                     'doctor' => $appointment->doctor ? $appointment->doctor->only(['id', 'name']) : null
@@ -717,6 +742,8 @@ public function getPatients(Request $request): JsonResponse
                 'confirmed' => $appointments->where('status', 'confirmed')->count(),
                 'completed' => $appointments->where('status', 'completed')->count(),
                 'cancelled' => $appointments->where('status', 'cancelled')->count(),
+                'urgent_cases' => $appointments->where('priority', 'urgent')->count(), // ADD THIS
+                'high_priority' => $appointments->where('priority', 'high')->count(), // ADD THIS
             ]
         ]);
     }

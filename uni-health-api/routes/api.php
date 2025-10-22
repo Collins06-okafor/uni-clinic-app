@@ -305,6 +305,9 @@ Route::middleware('auth:sanctum')->group(function () {
         // Urgent Queue
         Route::get('/urgent-queue', [ClinicalStaffController::class, 'getUrgentQueue']);
 
+        // Appointment reassignment
+        Route::post('appointments/{id}/reassign', [ClinicalStaffController::class, 'reassignAppointment']);
+
         // Student Requests
         Route::get('/student-requests', [ClinicalStaffController::class, 'getStudentRequests']);
         Route::post('/student-requests/{id}/assign', [ClinicalStaffController::class, 'assignStudentRequest']);

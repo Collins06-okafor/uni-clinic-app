@@ -108,6 +108,8 @@ const AcademicStaffDashboard: React.FC<AcademicStaffDashboardProps> = ({ user, o
   const { t } = useTranslation();
   
   const [activeTab, setActiveTab] = useState<string>('overview');
+  const [sidebarOpen, setSidebarOpen] = useState<boolean>(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(false);
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [medicalHistory, setMedicalHistory] = useState<MedicalRecord[]>([]);
   const [doctors, setDoctors] = useState<Doctor[]>([]);
@@ -845,473 +847,475 @@ const getCancelDisabledReason = (status: string): string => {
     return today.toISOString().split('T')[0];
   };
 
-  // Navigation component matching student dashboard style
-  const Navigation = () => (
-  <nav 
-    className="navbar navbar-expand-lg navbar-light"
-    style={{
-      position: 'fixed',
-      top: 0,
-      left: 0,
-      right: 0,
-      width: '100%',
-      zIndex: 1030,
-      background: 'white',
-      boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
-      border: 'none',
-      borderBottom: 'none',
-      minHeight: '70px', // Reduced for mobile
-      padding: 0,
-      margin: 0
-    }}
-  >
-    <div 
-      className="container-fluid d-flex align-items-center justify-content-between h-100"
-      style={{
-        padding: '0.5rem 1rem', // Better mobile padding
-        margin: 0
-      }}
-    >
-      {/* Logo Section - Mobile responsive */}
-      <div 
-        className="navbar-brand d-flex align-items-center"
-        style={{
-          marginRight: 0,
-          padding: 0,
-          minWidth: '200px' // Ensure logo is always visible
-        }}
-      >
-        <img
-          src="/logo6.png"
-          alt="Final International University Logo"
-          style={{
-            width: 'clamp(40px, 10vw, 50px)', // Responsive logo size
-            height: 'clamp(40px, 10vw, 50px)',
-            objectFit: 'contain',
-            borderRadius: '8px',
-            marginRight: 'clamp(8px, 2vw, 12px)' // Responsive spacing
-          }}
-        />
-        <div>
-          <h5 
-            style={{
-              color: '#212529',
-              fontWeight: 'bold',
-              fontSize: 'clamp(0.9rem, 3vw, 1.25rem)', // Responsive font size
-              marginBottom: '2px',
-              lineHeight: 1.2
-            }}
-            className="d-none d-sm-block" // Hide on very small screens
-          >
-            Final International University
-          </h5>
-          <h6 
-            style={{
-              color: '#212529',
-              fontWeight: 'bold',
-              fontSize: '0.9rem',
-              marginBottom: '2px',
-              lineHeight: 1.2
-            }}
-            className="d-block d-sm-none" // Show abbreviated name on small screens
-          >
-            FIU Academic
-          </h6>
-          <small 
-            style={{
-              color: '#6c757d',
-              fontSize: 'clamp(0.7rem, 2vw, 0.875rem)',
-              lineHeight: 1
-            }}
-            className="d-none d-md-block" // Hide subtitle on mobile
-          >
-            Academic Staff Medical Portal
-          </small>
-        </div>
-      </div>
-
-      {/* Mobile menu toggle */}
-      <button 
-        className="navbar-toggler d-lg-none border-0" 
-        type="button" 
-        data-bs-toggle="collapse" 
-        data-bs-target="#navbarContent"
-        aria-controls="navbarContent" 
-        aria-expanded="false" 
-        aria-label="Toggle navigation"
-        style={{
-          padding: '4px 8px',
-          fontSize: '1rem'
-        }}
-      >
-        <span className="navbar-toggler-icon"></span>
-      </button>
-
-        {/* Navigation Menu */}
-        <div className="collapse navbar-collapse" id="navbarContent">
-          <ul 
-            className="navbar-nav mx-auto mb-0" 
-            style={{ 
-              display: 'flex',
-              alignItems: 'center',
-              gap: '8px'
-            }}
-          >
-            <li className="nav-item">
-              <button 
-                className={`nav-link btn ${activeTab === 'overview' ? 'active' : ''}`}
-                onClick={() => setActiveTab('overview')}
-                style={{
-                  borderRadius: '8px',
-                  border: 'none',
-                  margin: 0,
-                  padding: '10px 16px',
-                  fontWeight: 600,
-                  transition: 'all 0.3s ease',
-                  backgroundColor: activeTab === 'overview' ? '#dc3545' : 'transparent',
-                  color: activeTab === 'overview' ? 'white' : '#495057',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                  minHeight: '44px'
-                }}
-                onMouseEnter={(e) => {
-                  if (activeTab !== 'overview') {
-                    e.currentTarget.style.backgroundColor = 'rgba(220, 53, 69, 0.1)';
-                    e.currentTarget.style.color = '#dc3545';
-                  }
-                }}
-                onMouseLeave={(e) => {
-                  if (activeTab !== 'overview') {
-                    e.currentTarget.style.backgroundColor = 'transparent';
-                    e.currentTarget.style.color = '#495057';
-                  }
-                }}
-              >
-                <BarChart3 size={18} />
-                <span>Overview</span>
-              </button>
-            </li>
-            
-            <li className="nav-item">
-              <button 
-                className={`nav-link btn ${activeTab === 'schedule' ? 'active' : ''}`}
-                onClick={() => setActiveTab('schedule')}
-                style={{
-                  borderRadius: '8px',
-                  border: 'none',
-                  margin: 0,
-                  padding: '10px 16px',
-                  fontWeight: 600,
-                  transition: 'all 0.3s ease',
-                  backgroundColor: activeTab === 'schedule' ? '#dc3545' : 'transparent',
-                  color: activeTab === 'schedule' ? 'white' : '#495057',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                  minHeight: '44px'
-                }}
-                onMouseEnter={(e) => {
-                  if (activeTab !== 'schedule') {
-                    e.currentTarget.style.backgroundColor = 'rgba(220, 53, 69, 0.1)';
-                    e.currentTarget.style.color = '#dc3545';
-                  }
-                }}
-                onMouseLeave={(e) => {
-                  if (activeTab !== 'schedule') {
-                    e.currentTarget.style.backgroundColor = 'transparent';
-                    e.currentTarget.style.color = '#495057';
-                  }
-                }}
-              >
-                <Calendar size={18} />
-                <span>Schedule</span>
-              </button>
-            </li>
-            
-            <li className="nav-item">
-              <button 
-                className={`nav-link btn ${activeTab === 'appointments' ? 'active' : ''}`}
-                onClick={() => handleTabChange('appointments')}
-                style={{
-                  borderRadius: '8px',
-                  border: 'none',
-                  margin: 0,
-                  padding: '10px 16px',
-                  fontWeight: 600,
-                  transition: 'all 0.3s ease',
-                  backgroundColor: activeTab === 'appointments' ? '#dc3545' : 'transparent',
-                  color: activeTab === 'appointments' ? 'white' : '#495057',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                  minHeight: '44px'
-                }}
-                onMouseEnter={(e) => {
-                  if (activeTab !== 'appointments') {
-                    e.currentTarget.style.backgroundColor = 'rgba(220, 53, 69, 0.1)';
-                    e.currentTarget.style.color = '#dc3545';
-                  }
-                }}
-                onMouseLeave={(e) => {
-                  if (activeTab !== 'appointments') {
-                    e.currentTarget.style.backgroundColor = 'transparent';
-                    e.currentTarget.style.color = '#495057';
-                  }
-                }}
-              >
-                <FileText size={18} />
-                <span>Appointments</span>
-              </button>
-            </li>
-            
-            <li className="nav-item">
-              <button 
-                className={`nav-link btn ${activeTab === 'medical-history' ? 'active' : ''}`}
-                onClick={() => handleTabChange('medical-history')}
-                style={{
-                  borderRadius: '8px',
-                  border: 'none',
-                  margin: 0,
-                  padding: '10px 16px',
-                  fontWeight: 600,
-                  transition: 'all 0.3s ease',
-                  backgroundColor: activeTab === 'medical-history' ? '#dc3545' : 'transparent',
-                  color: activeTab === 'medical-history' ? 'white' : '#495057',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                  minHeight: '44px'
-                }}
-                onMouseEnter={(e) => {
-                  if (activeTab !== 'medical-history') {
-                    e.currentTarget.style.backgroundColor = 'rgba(220, 53, 69, 0.1)';
-                    e.currentTarget.style.color = '#dc3545';
-                  }
-                }}
-                onMouseLeave={(e) => {
-                  if (activeTab !== 'medical-history') {
-                    e.currentTarget.style.backgroundColor = 'transparent';
-                    e.currentTarget.style.color = '#495057';
-                  }
-                }}
-              >
-                <History size={18} />
-                <span>History</span>
-              </button>
-            </li>
-            
-            <li className="nav-item">
-              <button 
-                className={`nav-link btn ${activeTab === 'profile' ? 'active' : ''}`}
-                onClick={() => handleTabChange('profile')}
-                style={{
-                  borderRadius: '8px',
-                  border: 'none',
-                  margin: 0,
-                  padding: '10px 16px',
-                  fontWeight: 600,
-                  transition: 'all 0.3s ease',
-                  backgroundColor: activeTab === 'profile' ? '#dc3545' : 'transparent',
-                  color: activeTab === 'profile' ? 'white' : '#495057',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                  minHeight: '44px'
-                }}
-                onMouseEnter={(e) => {
-                  if (activeTab !== 'profile') {
-                    e.currentTarget.style.backgroundColor = 'rgba(220, 53, 69, 0.1)';
-                    e.currentTarget.style.color = '#dc3545';
-                  }
-                }}
-                onMouseLeave={(e) => {
-                  if (activeTab !== 'profile') {
-                    e.currentTarget.style.backgroundColor = 'transparent';
-                    e.currentTarget.style.color = '#495057';
-                  }
-                }}
-              >
-                <UserCog size={18} />
-                <span>Profile</span>
-              </button>
-            </li>
-          </ul>
-
-        {/* Right side controls */}
-        <div 
-          className="d-flex align-items-center"
-          style={{ 
-            gap: '12px',
-            minWidth: '200px',
-            justifyContent: 'flex-end'
-          }}
-        >
-          {/* User Profile Dropdown - Language moved inside */}
-          <div className="dropdown">
-            <button 
-              className="btn btn-light dropdown-toggle d-flex align-items-center" 
-              data-bs-toggle="dropdown"
-              style={{ 
-                borderRadius: '25px',
-                border: '2px solid #dee2e6',
-                padding: '6px 12px',
-                background: '#f8f9fa',
-                color: '#212529',
-                height: '40px'
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.background = '#e9ecef';
-                e.currentTarget.style.borderColor = '#ced4da';
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.background = '#f8f9fa';
-                e.currentTarget.style.borderColor = '#dee2e6';
-              }}
-            >
-              <div className="me-2">
-                <AvatarDisplay 
-                  src={userProfile.avatar_url} 
-                  size={28} 
-                />
-              </div>
-              {/* Removed name display */}
-            </button>
-            
-            <ul 
-              className="dropdown-menu dropdown-menu-end" 
-              style={{ 
-                minWidth: '280px',
-                border: 'none',
-                boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
-                borderRadius: '12px',
-                padding: '8px 0'
-              }}
-            >
-              {/* User Info Header */}
-              <li 
-                className="dropdown-header"
-                style={{
-                  padding: '16px 20px 16px 20px',
-                  backgroundColor: '#f8f9fa',
-                  borderBottom: '1px solid #e9ecef',
-                  marginBottom: '8px',
-                  borderTopLeftRadius: '12px',
-                  borderTopRightRadius: '12px'
-                }}
-              >
-                <div className="d-flex align-items-center">
-                  <div className="me-3">
-                    <AvatarDisplay 
-                      src={userProfile.avatar_url} 
-                      size={40} 
-                    />
-                  </div>
-                  <div>
-                    <div className="fw-semibold">{user.name}</div>
-                    <small className="text-muted">{user.email}</small>
-                    <div>
-                      <small className="text-muted">Staff No: {user.staff_no}</small>
-                    </div>
-                  </div>
-                </div>
-              </li>
-              
-              {/* Language Selection */}
-              <li>
-                <h6 className="dropdown-header" style={{ padding: '12px 20px 8px 20px', margin: 0, color: '#6c757d', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                  Language
-                </h6>
-              </li>
-              <li>
-                <button 
-                  className="dropdown-item d-flex align-items-center"
-                  style={{
-                    padding: '12px 20px',
-                    transition: 'background-color 0.2s ease'
-                  }}
-                  onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f8f9fa'}
-                  onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
-                  onClick={() => i18n.changeLanguage('en')}
-                >
-                  <Globe size={16} className="me-3" />
-                  <div className="flex-grow-1 d-flex justify-content-between align-items-center">
-                    <span>🇺🇸 English</span>
-                    {i18n.language === 'en' && (
-                      <CheckCircle size={16} className="text-success" />
-                    )}
-                  </div>
-                </button>
-              </li>
-              <li>
-                <button 
-                  className="dropdown-item d-flex align-items-center"
-                  style={{
-                    padding: '12px 20px',
-                    transition: 'background-color 0.2s ease'
-                  }}
-                  onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f8f9fa'}
-                  onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
-                  onClick={() => i18n.changeLanguage('tr')}
-                >
-                  <Globe size={16} className="me-3" />
-                  <div className="flex-grow-1 d-flex justify-content-between align-items-center">
-                    <span>🇹🇷 Türkçe</span>
-                    {i18n.language === 'tr' && (
-                      <CheckCircle size={16} className="text-success" />
-                    )}
-                  </div>
-                </button>
-              </li>
-              
-              <li><hr className="dropdown-divider" style={{ margin: '8px 0' }} /></li>
-              
-              {/* Logout */}
-              {onLogout && (
-                <li>
-                  <button 
-                    className="dropdown-item d-flex align-items-center text-danger" 
-                    onClick={onLogout}
-                    style={{
-                      padding: '12px 20px',
-                      transition: 'background-color 0.2s ease'
-                    }}
-                    onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f8f9fa'}
-                    onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
-                  >
-                    <LogOut size={16} className="me-3" />
-                    {t('nav.logout')}
-                  </button>
-                </li>
-              )}
-            </ul>
-          </div>
-        </div>
-        </div>
-      </div>
-    </nav>
-  );
+  // ==================== SIDEBAR COMPONENT ====================
+const Sidebar = () => {
+  const menuItems = [
+    { id: 'overview', icon: BarChart3, label: 'Dashboard' },
+    { id: 'schedule', icon: Calendar, label: 'Book Appointment' },
+    { id: 'appointments', icon: History, label: 'My Appointments' },
+    { id: 'medical-history', icon: FileText, label: 'Medical Records' },
+  ];
 
   return (
-    <div className="min-vh-100" style={{ backgroundColor: '#f8f9fa', paddingTop: '90px' }}>
-      <Navigation />
-      
-      <div className="container-fluid px-4">
-        {/* Message Display */}
-        {message.text && (
-          <div className={`alert ${message.type === 'success' ? 'alert-success' : 'alert-danger'} alert-dismissible fade show mb-4`} 
-               role="alert">
-            <div className="d-flex align-items-center">
-              {message.type === 'success' ? <CheckCircle size={20} className="me-2" /> : <X size={20} className="me-2" />}
-              {message.text}
+    <>
+      {sidebarOpen && window.innerWidth < 768 && (
+        <div
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: 'rgba(0, 0, 0, 0.6)',
+            zIndex: 1040,
+            backdropFilter: 'blur(2px)',
+          }}
+          onClick={() => setSidebarOpen(false)}
+        />
+      )}
+
+      <div
+        style={{
+          position: 'fixed',
+          top: 0,
+          left: window.innerWidth < 768 ? (sidebarOpen ? 0 : '-300px') : 0,
+          bottom: 0,
+          width: sidebarCollapsed && window.innerWidth >= 768 ? '85px' : '280px',
+          background: '#1a1d29',
+          boxShadow: '4px 0 24px rgba(0, 0, 0, 0.12)',
+          transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+          zIndex: 1050,
+          display: 'flex',
+          flexDirection: 'column',
+          overflow: 'hidden',
+        }}
+      >
+        <div
+          style={{
+            padding: sidebarCollapsed && window.innerWidth >= 768 ? '24px 16px' : '24px',
+            borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            background: 'linear-gradient(135deg, #1e2230 0%, #1a1d29 100%)',
+            minHeight: '80px',
+          }}
+        >
+          {!(sidebarCollapsed && window.innerWidth >= 768) ? (
+            <div style={{ display: 'flex', alignItems: 'center', flex: 1 }}>
+              <div
+                style={{
+                  width: '48px',
+                  height: '48px',
+                  borderRadius: '12px',
+                  background: 'linear-gradient(135deg, #dc3545 0%, #c82333 100%)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  marginRight: '14px',
+                  boxShadow: '0 4px 12px rgba(220, 53, 69, 0.3)',
+                }}
+              >
+                <img src="/logo6.png" alt="FIU Logo" style={{ width: '32px', height: '32px', objectFit: 'cover' }} />
+              </div>
+              <div>
+                <h6 style={{ color: '#ffffff', margin: 0, fontSize: '1.05rem', fontWeight: 700 }}>
+                  FIU Medical
+                </h6>
+                <small style={{ color: 'rgba(255, 255, 255, 0.6)', fontSize: '0.8rem' }}>
+                  Academic Staff Portal
+                </small>
+              </div>
             </div>
+          ) : (
+            <div
+              style={{
+                width: '48px',
+                height: '48px',
+                borderRadius: '12px',
+                background: 'linear-gradient(135deg, #dc3545 0%, #c82333 100%)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                margin: '0 auto',
+              }}
+            >
+              <img src="/logo6.png" alt="FIU Logo" style={{ width: '32px', height: '32px', objectFit: 'cover' }} />
+            </div>
+          )}
+
+          {window.innerWidth >= 768 && (
             <button
-              type="button"
-              className="btn-close"
-              onClick={() => setMessage({ type: '', text: '' })}
-            ></button>
-          </div>
-        )}
+              onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+              style={{
+                background: 'linear-gradient(135deg, rgba(220, 53, 69, 0.15) 0%, rgba(200, 35, 51, 0.15) 100%)',
+                border: '1px solid rgba(220, 53, 69, 0.3)',
+                borderRadius: '10px',
+                width: '36px',
+                height: '36px',
+                color: '#dc3545',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                transition: 'all 0.3s ease',
+              }}
+            >
+              {sidebarCollapsed ? '»' : '«'}
+            </button>
+          )}
+        </div>
+
+        <nav
+          style={{
+            flex: 1,
+            overflowY: 'auto',
+            overflowX: 'hidden',
+            padding: sidebarCollapsed && window.innerWidth >= 768 ? '16px 8px' : '20px 16px',
+          }}
+        >
+          {!(sidebarCollapsed && window.innerWidth >= 768) && (
+            <div
+              style={{
+                color: 'rgba(255, 255, 255, 0.5)',
+                fontSize: '0.75rem',
+                fontWeight: 600,
+                textTransform: 'uppercase',
+                letterSpacing: '0.08em',
+                marginBottom: '12px',
+                paddingLeft: '12px',
+              }}
+            >
+              Main Menu
+            </div>
+          )}
+
+          {menuItems.map((item) => {
+            const Icon = item.icon;
+            const isActive = activeTab === item.id;
+
+            return (
+              <button
+                key={item.id}
+                onClick={() => {
+                  setActiveTab(item.id);
+                  if (window.innerWidth < 768) setSidebarOpen(false);
+                }}
+                style={{
+                  width: '100%',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: sidebarCollapsed && window.innerWidth >= 768 ? 'center' : 'flex-start',
+                  padding: sidebarCollapsed && window.innerWidth >= 768 ? '14px' : '14px 16px',
+                  marginBottom: '6px',
+                  background: isActive
+                    ? 'linear-gradient(135deg, rgba(220, 53, 69, 0.15) 0%, rgba(200, 35, 51, 0.15) 100%)'
+                    : 'transparent',
+                  border: isActive ? '1px solid rgba(220, 53, 69, 0.3)' : '1px solid transparent',
+                  borderRadius: '10px',
+                  color: isActive ? '#dc3545' : 'rgba(255, 255, 255, 0.75)',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s ease',
+                  fontSize: '0.95rem',
+                  fontWeight: isActive ? 600 : 500,
+                  position: 'relative',
+                }}
+              >
+                <Icon size={20} style={{ minWidth: '20px' }} />
+                {!(sidebarCollapsed && window.innerWidth >= 768) && (
+                  <span style={{ marginLeft: '14px' }}>{item.label}</span>
+                )}
+                {isActive && (
+                  <div
+                    style={{
+                      position: 'absolute',
+                      left: 0,
+                      top: '50%',
+                      transform: 'translateY(-50%)',
+                      width: '4px',
+                      height: '60%',
+                      background: 'linear-gradient(180deg, #dc3545 0%, #c82333 100%)',
+                      borderRadius: '0 4px 4px 0',
+                    }}
+                  />
+                )}
+              </button>
+            );
+          })}
+
+          <div style={{ height: '1px', background: 'rgba(255, 255, 255, 0.08)', margin: '20px 0' }} />
+
+          <button
+            onClick={() => {
+              setActiveTab('profile');
+              if (window.innerWidth < 768) setSidebarOpen(false);
+            }}
+            style={{
+              width: '100%',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: sidebarCollapsed && window.innerWidth >= 768 ? 'center' : 'flex-start',
+              padding: sidebarCollapsed && window.innerWidth >= 768 ? '14px' : '14px 16px',
+              marginBottom: '6px',
+              background: activeTab === 'profile'
+                ? 'linear-gradient(135deg, rgba(220, 53, 69, 0.15) 0%, rgba(200, 35, 51, 0.15) 100%)'
+                : 'transparent',
+              border: activeTab === 'profile' ? '1px solid rgba(220, 53, 69, 0.3)' : '1px solid transparent',
+              borderRadius: '10px',
+              color: activeTab === 'profile' ? '#dc3545' : 'rgba(255, 255, 255, 0.75)',
+              cursor: 'pointer',
+              transition: 'all 0.2s ease',
+              fontSize: '0.95rem',
+              fontWeight: activeTab === 'profile' ? 600 : 500,
+            }}
+          >
+            <User size={20} />
+            {!(sidebarCollapsed && window.innerWidth >= 768) && (
+              <span style={{ marginLeft: '14px' }}>Profile</span>
+            )}
+          </button>
+        </nav>
+
+        <div
+          style={{
+            padding: sidebarCollapsed && window.innerWidth >= 768 ? '16px 12px' : '20px',
+            borderTop: '1px solid rgba(255, 255, 255, 0.08)',
+          }}
+        >
+          {!(sidebarCollapsed && window.innerWidth >= 768) ? (
+            <div>
+              <div
+                style={{
+                  background: 'rgba(255, 255, 255, 0.06)',
+                  border: '1px solid rgba(255, 255, 255, 0.1)',
+                  padding: '14px 16px',
+                  borderRadius: '12px',
+                  marginBottom: '12px',
+                  display: 'flex',
+                  alignItems: 'center',
+                }}
+              >
+                <div
+                  style={{
+                    width: '40px',
+                    height: '40px',
+                    borderRadius: '10px',
+                    background: 'linear-gradient(135deg, #dc3545 0%, #c82333 100%)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    marginRight: '12px',
+                    fontSize: '1.1rem',
+                    fontWeight: 700,
+                    color: 'white',
+                  }}
+                >
+                  {user?.name?.charAt(0).toUpperCase() || 'A'}
+                </div>
+                <div style={{ flex: 1, overflow: 'hidden' }}>
+                  <div
+                    style={{
+                      fontSize: '0.95rem',
+                      fontWeight: 600,
+                      color: 'white',
+                      whiteSpace: 'nowrap',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                    }}
+                  >
+                    {user?.name || 'Staff'}
+                  </div>
+                  <small style={{ color: 'rgba(255, 255, 255, 0.6)', fontSize: '0.75rem' }}>
+                    Academic Staff
+                  </small>
+                </div>
+              </div>
+
+              <div style={{ marginBottom: '12px' }}>
+                <div
+                  style={{
+                    color: 'rgba(255, 255, 255, 0.5)',
+                    fontSize: '0.7rem',
+                    fontWeight: 600,
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.08em',
+                    marginBottom: '8px',
+                    paddingLeft: '4px',
+                  }}
+                >
+                  Language
+                </div>
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  <button
+                    onClick={() => i18n.changeLanguage('en')}
+                    style={{
+                      flex: 1,
+                      background: i18n.language === 'en'
+                        ? 'linear-gradient(135deg, rgba(220, 53, 69, 0.2) 0%, rgba(200, 35, 51, 0.2) 100%)'
+                        : 'rgba(255, 255, 255, 0.05)',
+                      border: i18n.language === 'en' ? '1px solid rgba(220, 53, 69, 0.4)' : '1px solid rgba(255, 255, 255, 0.1)',
+                      color: i18n.language === 'en' ? '#dc3545' : 'rgba(255, 255, 255, 0.7)',
+                      padding: '8px 12px',
+                      borderRadius: '8px',
+                      cursor: 'pointer',
+                      transition: 'all 0.2s ease',
+                      fontSize: '0.85rem',
+                      fontWeight: i18n.language === 'en' ? 600 : 500,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '6px',
+                    }}
+                  >
+                    <Globe size={14} />
+                    <span>EN</span>
+                    {i18n.language === 'en' && <CheckCircle size={14} />}
+                  </button>
+
+                  <button
+                    onClick={() => i18n.changeLanguage('tr')}
+                    style={{
+                      flex: 1,
+                      background: i18n.language === 'tr'
+                        ? 'linear-gradient(135deg, rgba(220, 53, 69, 0.2) 0%, rgba(200, 35, 51, 0.2) 100%)'
+                        : 'rgba(255, 255, 255, 0.05)',
+                      border: i18n.language === 'tr' ? '1px solid rgba(220, 53, 69, 0.4)' : '1px solid rgba(255, 255, 255, 0.1)',
+                      color: i18n.language === 'tr' ? '#dc3545' : 'rgba(255, 255, 255, 0.7)',
+                      padding: '8px 12px',
+                      borderRadius: '8px',
+                      cursor: 'pointer',
+                      transition: 'all 0.2s ease',
+                      fontSize: '0.85rem',
+                      fontWeight: i18n.language === 'tr' ? 600 : 500,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '6px',
+                    }}
+                  >
+                    <Globe size={14} />
+                    <span>TR</span>
+                    {i18n.language === 'tr' && <CheckCircle size={14} />}
+                  </button>
+                </div>
+              </div>
+
+              <button
+                onClick={onLogout}
+                style={{
+                  width: '100%',
+                  background: 'rgba(220, 53, 69, 0.15)',
+                  border: '1px solid rgba(220, 53, 69, 0.3)',
+                  color: '#dc3545',
+                  padding: '12px',
+                  borderRadius: '10px',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s ease',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontSize: '0.95rem',
+                  fontWeight: 600,
+                }}
+              >
+                <LogOut size={18} style={{ marginRight: '8px' }} />
+                Logout
+              </button>
+            </div>
+          ) : (
+            <div>
+              <button
+                onClick={() => i18n.changeLanguage(i18n.language === 'en' ? 'tr' : 'en')}
+                style={{
+                  width: '100%',
+                  background: 'rgba(255, 255, 255, 0.06)',
+                  border: '1px solid rgba(255, 255, 255, 0.1)',
+                  color: 'rgba(255, 255, 255, 0.75)',
+                  padding: '12px',
+                  borderRadius: '10px',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  marginBottom: '8px',
+                }}
+              >
+                <Globe size={20} />
+              </button>
+              <button
+                onClick={onLogout}
+                style={{
+                  width: '100%',
+                  background: 'rgba(220, 53, 69, 0.15)',
+                  border: '1px solid rgba(220, 53, 69, 0.3)',
+                  color: '#dc3545',
+                  padding: '12px',
+                  borderRadius: '10px',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+              >
+                <LogOut size={20} />
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+    </>
+  );
+};
+// ==================== END SIDEBAR ====================
+
+  // Navigation component matching student dashboard style
+  
+
+  return (
+  <div style={{ minHeight: '100vh', background: 'linear-gradient(135deg, #ffffffff 0%, #f0fdf4 100%)' }}>
+    <Sidebar />
+    
+    <div style={{
+      marginLeft: window.innerWidth < 768 ? 0 : (sidebarCollapsed ? '85px' : '280px'),
+      transition: 'margin-left 0.3s ease',
+      paddingTop: '40px',
+    }}>
+      {window.innerWidth < 768 && (
+        <div
+          style={{
+            position: 'sticky',
+            top: 0,
+            background: 'white',
+            boxShadow: '0 2px 8px rgba(0, 0, 0, 0.1)',
+            padding: '16px',
+            zIndex: 1000,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+          }}
+        >
+          <button
+            onClick={() => setSidebarOpen(true)}
+            style={{
+              background: 'linear-gradient(135deg, #dc3545 0%, #c82333 100%)',
+              border: 'none',
+              borderRadius: '10px',
+              width: '40px',
+              height: '40px',
+              color: 'white',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontSize: '1.2rem',
+            }}
+          >
+            ☰
+          </button>
+          <h5 style={{ margin: 0, fontWeight: 700 }}>Academic Staff</h5>
+          <div style={{ width: '40px' }} />
+        </div>
+      )}
 
         {/* Overview Tab */}
         {activeTab === 'overview' && (
@@ -2438,18 +2442,6 @@ const getCancelDisabledReason = (status: string): string => {
                           onChange={(e) => setUserProfile({ ...userProfile, emergency_contact_email: e.target.value })}
                           placeholder="Emergency contact email"
                         />
-                      </div>
-                      <div className="col-12">
-                        <label className="form-label fw-semibold">Bio</label>
-                        <textarea
-                          className="form-control"
-                          rows={4}
-                          value={userProfile.bio}
-                          onChange={(e) => setUserProfile({ ...userProfile, bio: e.target.value })}
-                          placeholder="Tell us about yourself, your research interests, or academic background..."
-                          maxLength={500}
-                        />
-                        <div className="form-text">{userProfile.bio ? userProfile.bio.length : 0}/500 characters</div>
                       </div>
                     </div>
 

@@ -241,6 +241,64 @@ public function rejectStudentRequest(Request $request, $id): JsonResponse
     ]);
 }
 
+/**
+ * Reassign cancelled appointment to new doctor
+ */
+public function reassignAppointment(Request $request, $id): JsonResponse
+{
+    $validated = $request->validate([
+        'doctor_id' => 'required|exists:users,id',
+        'notes' => 'nullable|string|max:500'
+    ]);
+
+    try {
+        DB::beginTransaction();
+
+        $appointment = Appointment::where('needs_reassignment', true)
+            ->findOrFail($id);
+
+        // Verify the new doctor exists and is a doctor
+        $newDoctor = User::where('id', $validated['doctor_id'])
+            ->where('role', 'doctor')
+            ->firstOrFail();
+
+        // Update appointment with new doctor
+        $appointment->update([
+            'doctor_id' => $validated['doctor_id'],
+            'status' => 'scheduled', // Reset to scheduled
+            'needs_reassignment' => false,
+            'reassignment_notes' => $validated['notes'] ?? null,
+            'reassigned_at' => now(),
+            'reassigned_by' => $request->user()->id
+        ]);
+
+        // Log the reassignment
+        \Log::info("Appointment {$id} reassigned to Dr. {$newDoctor->name} by clinical staff", [
+            'appointment_id' => $id,
+            'new_doctor_id' => $newDoctor->id,
+            'clinical_staff_id' => $request->user()->id
+        ]);
+
+        // Trigger notification to new doctor
+        event(new \App\Events\AppointmentReassigned($appointment, $newDoctor));
+
+        DB::commit();
+
+        return response()->json([
+            'message' => 'Appointment reassigned successfully',
+            'appointment' => $appointment->load(['patient', 'doctor'])
+        ]);
+
+    } catch (\Exception $e) {
+        DB::rollBack();
+        \Log::error('Error reassigning appointment: ' . $e->getMessage());
+        return response()->json([
+            'message' => 'Failed to reassign appointment',
+            'error' => $e->getMessage()
+        ], 500);
+    }
+}
+
 // Add this to your ClinicalStaffController dashboard method
 
 private function getKPIData($today, $weekStart, $monthStart): array
@@ -1259,7 +1317,6 @@ public function updateWalkInPatientStatus(Request $request, $id): JsonResponse
                 'department' => $patient->department,
                 'status' => $latestAppointment ? $latestAppointment->status : 'inactive',
                 'priority' => $latestAppointment ? $latestAppointment->priority : 'normal',
-                'assigned_doctor' => $patient->doctor ? $patient->doctor->name : null,
                 'last_visit' => $latestAppointment ? $latestAppointment->created_at : null
             ];
         });
@@ -1324,6 +1381,20 @@ public function updateWalkInPatientStatus(Request $request, $id): JsonResponse
     }
     
     $appointments = $query->get()->map(function($appointment) {
+        // Determine the request type based on patient role
+        $requestType = 'Student Request'; // Default
+        
+        if ($appointment->patient) {
+            // Check if patient has staff_no (academic staff)
+            if (!empty($appointment->patient->staff_no)) {
+                $requestType = 'Academic Staff Request';
+            }
+            // Alternative: Check by role if you have a role field
+            // if ($appointment->patient->role === 'academic_staff') {
+            //     $requestType = 'Academic Staff Request';
+            // }
+        }
+        
         return [
             'id' => $appointment->id,
             'date' => $appointment->date,
@@ -1332,27 +1403,30 @@ public function updateWalkInPatientStatus(Request $request, $id): JsonResponse
             'patient' => [
                 'name' => $appointment->patient->name,
                 'student_id' => $appointment->patient->student_id,
-                'department' => $appointment->patient->department
+                'staff_no' => $appointment->patient->staff_no ?? null, // Include staff_no
+                'department' => $appointment->patient->department,
+                'role' => $appointment->patient->role ?? null // Include role if available
             ],
             'type' => $appointment->type,
-            'doctor' => $appointment->doctor ? $appointment->doctor->name : 'Unassigned', // FIX THIS LINE
+            'request_type' => $requestType, // NEW: Add request type
+            'doctor' => $appointment->doctor ? $appointment->doctor->name : 'Unassigned',
             'status' => $appointment->status,
             'room' => $appointment->room,
             'notes' => $appointment->notes
         ];
     });
         
-        return response()->json([
-            'appointments' => $appointments,
-            'schedule_summary' => [
-                'date' => $date,
-                'total_appointments' => $appointments->count(),
-                'completed' => $appointments->where('status', 'completed')->count(),
-                'in_progress' => $appointments->where('status', 'in_progress')->count(),
-                'scheduled' => $appointments->where('status', 'scheduled')->count(),
-            ]
-        ]);
-    }
+    return response()->json([
+        'appointments' => $appointments,
+        'schedule_summary' => [
+            'date' => $date,
+            'total_appointments' => $appointments->count(),
+            'completed' => $appointments->where('status', 'completed')->count(),
+            'in_progress' => $appointments->where('status', 'in_progress')->count(),
+            'scheduled' => $appointments->where('status', 'scheduled')->count(),
+        ]
+    ]);
+}
 
     /**
  * Get student appointment requests for clinical staff to review
@@ -1370,30 +1444,43 @@ public function getStudentRequests(Request $request): JsonResponse
         }
         
         $requests = $query->orderBy('created_at', 'desc')->get()->map(function($appointment) {
+            // Determine the request type based on patient role
+            $requestType = 'Student Request'; // Default
+            
+            if ($appointment->patient) {
+                // Check if patient has staff_no (academic staff)
+                if (!empty($appointment->patient->staff_no)) {
+                    $requestType = 'Academic Staff Request';
+                }
+            }
+            
             return [
                 'id' => $appointment->id,
                 'patient' => $appointment->patient ? [
                     'name' => $appointment->patient->name,
                     'student_id' => $appointment->patient->student_id,
-                    'department' => $appointment->patient->department
+                    'staff_no' => $appointment->patient->staff_no ?? null, // Include staff_no
+                    'department' => $appointment->patient->department,
+                    'role' => $appointment->patient->role ?? null // Include role if available
                 ] : null,
                 'doctor' => $appointment->doctor ? [
                     'name' => $appointment->doctor->name,
                     'specialization' => $appointment->doctor->specialization
                 ] : null,
-                'date' => $appointment->date, // Just the date, no time
+                'date' => $appointment->date,
                 'time' => $appointment->time,
                 'reason' => $appointment->reason,
                 'specialization' => $appointment->specialization,
                 'appointment_type' => $appointment->type,
+                'request_type' => $requestType, // NEW: Add request type
                 'priority' => $appointment->priority ?? $appointment->urgency ?? 'normal',
                 'urgency' => $appointment->urgency ?? $appointment->priority ?? 'normal',
                 'status' => $appointment->status,
                 'requested_date' => $appointment->date,
                 'requested_time' => $appointment->time,
                 'message' => $appointment->reason,
-                'created_at' => $appointment->created_at->format('Y-m-d'), // CHANGE THIS - just date
-                'updated_at' => $appointment->updated_at->format('Y-m-d')  // CHANGE THIS - just date
+                'created_at' => $appointment->created_at->format('Y-m-d'),
+                'updated_at' => $appointment->updated_at->format('Y-m-d')
             ];
         });
         

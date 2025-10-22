@@ -110,6 +110,7 @@ interface Appointment {
   time: string;
   duration?: number;
   type: string;
+  request_type?: string;
   status: string;
   priority?: string;
   reason?: string;
@@ -403,6 +404,9 @@ const ClinicalStaffDashboard: React.FC<ClinicalStaffDashboardProps> = ({ user, o
   const [showVitalsViewer, setShowVitalsViewer] = useState(false);
   const [showMedicalCard, setShowMedicalCard] = useState(false);
   const [showMedicationManagement, setShowMedicationManagement] = useState(false);
+
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(false); // For mobile
 
   const [userProfile, setUserProfile] = useState({
     staff_no: user?.staff_no || '',
@@ -1345,7 +1349,12 @@ const saveProfile = async (e?: React.FormEvent): Promise<void> => {
   
   
   const QuickTimeSlots: React.FC<QuickTimeSlotsProps> = ({ selectedDate, onTimeSelect, formData, setFormData, checkDoctorAvailability }) => {
-    const timeSlots = ['09:00', '10:00', '11:00', '14:00', '15:00', '16:00'];
+    // Generate more comprehensive time slots
+    const quickSlots = [
+      '09:00', '09:30', '10:00', '10:30', '11:00', '11:30',
+      '12:00', '12:30', '13:00', '13:30', '14:00', '14:30',
+      '15:00', '15:30', '16:00', '16:30', '17:00'
+    ];
     
     if (isDateBlocked(selectedDate)) {
       return (
@@ -1363,7 +1372,7 @@ const saveProfile = async (e?: React.FormEvent): Promise<void> => {
       <div className="mb-3">
         <label className="form-label">Quick Time Slots</label>
         <div className="d-flex flex-wrap gap-2">
-          {timeSlots.map((time) => (
+          {quickSlots.map((time) => (
             <button
               key={time}
               type="button"
@@ -1381,6 +1390,9 @@ const saveProfile = async (e?: React.FormEvent): Promise<void> => {
             </button>
           ))}
         </div>
+        <small className="text-muted d-block mt-2">
+          Or select a custom time below
+        </small>
       </div>
     );
   };
@@ -1569,455 +1581,575 @@ useEffect(() => {
 
 // Updated Navigation Component with inline styles for ClinicalStaffDashboard.tsx
 
-const Navigation = () => (
-  <nav 
-    className="navbar navbar-expand-lg navbar-light"
-    style={{
-      background: 'linear-gradient(135deg, #ffffffff 0%, #ffffffff 100%)',
-      border: 'none',
-      borderBottom: 'none',
-      boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
-      position: 'fixed',
-      top: 0,
-      left: 0,
-      right: 0,
-      zIndex: 1030,
-      height: '85px'
-    }}
-  >
-    <div className="container-fluid">
-      {/* Logo */}
-      <div 
-        className="navbar-brand"
+// Sidebar Component
+const Sidebar = () => {
+  const menuItems = [
+    { 
+      id: 'overview', 
+      icon: BarChart3, 
+      label: t('nav.overview', 'Overview'),
+      badge: null 
+    },
+    { 
+      id: 'appointments', 
+      icon: Calendar, 
+      label: t('nav.appointments', 'Appointments'),
+      badge: dashboardData?.today_overview?.pending_student_requests || null
+    },
+    { 
+      id: 'patients', 
+      icon: Users, 
+      label: t('nav.patients', 'Patients'),
+      badge: null 
+    },
+    { 
+      id: 'medications', 
+      icon: Pill, 
+      label: t('nav.medications', 'Medications'),
+      badge: null 
+    },
+    { 
+      id: 'doctors', 
+      icon: Stethoscope, 
+      label: t('nav.doctors', 'Doctors'),
+      badge: null 
+    },
+    { 
+      id: 'walkin', 
+      icon: UserPlus, 
+      label: t('nav.walkin_patients', 'Walk-in Patients'),
+      badge: urgentRequests.length > 0 ? urgentRequests.length : null
+    },
+  ];
+
+  return (
+    <>
+      {/* Mobile Overlay */}
+      {sidebarOpen && window.innerWidth < 768 && (
+        <div
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: 'rgba(0, 0, 0, 0.6)',
+            zIndex: 1040,
+            backdropFilter: 'blur(2px)',
+            animation: 'fadeIn 0.2s ease',
+          }}
+          onClick={() => setSidebarOpen(false)}
+        />
+      )}
+
+      {/* Sidebar Container */}
+      <div
         style={{
+          position: 'fixed',
+          top: 0,
+          left: window.innerWidth < 768 ? (sidebarOpen ? 0 : '-300px') : 0,
+          bottom: 0,
+          width: sidebarCollapsed && window.innerWidth >= 768 ? '85px' : '280px',
+          background: '#1a1d29',
+          boxShadow: '4px 0 24px rgba(0, 0, 0, 0.12)',
+          transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+          zIndex: 1050,
           display: 'flex',
-          alignItems: 'center',
-          color: '#333'
+          flexDirection: 'column',
+          overflow: 'hidden',
         }}
       >
-        <img
-          src="/logo6.png"
-          alt="Final International University Logo"
+        {/* Header Section */}
+        <div
           style={{
-            width: '50px',
-            height: '50px',
-            borderRadius: '8px',
-            objectFit: 'cover',
-            marginRight: '15px'
+            padding: sidebarCollapsed && window.innerWidth >= 768 ? '24px 16px' : '24px',
+            borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            background: 'linear-gradient(135deg, #1e2230 0%, #1a1d29 100%)',
+            minHeight: '80px',
           }}
-        />
-        <div>
-          <h5 
-            style={{
-              color: '#333',
-              fontWeight: 600,
-              margin: 0,
-              fontSize: '1.25rem',
-              lineHeight: 1.2
-            }}
-          >
-            Final International University
-          </h5>
-          <small 
-            style={{
-              color: '#666',
-              fontSize: '0.85rem'
-            }}
-          >
-            Medical Appointments
-          </small>
-        </div>
-      </div>
-
-      {/* Mobile menu toggle */}
-      <button 
-        className="navbar-toggler" 
-        type="button" 
-        data-bs-toggle="collapse" 
-        data-bs-target="#navbarContent"
-        aria-controls="navbarContent" 
-        aria-expanded="false" 
-        aria-label="Toggle navigation"
-      >
-        <span className="navbar-toggler-icon"></span>
-      </button>
-
-      {/* Navigation Menu */}
-      <div className="collapse navbar-collapse" id="navbarContent">
-        <ul className="navbar-nav me-auto mb-2 mb-lg-0">
-          <li className="nav-item">
-            <button 
-              className={`nav-link btn ${activeTab === 'overview' ? 'active' : ''}`}
-              onClick={() => setActiveTab('overview')}
-              style={{
-                color: activeTab === 'overview' ? '#dc3545' : '#666',
-                background: activeTab === 'overview' ? 'rgba(220, 53, 69, 0.1)' : 'none',
-                border: 'none',
-                padding: '8px 16px',
-                borderRadius: '8px',
-                transition: 'all 0.3s ease',
-                margin: '0 4px',
-                display: 'flex',
-                alignItems: 'center',
-                fontWeight: activeTab === 'overview' ? 600 : 'normal'
-              }}
-              onMouseEnter={(e) => {
-                if (activeTab !== 'overview') {
-                  e.currentTarget.style.color = '#dc3545';
-                  e.currentTarget.style.background = 'rgba(220, 53, 69, 0.05)';
-                }
-              }}
-              onMouseLeave={(e) => {
-                if (activeTab !== 'overview') {
-                  e.currentTarget.style.color = '#666';
-                  e.currentTarget.style.background = 'none';
-                }
-              }}
-            >
-              <BarChart3 size={18} className="me-2" />
-              {t('nav.overview')}
-            </button>
-          </li>
-          <li className="nav-item">
-            <button 
-              className={`nav-link btn ${activeTab === 'appointments' ? 'active' : ''}`}
-              onClick={() => setActiveTab('appointments')}
-              style={{
-                color: activeTab === 'appointments' ? '#dc3545' : '#666',
-                background: activeTab === 'appointments' ? 'rgba(220, 53, 69, 0.1)' : 'none',
-                border: 'none',
-                padding: '8px 16px',
-                borderRadius: '8px',
-                transition: 'all 0.3s ease',
-                margin: '0 4px',
-                display: 'flex',
-                alignItems: 'center',
-                fontWeight: activeTab === 'appointments' ? 600 : 'normal'
-              }}
-              onMouseEnter={(e) => {
-                if (activeTab !== 'appointments') {
-                  e.currentTarget.style.color = '#dc3545';
-                  e.currentTarget.style.background = 'rgba(220, 53, 69, 0.05)';
-                }
-              }}
-              onMouseLeave={(e) => {
-                if (activeTab !== 'appointments') {
-                  e.currentTarget.style.color = '#666';
-                  e.currentTarget.style.background = 'none';
-                }
-              }}
-            >
-              <Calendar size={18} className="me-2" />
-              {t('nav.appointments')}
-            </button>
-          </li>
-          <li className="nav-item">
-            <button 
-              className={`nav-link btn ${activeTab === 'patients' ? 'active' : ''}`}
-              onClick={() => setActiveTab('patients')}
-              style={{
-                color: activeTab === 'patients' ? '#dc3545' : '#666',
-                background: activeTab === 'patients' ? 'rgba(220, 53, 69, 0.1)' : 'none',
-                border: 'none',
-                padding: '8px 16px',
-                borderRadius: '8px',
-                transition: 'all 0.3s ease',
-                margin: '0 4px',
-                display: 'flex',
-                alignItems: 'center',
-                fontWeight: activeTab === 'patients' ? 600 : 'normal'
-              }}
-              onMouseEnter={(e) => {
-                if (activeTab !== 'patients') {
-                  e.currentTarget.style.color = '#dc3545';
-                  e.currentTarget.style.background = 'rgba(220, 53, 69, 0.05)';
-                }
-              }}
-              onMouseLeave={(e) => {
-                if (activeTab !== 'patients') {
-                  e.currentTarget.style.color = '#666';
-                  e.currentTarget.style.background = 'none';
-                }
-              }}
-            >
-              <Users size={18} className="me-2" />
-              {t('nav.patients')}
-            </button>
-          </li>
-          <li className="nav-item">
-            <button 
-              className={`nav-link btn ${activeTab === 'medications' ? 'active' : ''}`}
-              onClick={() => setActiveTab('medications')}
-              style={{
-                color: activeTab === 'medications' ? '#dc3545' : '#666',
-                background: activeTab === 'medications' ? 'rgba(220, 53, 69, 0.1)' : 'none',
-                border: 'none',
-                padding: '8px 16px',
-                borderRadius: '8px',
-                transition: 'all 0.3s ease',
-                margin: '0 4px',
-                display: 'flex',
-                alignItems: 'center',
-                fontWeight: activeTab === 'medications' ? 600 : 'normal'
-              }}
-              onMouseEnter={(e) => {
-                if (activeTab !== 'medications') {
-                  e.currentTarget.style.color = '#dc3545';
-                  e.currentTarget.style.background = 'rgba(220, 53, 69, 0.05)';
-                }
-              }}
-              onMouseLeave={(e) => {
-                if (activeTab !== 'medications') {
-                  e.currentTarget.style.color = '#666';
-                  e.currentTarget.style.background = 'none';
-                }
-              }}
-            >
-              <Pill size={18} className="me-2" />
-              {t('nav.medications')}
-            </button>
-          </li>
-          <li className="nav-item">
-            <button 
-              className={`nav-link btn ${activeTab === 'doctors' ? 'active' : ''}`}
-              onClick={() => setActiveTab('doctors')}
-              style={{
-                color: activeTab === 'doctors' ? '#dc3545' : '#666',
-                background: activeTab === 'doctors' ? 'rgba(220, 53, 69, 0.1)' : 'none',
-                border: 'none',
-                padding: '8px 16px',
-                borderRadius: '8px',
-                transition: 'all 0.3s ease',
-                margin: '0 4px',
-                display: 'flex',
-                alignItems: 'center',
-                fontWeight: activeTab === 'doctors' ? 600 : 'normal'
-              }}
-              onMouseEnter={(e) => {
-                if (activeTab !== 'doctors') {
-                  e.currentTarget.style.color = '#dc3545';
-                  e.currentTarget.style.background = 'rgba(220, 53, 69, 0.05)';
-                }
-              }}
-              onMouseLeave={(e) => {
-                if (activeTab !== 'doctors') {
-                  e.currentTarget.style.color = '#666';
-                  e.currentTarget.style.background = 'none';
-                }
-              }}
-            >
-              <User size={18} className="me-2" />
-              {t('nav.doctors')}
-            </button>
-          </li>
-          <li className="nav-item">
-            <button 
-              className={`nav-link btn ${activeTab === 'walkin' ? 'active' : ''}`}
-              onClick={() => setActiveTab('walkin')}
-              style={{
-                color: activeTab === 'walkin' ? '#dc3545' : '#666',
-                background: activeTab === 'walkin' ? 'rgba(220, 53, 69, 0.1)' : 'none',
-                border: 'none',
-                padding: '8px 16px',
-                borderRadius: '8px',
-                transition: 'all 0.3s ease',
-                margin: '0 4px',
-                display: 'flex',
-                alignItems: 'center',
-                fontWeight: activeTab === 'walkin' ? 600 : 'normal'
-              }}
-              onMouseEnter={(e) => {
-                if (activeTab !== 'walkin') {
-                  e.currentTarget.style.color = '#dc3545';
-                  e.currentTarget.style.background = 'rgba(220, 53, 69, 0.05)';
-                }
-              }}
-              onMouseLeave={(e) => {
-                if (activeTab !== 'walkin') {
-                  e.currentTarget.style.color = '#666';
-                  e.currentTarget.style.background = 'none';
-                }
-              }}
-            >
-              <UserPlus size={18} className="me-2" />
-              {t('nav.walkin_patients', 'Walk-in Patients')}
-            </button>
-          </li>
-          <li className="nav-item">
-  <button 
-    className={`nav-link btn ${activeTab === 'profile' ? 'active' : ''}`}
-    onClick={() => setActiveTab('profile')}
-    style={{
-      color: activeTab === 'profile' ? '#dc3545' : '#666',
-      background: activeTab === 'profile' ? 'rgba(220, 53, 69, 0.1)' : 'none',
-      border: 'none',
-      padding: '8px 16px',
-      borderRadius: '8px',
-      transition: 'all 0.3s ease',
-      margin: '0 4px',
-      display: 'flex',
-      alignItems: 'center',
-      fontWeight: activeTab === 'profile' ? 600 : 'normal'
-    }}
-    onMouseEnter={(e) => {
-      if (activeTab !== 'profile') {
-        e.currentTarget.style.color = '#dc3545';
-        e.currentTarget.style.background = 'rgba(220, 53, 69, 0.05)';
-      }
-    }}
-    onMouseLeave={(e) => {
-      if (activeTab !== 'profile') {
-        e.currentTarget.style.color = '#666';
-        e.currentTarget.style.background = 'none';
-      }
-    }}
-  >
-    <User size={18} className="me-2" />
-    Profile
-  </button>
-</li>
-        </ul>
-
-        {/* Right side: User Dropdown with Language inside */}
-        <div className="d-flex align-items-center ms-auto">
-          {/* User Profile Dropdown */}
-          <div className="dropdown">
-            <button 
-              className="btn btn-light dropdown-toggle d-flex align-items-center" 
-              data-bs-toggle="dropdown"
-              style={{ 
-                borderRadius: '25px',
-                border: '2px solid #e0e0e0',
-                padding: '8px 16px',
-                background: 'white',
-                color: '#333'
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.background = '#f8f9fa';
-                e.currentTarget.style.borderColor = '#d0d0d0';
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.background = 'white';
-                e.currentTarget.style.borderColor = '#e0e0e0';
-              }}
-            >
-              <AvatarDisplay 
-                src={userProfile.avatar_url} 
-                size={32}
-                fallbackColor="#dc3545"
-              />
-            </button>
-            <ul 
-              className="dropdown-menu dropdown-menu-end" 
-              style={{ 
-                minWidth: '280px',
-                border: 'none',
-                boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
-                borderRadius: '12px',
-                padding: '8px 0'
-              }}
-            >
-              {/* User Info Header */}
-              <li 
-                className="dropdown-header"
+        >
+          {!(sidebarCollapsed && window.innerWidth >= 768) ? (
+            <div style={{ display: 'flex', alignItems: 'center', flex: 1 }}>
+              <div
                 style={{
-                  padding: '16px 20px 16px 20px',
-                  backgroundColor: '#f8f9fa',
-                  borderBottom: '1px solid #e9ecef',
-                  marginBottom: '8px',
-                  borderTopLeftRadius: '12px',
-                  borderTopRightRadius: '12px'
+                  width: '48px',
+                  height: '48px',
+                  borderRadius: '12px',
+                  background: 'linear-gradient(135deg, #dc3545 0%, #c82333 100%)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  marginRight: '14px',
+                  boxShadow: '0 4px 12px rgba(220, 53, 69, 0.3)',
+                  overflow: 'hidden',
                 }}
               >
-                <div className="d-flex align-items-center">
-                  <AvatarDisplay 
-                    src={userProfile.avatar_url} 
-                    size={40}
-                    fallbackColor="#dc3545"
-                    className="me-3"
-                  />
-                  <div>
-                    <div className="fw-semibold">{user?.name || 'Clinical Staff'}</div>
-                    <small className="text-muted">{user?.email || 'staff@hospital.com'}</small>
-                    <div>
-                      <small className="text-muted">Staff No: {user?.staff_no || 'CS001'}</small>
-                    </div>
-                  </div>
-                </div>
-            </li>
-              
-              {/* Language Selection */}
-              <li>
-                <h6 className="dropdown-header" style={{ padding: '12px 20px 8px 20px', margin: 0, color: '#6c757d', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                  Language
-                </h6>
-              </li>
-              <li>
-                <button 
-                  className="dropdown-item d-flex align-items-center"
+                <img
+                  src="/logo6.png"
+                  alt="FIU Logo"
                   style={{
-                    padding: '12px 20px',
-                    transition: 'background-color 0.2s ease'
+                    width: '32px',
+                    height: '32px',
+                    objectFit: 'cover',
                   }}
-                  onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f8f9fa'}
-                  onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
-                  onClick={() => i18n.changeLanguage('en')}
+                />
+              </div>
+              <div>
+                <h6
+                  style={{
+                    color: '#ffffff',
+                    margin: 0,
+                    fontSize: '1.05rem',
+                    fontWeight: 700,
+                    letterSpacing: '-0.02em',
+                  }}
                 >
-                  <Globe size={16} className="me-3" />
-                  <div className="flex-grow-1 d-flex justify-content-between align-items-center">
+                  FIU Medical
+                </h6>
+                <small
+                  style={{
+                    color: 'rgba(255, 255, 255, 0.6)',
+                    fontSize: '0.8rem',
+                    fontWeight: 500,
+                  }}
+                >
+                  Clinical Portal
+                </small>
+              </div>
+            </div>
+          ) : (
+            <div
+              style={{
+                width: '48px',
+                height: '48px',
+                borderRadius: '12px',
+                background: 'linear-gradient(135deg, #dc3545 0%, #c82333 100%)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                boxShadow: '0 4px 12px rgba(220, 53, 69, 0.3)',
+                margin: '0 auto',
+              }}
+            >
+              <img
+                src="/logo6.png"
+                alt="FIU Logo"
+                style={{
+                  width: '32px',
+                  height: '32px',
+                  objectFit: 'cover',
+                }}
+              />
+            </div>
+          )}
+
+          {/* Collapse Toggle - Desktop Only */}
+          {window.innerWidth >= 768 && (
+          <button
+            onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+            style={{
+              background: 'linear-gradient(135deg, rgba(220, 53, 69, 0.15) 0%, rgba(200, 35, 51, 0.15) 100%)',
+              border: '1px solid rgba(220, 53, 69, 0.3)',
+              borderRadius: '10px',
+              width: '36px',
+              height: '36px',
+              color: '#dc3545',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+              fontSize: '0.9rem',
+              fontWeight: 700,
+              boxShadow: '0 2px 8px rgba(220, 53, 69, 0.2)',
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.background = 'linear-gradient(135deg, rgba(220, 53, 69, 0.25) 0%, rgba(200, 35, 51, 0.25) 100%)';
+              e.currentTarget.style.transform = 'scale(1.05)';
+              e.currentTarget.style.boxShadow = '0 4px 12px rgba(220, 53, 69, 0.3)';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.background = 'linear-gradient(135deg, rgba(220, 53, 69, 0.15) 0%, rgba(200, 35, 51, 0.15) 100%)';
+              e.currentTarget.style.transform = 'scale(1)';
+              e.currentTarget.style.boxShadow = '0 2px 8px rgba(220, 53, 69, 0.2)';
+            }}
+          >
+            {sidebarCollapsed ? '»' : '«'}
+          </button>
+        )}
+        </div>
+
+        {/* Navigation Menu */}
+        <nav
+          style={{
+            flex: 1,
+            overflowY: 'auto',
+            overflowX: 'hidden',
+            padding: sidebarCollapsed && window.innerWidth >= 768 ? '16px 8px' : '20px 16px',
+          }}
+        >
+          {/* Menu Section Label */}
+          {!(sidebarCollapsed && window.innerWidth >= 768) && (
+            <div
+              style={{
+                color: 'rgba(255, 255, 255, 0.5)',
+                fontSize: '0.75rem',
+                fontWeight: 600,
+                textTransform: 'uppercase',
+                letterSpacing: '0.08em',
+                marginBottom: '12px',
+                paddingLeft: '12px',
+              }}
+            >
+              Main Menu
+            </div>
+          )}
+
+          {menuItems.map((item) => {
+            const Icon = item.icon;
+            const isActive = activeTab === item.id;
+
+            return (
+              <button
+                key={item.id}
+                onClick={() => {
+                  setActiveTab(item.id as TabType);
+                  if (window.innerWidth < 768) setSidebarOpen(false);
+                }}
+                style={{
+                  width: '100%',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent:
+                    sidebarCollapsed && window.innerWidth >= 768 ? 'center' : 'space-between',
+                  padding:
+                    sidebarCollapsed && window.innerWidth >= 768 ? '14px' : '14px 16px',
+                  marginBottom: '6px',
+                  background: isActive
+                    ? 'linear-gradient(135deg, rgba(220, 53, 69, 0.15) 0%, rgba(200, 35, 51, 0.15) 100%)'
+                    : 'transparent',
+                  border: isActive ? '1px solid rgba(220, 53, 69, 0.3)' : '1px solid transparent',
+                  borderRadius: '10px',
+                  color: isActive ? '#dc3545' : 'rgba(255, 255, 255, 0.75)',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+                  fontSize: '0.95rem',
+                  fontWeight: isActive ? 600 : 500,
+                  position: 'relative',
+                  overflow: 'hidden',
+                }}
+                onMouseEnter={(e) => {
+                  if (!isActive) {
+                    e.currentTarget.style.background = 'rgba(255, 255, 255, 0.06)';
+                    e.currentTarget.style.color = '#ffffff';
+                    e.currentTarget.style.transform = 'translateX(4px)';
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  if (!isActive) {
+                    e.currentTarget.style.background = 'transparent';
+                    e.currentTarget.style.color = 'rgba(255, 255, 255, 0.75)';
+                    e.currentTarget.style.transform = 'translateX(0)';
+                  }
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center' }}>
+                  <Icon size={20} style={{ minWidth: '20px' }} />
+                  {!(sidebarCollapsed && window.innerWidth >= 768) && (
+                    <span style={{ marginLeft: '14px' }}>{item.label}</span>
+                  )}
+                </div>
+
+                {/* Notification Badge */}
+                {item.badge && item.badge > 0 && !(sidebarCollapsed && window.innerWidth >= 768) && (
+                  <span
+                    style={{
+                      background: 'linear-gradient(135deg, #dc3545 0%, #c82333 100%)',
+                      color: 'white',
+                      fontSize: '0.7rem',
+                      fontWeight: 700,
+                      padding: '2px 8px',
+                      borderRadius: '12px',
+                      minWidth: '24px',
+                      textAlign: 'center',
+                      boxShadow: '0 2px 8px rgba(220, 53, 69, 0.4)',
+                    }}
+                  >
+                    {item.badge}
+                  </span>
+                )}
+
+                {/* Active Indicator */}
+                {isActive && (
+                  <div
+                    style={{
+                      position: 'absolute',
+                      left: 0,
+                      top: '50%',
+                      transform: 'translateY(-50%)',
+                      width: '4px',
+                      height: '60%',
+                      background: 'linear-gradient(180deg, #dc3545 0%, #c82333 100%)',
+                      borderRadius: '0 4px 4px 0',
+                    }}
+                  />
+                )}
+              </button>
+            );
+          })}
+
+          {/* Divider */}
+          <div
+            style={{
+              height: '1px',
+              background: 'rgba(255, 255, 255, 0.08)',
+              margin: '20px 0',
+            }}
+          />
+
+          {/* Secondary Menu Item - Profile */}
+          <button
+            onClick={() => {
+              setActiveTab('profile');
+              if (window.innerWidth < 768) setSidebarOpen(false);
+            }}
+            style={{
+              width: '100%',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent:
+                sidebarCollapsed && window.innerWidth >= 768 ? 'center' : 'flex-start',
+              padding:
+                sidebarCollapsed && window.innerWidth >= 768 ? '14px' : '14px 16px',
+              marginBottom: '6px',
+              background: activeTab === 'profile'
+                ? 'linear-gradient(135deg, rgba(220, 53, 69, 0.15) 0%, rgba(200, 35, 51, 0.15) 100%)'
+                : 'transparent',
+              border: activeTab === 'profile' ? '1px solid rgba(220, 53, 69, 0.3)' : '1px solid transparent',
+              borderRadius: '10px',
+              color: activeTab === 'profile' ? '#dc3545' : 'rgba(255, 255, 255, 0.75)',
+              cursor: 'pointer',
+              transition: 'all 0.2s ease',
+              fontSize: '0.95rem',
+              fontWeight: activeTab === 'profile' ? 600 : 500,
+            }}
+            onMouseEnter={(e) => {
+              if (activeTab !== 'profile') {
+                e.currentTarget.style.background = 'rgba(255, 255, 255, 0.06)';
+                e.currentTarget.style.color = '#ffffff';
+              }
+            }}
+            onMouseLeave={(e) => {
+              if (activeTab !== 'profile') {
+                e.currentTarget.style.background = 'transparent';
+                e.currentTarget.style.color = 'rgba(255, 255, 255, 0.75)';
+              }
+            }}
+          >
+            <User size={20} />
+            {!(sidebarCollapsed && window.innerWidth >= 768) && (
+              <span style={{ marginLeft: '14px' }}>Profile</span>
+            )}
+          </button>
+        </nav>
+
+        {/* User Profile Section - Bottom */}
+        <div
+          style={{
+            padding: sidebarCollapsed && window.innerWidth >= 768 ? '16px 12px' : '20px',
+            borderTop: '1px solid rgba(255, 255, 255, 0.08)',
+            background: 'linear-gradient(180deg, transparent 0%, rgba(0, 0, 0, 0.2) 100%)',
+          }}
+        >
+          {!(sidebarCollapsed && window.innerWidth >= 768) ? (
+            <div className="dropdown dropup w-100">
+              <button
+                className="btn w-100 text-start"
+                data-bs-toggle="dropdown"
+                style={{
+                  background: 'rgba(255, 255, 255, 0.06)',
+                  border: '1px solid rgba(255, 255, 255, 0.1)',
+                  color: 'white',
+                  padding: '14px 16px',
+                  borderRadius: '12px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  transition: 'all 0.2s ease',
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.background = 'rgba(255, 255, 255, 0.1)';
+                  e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.2)';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background = 'rgba(255, 255, 255, 0.06)';
+                  e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.1)';
+                }}
+              >
+                <div
+                  style={{
+                    width: '40px',
+                    height: '40px',
+                    borderRadius: '10px',
+                    background: 'linear-gradient(135deg, #dc3545 0%, #c82333 100%)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    marginRight: '12px',
+                    fontSize: '1.1rem',
+                    fontWeight: 700,
+                    boxShadow: '0 4px 12px rgba(220, 53, 69, 0.3)',
+                  }}
+                >
+                  {user?.name?.charAt(0).toUpperCase() || 'U'}
+                </div>
+                <div style={{ flex: 1, overflow: 'hidden' }}>
+                  <div
+                    style={{
+                      fontSize: '0.95rem',
+                      fontWeight: 600,
+                      whiteSpace: 'nowrap',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                    }}
+                  >
+                    {user?.name || 'User'}
+                  </div>
+                  <small
+                    style={{
+                      opacity: 0.7,
+                      fontSize: '0.75rem',
+                      fontWeight: 500,
+                    }}
+                  >
+                    Clinical Staff
+                  </small>
+                </div>
+                <Settings size={18} style={{ opacity: 0.6, minWidth: '18px' }} />
+              </button>
+
+              {/* Dropdown Menu */}
+              <ul
+                className="dropdown-menu dropdown-menu-end"
+                style={{
+                  minWidth: '220px',
+                  borderRadius: '12px',
+                  border: 'none',
+                  boxShadow: '0 8px 32px rgba(0, 0, 0, 0.15)',
+                  padding: '8px',
+                }}
+              >
+                <li>
+                  <h6
+                    className="dropdown-header"
+                    style={{
+                      fontSize: '0.7rem',
+                      textTransform: 'uppercase',
+                      color: '#999',
+                      fontWeight: 700,
+                      letterSpacing: '0.05em',
+                      padding: '8px 16px',
+                    }}
+                  >
+                    Language
+                  </h6>
+                </li>
+                <li>
+                  <button
+                    className="dropdown-item"
+                    onClick={() => i18n.changeLanguage('en')}
+                    style={{
+                      padding: '10px 16px',
+                      borderRadius: '8px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      fontSize: '0.9rem',
+                    }}
+                  >
+                    <Globe size={16} className="me-3" />
                     <span>🇺🇸 English</span>
                     {i18n.language === 'en' && (
-                      <CheckCircle size={16} className="text-success" />
+                      <CheckCircle size={16} className="text-success ms-auto" />
                     )}
-                  </div>
-                </button>
-              </li>
-              <li>
-                <button 
-                  className="dropdown-item d-flex align-items-center"
-                  style={{
-                    padding: '12px 20px',
-                    transition: 'background-color 0.2s ease'
-                  }}
-                  onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f8f9fa'}
-                  onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
-                  onClick={() => i18n.changeLanguage('tr')}
-                >
-                  <Globe size={16} className="me-3" />
-                  <div className="flex-grow-1 d-flex justify-content-between align-items-center">
+                  </button>
+                </li>
+                <li>
+                  <button
+                    className="dropdown-item"
+                    onClick={() => i18n.changeLanguage('tr')}
+                    style={{
+                      padding: '10px 16px',
+                      borderRadius: '8px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      fontSize: '0.9rem',
+                    }}
+                  >
+                    <Globe size={16} className="me-3" />
                     <span>🇹🇷 Türkçe</span>
                     {i18n.language === 'tr' && (
-                      <CheckCircle size={16} className="text-success" />
+                      <CheckCircle size={16} className="text-success ms-auto" />
                     )}
-                  </div>
-                </button>
-              </li>
-              
-              <li><hr className="dropdown-divider" style={{ margin: '8px 0' }} /></li>
-              
-              {/* Logout */}
-              <li>
-                <button 
-                  className="dropdown-item d-flex align-items-center text-danger" 
-                  onClick={onLogout}
-                  style={{
-                    padding: '12px 20px',
-                    transition: 'background-color 0.2s ease'
-                  }}
-                  onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f8f9fa'}
-                  onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
-                >
-                  <LogOut size={16} className="me-3" />
-                  {t('nav.logout', 'Logout')}
-                </button>
-              </li>
-            </ul>
-          </div>
+                  </button>
+                </li>
+                <li>
+                  <hr className="dropdown-divider" style={{ margin: '8px 0' }} />
+                </li>
+                <li>
+                  <button
+                    className="dropdown-item text-danger"
+                    onClick={onLogout}
+                    style={{
+                      padding: '10px 16px',
+                      borderRadius: '8px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      fontSize: '0.9rem',
+                      fontWeight: 600,
+                    }}
+                  >
+                    <LogOut size={16} className="me-3" />
+                    Logout
+                  </button>
+                </li>
+              </ul>
+            </div>
+          ) : (
+            // Collapsed state - Just logout button
+            <button
+              onClick={onLogout}
+              title="Logout"
+              style={{
+                width: '100%',
+                background: 'rgba(220, 53, 69, 0.15)',
+                border: '1px solid rgba(220, 53, 69, 0.3)',
+                color: '#dc3545',
+                padding: '12px',
+                borderRadius: '10px',
+                cursor: 'pointer',
+                transition: 'all 0.2s ease',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.background = 'rgba(220, 53, 69, 0.25)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.background = 'rgba(220, 53, 69, 0.15)';
+              }}
+            >
+              <LogOut size={20} />
+            </button>
+          )}
         </div>
       </div>
-    </div>
-  </nav>
-);
+    </>
+  );
+};
+
 
   // Dashboard Overview Component
 // Dashboard Overview Component - CORRECTED VERSION
@@ -2740,35 +2872,61 @@ const DashboardOverview: React.FC = () => {
 const AppointmentsTab: React.FC = () => {
   // Combine appointments and student requests for display
   const combinedAppointments = useMemo(() => {
-    const regularAppointments = appointments.map(apt => ({ ...apt, isStudentRequest: false }));
-    const studentRequestAppointments = studentRequests.map(request => ({
+  const regularAppointments = appointments.map(apt => ({ 
+    ...apt, 
+    isStudentRequest: false 
+  }));
+  
+  const studentRequestAppointments = studentRequests.map(request => {
+    // Determine the display type based on patient role
+    let displayType = 'Student Request'; // Default
+    
+    if (request.patient) {
+      // Check if patient has staff_no (academic staff)
+      if (request.patient.staff_no) {
+        displayType = 'Academic Staff Request';
+      }
+      // Alternative: Check by role if available
+      // if (request.patient.role === 'academic_staff') {
+      //   displayType = 'Academic Staff Request';
+      // }
+    }
+    
+    // Use request_type from backend if available, otherwise use displayType
+    const requestType = request.request_type || displayType;
+    
+    return {
       ...request,
       isStudentRequest: true,
       patient: request.patient ? {
         name: request.patient.name,
         student_id: request.patient.student_id || 'N/A',
+        staff_no: request.patient.staff_no || null,
         department: request.patient.department || 'N/A'
       } : {
         name: 'Unknown',
         student_id: 'N/A',
+        staff_no: null,
         department: 'N/A'
       },
       doctor: 'To be assigned',
-      type: request.appointment_type || 'Student Request',
-      appointment_type: request.appointment_type || 'Student Request',
+      type: requestType, // Use the determined request type
+      appointment_type: request.appointment_type || requestType,
+      request_type: requestType, // Store for later use
       priority: request.priority || request.urgency || 'normal',
       status: request.status || 'pending',
       date: request.date || request.requested_date,
       time: request.time || request.requested_time,
       reason: request.reason || request.message
-    }));
-    
-    return [...regularAppointments, ...studentRequestAppointments].sort((a, b) => {
-      const dateCompare = new Date(a.date || '1970-01-01').getTime() - new Date(b.date || '1970-01-01').getTime();
-      if (dateCompare !== 0) return dateCompare;
-      return (a.time || '00:00').localeCompare(b.time || '00:00');
-    });
-  }, [appointments, studentRequests]);
+    };
+  });
+  
+  return [...regularAppointments, ...studentRequestAppointments].sort((a, b) => {
+    const dateCompare = new Date(a.date || '1970-01-01').getTime() - new Date(b.date || '1970-01-01').getTime();
+    if (dateCompare !== 0) return dateCompare;
+    return (a.time || '00:00').localeCompare(b.time || '00:00');
+  });
+}, [appointments, studentRequests]);
 
   return (
     <div className="container-fluid py-4">
@@ -2818,6 +2976,7 @@ const AppointmentsTab: React.FC = () => {
                 <option value="pending">Pending (Student Requests)</option>
                 <option value="under_review">Under Review</option>
                 <option value="rejected">Rejected</option>
+                <option value="needs_reassignment">Needs Reassignment</option>
               </select>
             </div>
             <div className="col-md-3">
@@ -2887,11 +3046,17 @@ const AppointmentsTab: React.FC = () => {
                     })
                     .map((apt) => {
                       return (
+                        
                         <tr key={`${apt.isStudentRequest ? 'request' : 'appointment'}-${apt.id}`}>
                           <td>
                             <span className={`badge ${apt.isStudentRequest ? 'bg-info' : 'bg-primary'}`}>
-                              {apt.isStudentRequest ? 'Student Request' : 'Appointment'}
+                              {apt.isStudentRequest ? apt.request_type || 'Student Request' : 'Appointment'}
                             </span>
+                            {apt.needs_reassignment && (
+                              <span className="badge bg-warning text-dark ms-1">
+                                Needs Reassignment
+                              </span>
+                            )}
                           </td>
                           <td>
                             <div>
@@ -2917,6 +3082,10 @@ const AppointmentsTab: React.FC = () => {
                               <span className="badge bg-danger">
                                 Rejected
                               </span>
+                            ) : apt.status === 'pending' && apt.needs_reassignment ? (
+                              <span className="badge bg-warning text-dark">
+                                Awaiting Reassignment
+                              </span>
                             ) : (
                               <span className={getStatusBadge(apt.status)}>
                                 {getStatusText(apt.status)}
@@ -2931,12 +3100,35 @@ const AppointmentsTab: React.FC = () => {
                           <td>
                             {typeof apt.doctor === 'string' 
                               ? apt.doctor 
-                              : apt.doctor?.name || 'Unassigned'
+                              : apt.doctor?.name || (apt.needs_reassignment ? 'Unassigned - Needs Reassignment' : 'Unassigned')
                             }
+                            {apt.cancellation_reason && (
+                              <div>
+                                <small className="text-danger">
+                                  Cancelled: {apt.cancellation_reason}
+                                </small>
+                              </div>
+                            )}
                           </td>
                           <td>
                             <div className="btn-group btn-group-sm" role="group">
-                              {apt.isStudentRequest ? (
+                              {apt.needs_reassignment ? (
+                                // Show reassign button for cancelled appointments
+                                <button 
+                                  className="btn btn-warning"
+                                  onClick={() => {
+                                    setFormData({
+                                      ...apt,
+                                      appointmentId: apt.id,
+                                      action: 'reassign'
+                                    });
+                                    setShowModal('assignRequest');
+                                  }}
+                                >
+                                  <Users size={14} className="me-1" />
+                                  Reassign Doctor
+                                </button>
+                              ) : apt.isStudentRequest ? (
                                 <>
                                   {/* Show assign button for pending/under_review requests */}
                                   {['pending', 'under_review'].includes(apt.status) && (
@@ -3002,27 +3194,39 @@ const AppointmentsTab: React.FC = () => {
                                   )}
                                 </>
                               ) : (
-                                <>
-                                  <button 
-                                    className="btn btn-outline-primary"
-                                    onClick={() => {
-                                      setFormData({...apt});
-                                      setShowModal('editAppointment');
-                                    }}
-                                  >
-                                    <Edit size={14} />
-                                  </button>
-                                  <button 
-                                    className="btn btn-outline-success"
-                                    onClick={() => {
-                                      setFormData({ appointmentId: apt.id, method: 'sms' });
-                                      setShowModal('confirm');
-                                    }}
-                                  >
-                                    <Check size={14} />
-                                  </button>
-                                </>
-                              )}
+  <>
+    <button 
+      className="btn btn-outline-primary"
+      onClick={() => {
+        setFormData({...apt});
+        setShowModal('editAppointment');
+      }}
+    >
+      <Edit size={14} />
+    </button>
+    
+    {/* Show "Ready for Doctor" for scheduled/confirmed appointments */}
+    {['scheduled', 'confirmed'].includes(apt.status) ? (
+      <button 
+        className="btn btn-success"
+        disabled
+      >
+        <Check size={14} className="me-1" />
+        Ready for Doctor
+      </button>
+    ) : (
+      <button 
+        className="btn btn-outline-success"
+        onClick={() => {
+          setFormData({ appointmentId: apt.id, method: 'sms' });
+          setShowModal('confirm');
+        }}
+      >
+        <Check size={14} />
+      </button>
+    )}
+  </>
+)}
                             </div>
                           </td>
                         </tr>
@@ -3077,7 +3281,6 @@ const AppointmentsTab: React.FC = () => {
         <th style={{ fontWeight: 'normal' }}>Staff No</th>
         <th style={{ fontWeight: 'normal' }}>Age</th>
         <th style={{ fontWeight: 'normal' }}>Department</th>
-        <th style={{ fontWeight: 'normal' }}>Assigned Doctor</th>
         <th style={{ fontWeight: 'normal' }}>Actions</th>
       </tr>
     </thead>
@@ -3110,7 +3313,6 @@ const AppointmentsTab: React.FC = () => {
             <td>{patient.staff_no || 'N/A'}</td>
             <td>{patient.age || 'N/A'}</td>
             <td>{patient.department || 'N/A'}</td>
-            <td>{patient.assigned_doctor || 'Unassigned'}</td>
             <td>
               <div className="btn-group btn-group-sm" role="group">
                 <button 
@@ -3626,9 +3828,52 @@ const AppointmentsTab: React.FC = () => {
 );
 
   return (
-  <div style={{ minHeight: '100vh', backgroundColor: '#f8f9fa', paddingTop: '90px' }}>
-      {/* Navigation */}
-      <Navigation />
+  <div style={{ minHeight: '100vh', backgroundColor: '#f8f9fa', display: 'flex' }}>
+    {/* Sidebar */}
+    <Sidebar />
+    
+    {/* Mobile Header */}
+    <div
+      style={{
+        position: 'fixed',
+        top: 0,
+        left: 0,
+        right: 0,
+        height: '60px',
+        background: 'white',
+        boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+        display: window.innerWidth < 768 ? 'flex' : 'none',
+        alignItems: 'center',
+        padding: '0 20px',
+        zIndex: 1030,
+      }}
+    >
+      <button
+        onClick={() => setSidebarOpen(!sidebarOpen)}
+        style={{
+          background: 'none',
+          border: 'none',
+          fontSize: '1.5rem',
+          cursor: 'pointer',
+          padding: '5px',
+        }}
+      >
+        ☰
+      </button>
+      <h6 style={{ margin: 0, marginLeft: '15px', fontWeight: 600 }}>
+        FIU Medical
+      </h6>
+    </div>
+
+    {/* Main Content Area */}
+    <div
+      style={{
+        flex: 1,
+        marginLeft: window.innerWidth >= 768 ? (sidebarCollapsed ? '80px' : '280px') : '0',
+        paddingTop: window.innerWidth < 768 ? '60px' : '0',
+        transition: 'margin-left 0.3s ease',
+      }}
+    >
 
       {/* Message Display */}
       {message.text && (
@@ -4638,7 +4883,8 @@ const AppointmentsTab: React.FC = () => {
     patients={patients} 
   />
 )}
-    </div>
+       </div> {/* Close main content div */}
+    </div> 
   );
 };
 

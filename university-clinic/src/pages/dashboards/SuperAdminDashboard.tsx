@@ -84,6 +84,8 @@ const EnhancedSuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({ user,
   const navigate = useNavigate();
   
   const [activeTab, setActiveTab] = useState('dashboard');
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);  // ADD THIS
+  const [sidebarOpen, setSidebarOpen] = useState(false);  
   const [users, setUsers] = useState<User[]>([]);
   const [departments, setDepartments] = useState<Department[]>([]);
   const [holidays, setHolidays] = useState<Holiday[]>([]);
@@ -508,6 +510,170 @@ const EnhancedSuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({ user,
     }
   };
 
+  // Add these chart components before your main component
+const MiniBarChart = ({ data, color, max }: { data: number[], color: string, max?: number }) => {
+  const maxValue = max || Math.max(...data);
+  return (
+    <div style={{ display: 'flex', alignItems: 'flex-end', gap: '4px', height: '40px' }}>
+      {data.map((value, index) => (
+        <div key={index} style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'flex-end' }}>
+          <div style={{
+            height: `${(value / maxValue) * 100}%`,
+            background: `linear-gradient(to top, ${color}, ${color}88)`,
+            borderRadius: '3px 3px 0 0',
+            minHeight: value > 0 ? '4px' : '2px',
+            transition: 'all 0.3s ease'
+          }} />
+        </div>
+      ))}
+    </div>
+  );
+};
+
+const LineSparkline = ({ data, color, width = 100, height = 40 }: { data: number[], color: string, width?: number, height?: number }) => {
+  const max = Math.max(...data);
+  const min = Math.min(...data);
+  const range = max - min || 1;
+  
+  const points = data.map((value, index) => {
+    const x = (index / (data.length - 1)) * width;
+    const y = height - ((value - min) / range) * height;
+    return `${x},${y}`;
+  }).join(' ');
+
+  return (
+    <svg width={width} height={height} style={{ display: 'block' }}>
+      <polyline
+        points={points}
+        fill="none"
+        stroke={color}
+        strokeWidth="2.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      {data.map((value, index) => {
+        const x = (index / (data.length - 1)) * width;
+        const y = height - ((value - min) / range) * height;
+        return (
+          <circle
+            key={index}
+            cx={x}
+            cy={y}
+            r="3"
+            fill={color}
+          />
+        );
+      })}
+    </svg>
+  );
+};
+
+const RadialProgress = ({ percentage, color, size = 120 }: { percentage: number, color: string, size?: number }) => {
+  const radius = (size - 20) / 2;
+  const circumference = 2 * Math.PI * radius;
+  const strokeDashoffset = circumference - (percentage / 100) * circumference;
+
+  return (
+    <div style={{ position: 'relative', width: size, height: size }}>
+      <svg width={size} height={size} style={{ transform: 'rotate(-90deg)' }}>
+        <circle
+          cx={size / 2}
+          cy={size / 2}
+          r={radius}
+          fill="none"
+          stroke="#f3f4f6"
+          strokeWidth="10"
+        />
+        <circle
+          cx={size / 2}
+          cy={size / 2}
+          r={radius}
+          fill="none"
+          stroke={color}
+          strokeWidth="10"
+          strokeDasharray={circumference}
+          strokeDashoffset={strokeDashoffset}
+          strokeLinecap="round"
+          style={{ transition: 'stroke-dashoffset 1s ease' }}
+        />
+      </svg>
+      <div style={{
+        position: 'absolute',
+        top: '50%',
+        left: '50%',
+        transform: 'translate(-50%, -50%)',
+        textAlign: 'center'
+      }}>
+        <div style={{ fontSize: '28px', fontWeight: '700', color: '#1f2937' }}>
+          {percentage}%
+        </div>
+        <div style={{ fontSize: '11px', color: '#6b7280', fontWeight: '600' }}>
+          Success
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const DonutChart = ({ data, colors, size = 140 }: { data: number[], colors: string[], size?: number }) => {
+  const total = data.reduce((sum, val) => sum + val, 0);
+  let currentAngle = 0;
+
+  return (
+    <div style={{ position: 'relative', width: size, height: size }}>
+      <svg width={size} height={size} style={{ transform: 'rotate(-90deg)' }}>
+        {data.map((value, index) => {
+          const percentage = (value / total) * 100;
+          const angle = (percentage / 100) * 360;
+          const radius = (size - 30) / 2;
+          const circumference = 2 * Math.PI * radius;
+          const strokeDasharray = `${(angle / 360) * circumference} ${circumference}`;
+          const rotation = currentAngle;
+          currentAngle += angle;
+
+          return value > 0 ? (
+            <circle
+              key={index}
+              cx={size / 2}
+              cy={size / 2}
+              r={radius}
+              fill="none"
+              stroke={colors[index]}
+              strokeWidth="15"
+              strokeDasharray={strokeDasharray}
+              style={{ 
+                transform: `rotate(${rotation}deg)`,
+                transformOrigin: 'center',
+                transition: 'all 0.6s ease'
+              }}
+            />
+          ) : null;
+        })}
+        <circle
+          cx={size / 2}
+          cy={size / 2}
+          r={(size - 60) / 2}
+          fill="white"
+        />
+      </svg>
+      <div style={{
+        position: 'absolute',
+        top: '50%',
+        left: '50%',
+        transform: 'translate(-50%, -50%)',
+        textAlign: 'center'
+      }}>
+        <div style={{ fontSize: '24px', fontWeight: '700', color: '#1f2937' }}>
+          {total}
+        </div>
+        <div style={{ fontSize: '11px', color: '#6b7280', fontWeight: '600' }}>
+          Total
+        </div>
+      </div>
+    </div>
+  );
+};
+
   // NEW: Chart Data Configurations
   const getChartData = () => {
     if (!kpiStats || !kpiStats.appointment_trends) return null;
@@ -618,207 +784,375 @@ const EnhancedSuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({ user,
   </button>
 );
 
+// Professional Sidebar Component for Super Admin Dashboard
+const Sidebar = () => {
+  const menuItems = [
+    { id: 'dashboard', icon: Activity, label: t('superadmin.dashboard', 'Dashboard') },
+    { id: 'users', icon: Users, label: t('superadmin.users', 'Users') },
+    { id: 'departments', icon: Building, label: t('superadmin.departments', 'Departments') },
+    { id: 'holidays', icon: Calendar, label: t('superadmin.academic_calendar', 'Academic Calendar') },
+    { id: 'settings', icon: Settings, label: t('nav.settings', 'Clinic Settings') },
+  ];
+
+  return (
+    <>
+      {/* Mobile Overlay */}
+      {sidebarOpen && window.innerWidth < 768 && (
+        <div
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: 'rgba(0, 0, 0, 0.6)',
+            zIndex: 1040,
+            backdropFilter: 'blur(2px)',
+          }}
+          onClick={() => setSidebarOpen(false)}
+        />
+      )}
+
+      {/* Sidebar */}
+      <div
+        style={{
+          position: 'fixed',
+          top: 0,
+          left: window.innerWidth < 768 ? (sidebarOpen ? 0 : '-300px') : 0,
+          bottom: 0,
+          width: sidebarCollapsed && window.innerWidth >= 768 ? '85px' : '280px',
+          background: '#1a1d29',
+          boxShadow: '4px 0 24px rgba(0, 0, 0, 0.12)',
+          transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+          zIndex: 1050,
+          display: 'flex',
+          flexDirection: 'column',
+          overflow: 'hidden',
+        }}
+      >
+        {/* Header */}
+        <div
+          style={{
+            padding: sidebarCollapsed && window.innerWidth >= 768 ? '24px 16px' : '24px',
+            borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            background: 'linear-gradient(135deg, #1e2230 0%, #1a1d29 100%)',
+            minHeight: '80px',
+          }}
+        >
+          {!(sidebarCollapsed && window.innerWidth >= 768) ? (
+            <div style={{ display: 'flex', alignItems: 'center', flex: 1 }}>
+              <div
+                style={{
+                  width: '48px',
+                  height: '48px',
+                  borderRadius: '12px',
+                  background: 'linear-gradient(135deg, #dc3545 0%, #c82333 100%)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  marginRight: '14px',
+                  boxShadow: '0 4px 12px rgba(220, 53, 69, 0.3)',
+                  overflow: 'hidden',
+                }}
+              >
+                <img
+                  src="/logo6.png"
+                  alt="FIU Logo"
+                  style={{
+                    width: '32px',
+                    height: '32px',
+                    objectFit: 'cover',
+                  }}
+                />
+              </div>
+              <div>
+                <h6 style={{ color: '#ffffff', margin: 0, fontSize: '1.05rem', fontWeight: 700 }}>
+                  FIU Admin
+                </h6>
+                <small style={{ color: 'rgba(255, 255, 255, 0.6)', fontSize: '0.8rem', fontWeight: 500 }}>
+                  Super Admin Portal
+                </small>
+              </div>
+            </div>
+          ) : (
+            <div
+              style={{
+                width: '48px',
+                height: '48px',
+                borderRadius: '12px',
+                background: 'linear-gradient(135deg, #dc3545 0%, #c82333 100%)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                boxShadow: '0 4px 12px rgba(220, 53, 69, 0.3)',
+                margin: '0 auto',
+              }}
+            >
+              <img src="/logo6.png" alt="FIU Logo" style={{ width: '32px', height: '32px', objectFit: 'cover' }} />
+            </div>
+          )}
+
+          {window.innerWidth >= 768 && (
+            <button
+              onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+              style={{
+                background: 'linear-gradient(135deg, rgba(220, 53, 69, 0.15) 0%, rgba(200, 35, 51, 0.15) 100%)',
+                border: '1px solid rgba(220, 53, 69, 0.3)',
+                borderRadius: '10px',
+                width: '36px',
+                height: '36px',
+                color: '#dc3545',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                fontSize: '0.9rem',
+                fontWeight: 700,
+                boxShadow: '0 2px 8px rgba(220, 53, 69, 0.2)',
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.background = 'linear-gradient(135deg, rgba(220, 53, 69, 0.25) 0%, rgba(200, 35, 51, 0.25) 100%)';
+                e.currentTarget.style.transform = 'scale(1.05)';
+                e.currentTarget.style.boxShadow = '0 4px 12px rgba(220, 53, 69, 0.3)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.background = 'linear-gradient(135deg, rgba(220, 53, 69, 0.15) 0%, rgba(200, 35, 51, 0.15) 100%)';
+                e.currentTarget.style.transform = 'scale(1)';
+                e.currentTarget.style.boxShadow = '0 2px 8px rgba(220, 53, 69, 0.2)';
+              }}
+            >
+              {sidebarCollapsed ? '»' : '«'}
+            </button>
+          )}
+        </div>
+
+        {/* Menu */}
+        <nav style={{ flex: 1, overflowY: 'auto', padding: sidebarCollapsed && window.innerWidth >= 768 ? '16px 8px' : '20px 16px' }}>
+          {!(sidebarCollapsed && window.innerWidth >= 768) && (
+            <div style={{ color: 'rgba(255, 255, 255, 0.5)', fontSize: '0.75rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '12px', paddingLeft: '12px' }}>
+              Main Menu
+            </div>
+          )}
+
+          {menuItems.map((item) => {
+            const Icon = item.icon;
+            const isActive = activeTab === item.id;
+
+            return (
+              <button
+                key={item.id}
+                onClick={() => {
+                  setActiveTab(item.id);
+                  if (window.innerWidth < 768) setSidebarOpen(false);
+                }}
+                style={{
+                  width: '100%',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: sidebarCollapsed && window.innerWidth >= 768 ? 'center' : 'space-between',
+                  padding: sidebarCollapsed && window.innerWidth >= 768 ? '14px' : '14px 16px',
+                  marginBottom: '6px',
+                  background: isActive ? 'linear-gradient(135deg, rgba(220, 53, 69, 0.15) 0%, rgba(200, 35, 51, 0.15) 100%)' : 'transparent',
+                  border: isActive ? '1px solid rgba(220, 53, 69, 0.3)' : '1px solid transparent',
+                  borderRadius: '10px',
+                  color: isActive ? '#dc3545' : 'rgba(255, 255, 255, 0.75)',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+                  fontSize: '0.95rem',
+                  fontWeight: isActive ? 600 : 500,
+                  position: 'relative',
+                }}
+                onMouseEnter={(e) => {
+                  if (!isActive) {
+                    e.currentTarget.style.background = 'rgba(255, 255, 255, 0.06)';
+                    e.currentTarget.style.color = '#ffffff';
+                    e.currentTarget.style.transform = 'translateX(4px)';
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  if (!isActive) {
+                    e.currentTarget.style.background = 'transparent';
+                    e.currentTarget.style.color = 'rgba(255, 255, 255, 0.75)';
+                    e.currentTarget.style.transform = 'translateX(0)';
+                  }
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center' }}>
+                  <Icon size={20} />
+                  {!(sidebarCollapsed && window.innerWidth >= 768) && (
+                    <span style={{ marginLeft: '14px' }}>{item.label}</span>
+                  )}
+                </div>
+                {isActive && (
+                  <div
+                    style={{
+                      position: 'absolute',
+                      left: 0,
+                      top: '50%',
+                      transform: 'translateY(-50%)',
+                      width: '4px',
+                      height: '60%',
+                      background: 'linear-gradient(180deg, #dc3545 0%, #c82333 100%)',
+                      borderRadius: '0 4px 4px 0',
+                    }}
+                  />
+                )}
+              </button>
+            );
+          })}
+        </nav>
+
+        {/* User Profile */}
+        <div
+          style={{
+            padding: sidebarCollapsed && window.innerWidth >= 768 ? '16px 12px' : '20px',
+            borderTop: '1px solid rgba(255, 255, 255, 0.08)',
+            background: 'linear-gradient(180deg, transparent 0%, rgba(0, 0, 0, 0.2) 100%)',
+          }}
+        >
+          {!(sidebarCollapsed && window.innerWidth >= 768) ? (
+            <div className="dropdown dropup w-100">
+              <button
+                className="btn w-100 text-start"
+                data-bs-toggle="dropdown"
+                style={{
+                  background: 'rgba(255, 255, 255, 0.06)',
+                  border: '1px solid rgba(255, 255, 255, 0.1)',
+                  color: 'white',
+                  padding: '14px 16px',
+                  borderRadius: '12px',
+                  display: 'flex',
+                  alignItems: 'center',
+                }}
+              >
+                <div
+                  style={{
+                    width: '40px',
+                    height: '40px',
+                    borderRadius: '10px',
+                    background: 'linear-gradient(135deg, #dc3545 0%, #c82333 100%)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    marginRight: '12px',
+                    fontSize: '1.1rem',
+                    fontWeight: 700,
+                  }}
+                >
+                  {user?.name?.charAt(0).toUpperCase() || 'S'}
+                </div>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: '0.95rem', fontWeight: 600 }}>
+                    {user?.name || 'Super Admin'}
+                  </div>
+                  <small style={{ opacity: 0.7, fontSize: '0.75rem' }}>
+                    Super Administrator
+                  </small>
+                </div>
+                <Settings size={18} style={{ opacity: 0.6 }} />
+              </button>
+
+              <ul className="dropdown-menu dropdown-menu-end">
+                <li><h6 className="dropdown-header">Language</h6></li>
+                <li>
+                  <button className="dropdown-item" onClick={() => i18n.changeLanguage('en')}>
+                    <Globe size={16} className="me-2" />
+                    🇺🇸 English
+                  </button>
+                </li>
+                <li>
+                  <button className="dropdown-item" onClick={() => i18n.changeLanguage('tr')}>
+                    <Globe size={16} className="me-2" />
+                    🇹🇷 Türkçe
+                  </button>
+                </li>
+                <li><hr className="dropdown-divider" /></li>
+                <li>
+                  <button className="dropdown-item text-danger" onClick={onLogout}>
+                    <LogOut size={16} className="me-2" />
+                    Logout
+                  </button>
+                </li>
+              </ul>
+            </div>
+          ) : (
+            <button
+              onClick={onLogout}
+              title="Logout"
+              style={{
+                width: '100%',
+                background: 'rgba(220, 53, 69, 0.15)',
+                border: '1px solid rgba(220, 53, 69, 0.3)',
+                color: '#dc3545',
+                padding: '12px',
+                borderRadius: '10px',
+                cursor: 'pointer',
+              }}
+            >
+              <LogOut size={20} />
+            </button>
+          )}
+        </div>
+      </div>
+    </>
+  );
+};
+
   const currentStats = getCurrentStats();
   const chartData = getChartData();
 
   return (
-    <div className="min-vh-100" style={{ backgroundColor: '#f8f9fa' }}>
-      {/* Enhanced Header with Navigation */}
-      <nav 
-        className="navbar navbar-expand-lg navbar-light mb-4" 
-        style={{ 
-          background: 'white',
-          boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
-          position: 'sticky',
-          top: 0,
-          zIndex: 1030,
-          minHeight: '80px'
-        }}
-      >
-        <div className="container-fluid">
-          {/* Left: Brand */}
-          <div className="navbar-brand d-flex align-items-center">
-            <img
-              src="/logo6.png"
-              alt={t('login.brand_name')}
-              style={{
-                width: '50px',
-                height: '50px',
-                borderRadius: '8px',
-                objectFit: 'cover',
-                marginRight: '15px'
-              }}
-            />
-            <div>
-              <div className="fw-bold" style={{ color: '#212529', fontSize: '1.25rem' }}>
-                {t('login.brand_name')}
-              </div>
-              <small style={{ color: '#6c757d' }}>{t('superadmin.portal')}</small>
-            </div>
-          </div>
+  <div className="min-vh-100" style={{ backgroundColor: '#f8f9fa', display: 'flex' }}>
+    {/* Sidebar */}
+    <Sidebar />
 
-          {/* Center: Navigation Tabs */}
-          <div className="navbar-nav d-flex flex-row mx-auto">
-            <NavTab 
-              tabKey="dashboard" 
-              icon={Activity} 
-              label={t('superadmin.dashboard')} 
-              isActive={activeTab === 'dashboard'}
-              onClick={setActiveTab}
-            />
-            <NavTab 
-              tabKey="users" 
-              icon={Users} 
-              label={t('superadmin.users')} 
-              isActive={activeTab === 'users'}
-              onClick={setActiveTab}
-            />
-            <NavTab 
-              tabKey="departments" 
-              icon={Building} 
-              label={t('superadmin.departments')} 
-              isActive={activeTab === 'departments'}
-              onClick={setActiveTab}
-            />
-            <NavTab 
-              tabKey="holidays" 
-              icon={Calendar} 
-              label={t('superadmin.academic_calendar')} 
-              isActive={activeTab === 'holidays'}
-              onClick={setActiveTab}
-            />
-            <NavTab 
-              tabKey="settings" 
-              icon={Settings} 
-              label={t('nav.settings', 'Clinic Settings')} 
-              isActive={activeTab === 'settings'}
-              onClick={setActiveTab}
-            />
-          </div>
-          
-          {/* Right: Controls */}
-<div className="d-flex align-items-center gap-3">
-  <button 
-    className="btn btn-outline-primary btn-sm"
-    onClick={fetchData}
-    disabled={loading}
-  >
-    <RefreshCw size={16} className={`me-1 ${loading ? 'spin' : ''}`} />
-    {t('refresh')}
-  </button>
-
-  {/* User Profile Dropdown with Language inside */}
-  <div className="dropdown">
-    <button 
-      className="btn btn-light dropdown-toggle d-flex align-items-center" 
-      data-bs-toggle="dropdown"
-      style={{ borderRadius: '25px', border: '2px solid #dee2e6' }}
+    {/* Mobile Header */}
+    <div
+      style={{
+        position: 'fixed',
+        top: 0,
+        left: 0,
+        right: 0,
+        height: '60px',
+        background: 'white',
+        boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+        display: window.innerWidth < 768 ? 'flex' : 'none',
+        alignItems: 'center',
+        padding: '0 20px',
+        zIndex: 1030,
+      }}
     >
-      <UserCog size={18} className="me-2" />
-      {/* Removed name display */}
-    </button>
-    <ul className="dropdown-menu dropdown-menu-end" style={{ minWidth: '280px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.15)', borderRadius: '12px', padding: '8px 0' }}>
-      {/* User Info Header */}
-      <li 
-        className="dropdown-header"
+      <button
+        onClick={() => setSidebarOpen(!sidebarOpen)}
         style={{
-          padding: '16px 20px 16px 20px',
-          backgroundColor: '#f8f9fa',
-          borderBottom: '1px solid #e9ecef',
-          marginBottom: '8px',
-          borderTopLeftRadius: '12px',
-          borderTopRightRadius: '12px'
+          background: 'none',
+          border: 'none',
+          fontSize: '1.5rem',
+          cursor: 'pointer',
+          padding: '5px',
         }}
       >
-        <div className="d-flex align-items-center">
-          <div 
-            className="rounded-circle me-3 d-flex align-items-center justify-content-center"
-            style={{
-              width: '40px',
-              height: '40px',
-              backgroundColor: '#dc3545',
-              color: 'white'
-            }}
-          >
-            <UserCog size={20} />
-          </div>
-          <div>
-            <div className="fw-semibold">{user?.name || 'SuperAdmin'}</div>
-            <small className="text-muted">System Administrator</small>
-          </div>
-        </div>
-      </li>
+        ☰
+      </button>
+      <h6 style={{ margin: 0, marginLeft: '15px', fontWeight: 600 }}>
+        FIU Super Admin
+      </h6>
+    </div>
+
+    {/* Main Content Wrapper */}
+    <div
+      style={{
+        flex: 1,
+        marginLeft: window.innerWidth >= 768 ? (sidebarCollapsed ? '85px' : '280px') : '0',
+        paddingTop: window.innerWidth < 768 ? '60px' : '0',
+        transition: 'margin-left 0.3s ease',
+      }}
+    >
       
-      {/* Language Selection */}
-      <li>
-        <h6 className="dropdown-header" style={{ padding: '12px 20px 8px 20px', margin: 0, color: '#6c757d', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-          Language
-        </h6>
-      </li>
-      <li>
-        <button 
-          className="dropdown-item d-flex align-items-center"
-          style={{
-            padding: '12px 20px',
-            transition: 'background-color 0.2s ease'
-          }}
-          onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f8f9fa'}
-          onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
-          onClick={() => changeLanguage('en')}
-        >
-          <Globe size={16} className="me-3" />
-          <div className="flex-grow-1 d-flex justify-content-between align-items-center">
-            <span>🇺🇸 English</span>
-            {i18n.language === 'en' && (
-              <CheckCircle size={16} className="text-success" />
-            )}
-          </div>
-        </button>
-      </li>
-      <li>
-        <button 
-          className="dropdown-item d-flex align-items-center"
-          style={{
-            padding: '12px 20px',
-            transition: 'background-color 0.2s ease'
-          }}
-          onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f8f9fa'}
-          onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
-          onClick={() => changeLanguage('tr')}
-        >
-          <Globe size={16} className="me-3" />
-          <div className="flex-grow-1 d-flex justify-content-between align-items-center">
-            <span>🇹🇷 Türkçe</span>
-            {i18n.language === 'tr' && (
-              <CheckCircle size={16} className="text-success" />
-            )}
-          </div>
-        </button>
-      </li>
-      
-      <li><hr className="dropdown-divider" style={{ margin: '8px 0' }} /></li>
-      
-      {/* Logout */}
-      <li>
-        <button 
-          className="dropdown-item d-flex align-items-center text-danger" 
-          onClick={handleLogout}
-          style={{
-            padding: '12px 20px',
-            transition: 'background-color 0.2s ease'
-          }}
-          onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f8f9fa'}
-          onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
-        >
-          <LogOut size={16} className="me-3" />
-          {t('nav.logout')}
-        </button>
-      </li>
-    </ul>
-  </div>
-</div>
-        </div>
-      </nav>
 
       <div className="container-fluid px-4">
         {/* Alert Messages */}
@@ -920,59 +1254,199 @@ const EnhancedSuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({ user,
             ) : kpiStats && currentStats ? (
               <>
                 {/* Main KPI Cards */}
-                <div className="row g-4 mb-4">
-                  <div className="col-md-3">
-                    <div className="card border-0 shadow-sm h-100">
-                      <div className="card-body text-center">
-                        <Calendar size={32} className="text-primary mb-2" />
-                        <h3 className="fw-bold mb-1">{currentStats.total_appointments || 0}</h3>
-                        <p className="text-muted mb-0">Total Appointments</p>
-                        <small className="text-muted">
-                          {timeframe === 'today' && 'Today'}
-                          {timeframe === 'week' && 'This Week'}
-                          {timeframe === 'month' && 'This Month'}
-                        </small>
-                      </div>
-                    </div>
-                  </div>
+                {/* Main KPI Cards with Charts */}
+<div className="row g-4 mb-4">
+  {/* Total Appointments Card with Bar Chart */}
+  <div className="col-md-3">
+    <div className="card border-0 shadow-sm h-100" style={{ borderRadius: '16px' }}>
+      <div className="card-body" style={{ position: 'relative', overflow: 'hidden' }}>
+        <div style={{
+          position: 'absolute',
+          top: 0,
+          right: 0,
+          width: '120px',
+          height: '120px',
+          background: 'linear-gradient(135deg, #3b82f615, transparent)',
+          borderRadius: '0 16px 0 100%'
+        }} />
+        <div style={{ position: 'relative', zIndex: 1 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '16px' }}>
+            <div style={{
+              width: '48px',
+              height: '48px',
+              borderRadius: '12px',
+              background: 'linear-gradient(135deg, #3b82f615, #3b82f625)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center'
+            }}>
+              <Calendar size={24} style={{ color: '#3b82f6' }} />
+            </div>
+            <div style={{
+              fontSize: '36px',
+              fontWeight: '700',
+              color: '#1f2937'
+            }}>
+              {currentStats?.total_appointments || 0}
+            </div>
+          </div>
+          <div style={{ fontSize: '14px', fontWeight: '600', color: '#6b7280', marginBottom: '12px' }}>
+  Total Appointments
+</div>
+{kpiStats?.trends?.appointments && kpiStats.trends.appointments.length > 0 ? (
+  <>
+    <MiniBarChart data={kpiStats.trends.appointments} color="#3b82f6" />
+    <div style={{ fontSize: '12px', color: '#3b82f6', fontWeight: '600', marginTop: '8px' }}>
+      7-day trend
+    </div>
+  </>
+) : (
+  <div style={{ fontSize: '12px', color: '#9ca3af', fontStyle: 'italic' }}>
+    No trend data available
+  </div>
+)}
+        </div>
+      </div>
+    </div>
+  </div>
 
-                  <div className="col-md-3">
-                    <div className="card border-0 shadow-sm h-100">
-                      <div className="card-body text-center">
-                        <CheckCircle size={32} className="text-success mb-2" />
-                        <h3 className="fw-bold mb-1">{currentStats.completed || 0}</h3>
-                        <p className="text-muted mb-0">Completed</p>
-                        <small className="text-success">
-                          {currentStats.completion_rate || 0}% completion rate
-                        </small>
-                      </div>
-                    </div>
-                  </div>
+  {/* Completed with Line Chart */}
+  <div className="col-md-3">
+    <div className="card border-0 shadow-sm h-100" style={{ borderRadius: '16px' }}>
+      <div className="card-body" style={{ position: 'relative', overflow: 'hidden' }}>
+        <div style={{
+          position: 'absolute',
+          top: 0,
+          right: 0,
+          width: '120px',
+          height: '120px',
+          background: 'linear-gradient(135deg, #10b98115, transparent)',
+          borderRadius: '0 16px 0 100%'
+        }} />
+        <div style={{ position: 'relative', zIndex: 1 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '16px' }}>
+            <div style={{
+              width: '48px',
+              height: '48px',
+              borderRadius: '12px',
+              background: 'linear-gradient(135deg, #10b98115, #10b98125)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center'
+            }}>
+              <CheckCircle size={24} style={{ color: '#10b981' }} />
+            </div>
+            <div style={{
+              fontSize: '36px',
+              fontWeight: '700',
+              color: '#1f2937'
+            }}>
+              {currentStats?.completed || 0}
+            </div>
+          </div>
+          <div style={{ fontSize: '14px', fontWeight: '600', color: '#6b7280', marginBottom: '12px' }}>
+  Completed
+</div>
+{kpiStats?.trends?.completions && kpiStats.trends.completions.length > 0 ? (
+  <>
+    <LineSparkline data={kpiStats.trends.completions} color="#10b981" width={120} height={40} />
+    <div style={{ fontSize: '12px', color: '#10b981', fontWeight: '600', marginTop: '8px' }}>
+      {currentStats?.completion_rate || 0}% completion rate
+    </div>
+  </>
+) : (
+  <div style={{ fontSize: '12px', color: '#10b981', fontWeight: '600' }}>
+    {currentStats?.completion_rate || 0}% completion rate
+  </div>
+)}
+        </div>
+      </div>
+    </div>
+  </div>
 
-                  <div className="col-md-3">
-                    <div className="card border-0 shadow-sm h-100">
-                      <div className="card-body text-center">
-                        <X size={32} className="text-danger mb-2" />
-                        <h3 className="fw-bold mb-1">{currentStats.cancelled || 0}</h3>
-                        <p className="text-muted mb-0">Cancelled</p>
-                        <small className="text-danger">
-                          {currentStats.cancellation_rate || 0}% cancellation rate
-                        </small>
-                      </div>
-                    </div>
-                  </div>
+  {/* Cancelled with Bar Chart */}
+  <div className="col-md-3">
+    <div className="card border-0 shadow-sm h-100" style={{ borderRadius: '16px' }}>
+      <div className="card-body" style={{ position: 'relative', overflow: 'hidden' }}>
+        <div style={{
+          position: 'absolute',
+          top: 0,
+          right: 0,
+          width: '120px',
+          height: '120px',
+          background: 'linear-gradient(135deg, #ef444415, transparent)',
+          borderRadius: '0 16px 0 100%'
+        }} />
+        <div style={{ position: 'relative', zIndex: 1 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '16px' }}>
+            <div style={{
+              width: '48px',
+              height: '48px',
+              borderRadius: '12px',
+              background: 'linear-gradient(135deg, #ef444415, #ef444425)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center'
+            }}>
+              <X size={24} style={{ color: '#ef4444' }} />
+            </div>
+            <div style={{
+              fontSize: '36px',
+              fontWeight: '700',
+              color: '#1f2937'
+            }}>
+              {currentStats?.cancelled || 0}
+            </div>
+          </div>
+          <div style={{ fontSize: '14px', fontWeight: '600', color: '#6b7280', marginBottom: '12px' }}>
+  Cancelled
+</div>
+{kpiStats?.trends?.cancellations && kpiStats.trends.cancellations.length > 0 ? (
+  <>
+    <MiniBarChart data={kpiStats.trends.cancellations} color="#ef4444" />
+    <div style={{ fontSize: '12px', color: '#ef4444', fontWeight: '600', marginTop: '8px' }}>
+      {currentStats?.cancellation_rate?.toFixed(1) || 0}% cancellation rate
+    </div>
+  </>
+) : (
+  <div style={{ fontSize: '12px', color: '#ef4444', fontWeight: '600' }}>
+    {currentStats?.cancellation_rate?.toFixed(1) || 0}% cancellation rate
+  </div>
+)}
+        </div>
+      </div>
+    </div>
+  </div>
 
-                  <div className="col-md-3">
-                    <div className="card border-0 shadow-sm h-100">
-                      <div className="card-body text-center">
-                        <Activity size={32} className="text-info mb-2" />
-                        <h3 className="fw-bold mb-1">{currentStats.sessions_today || currentStats.in_progress || 0}</h3>
-                        <p className="text-muted mb-0">Active Sessions</p>
-                        <small className="text-info">Currently in progress</small>
-                      </div>
-                    </div>
-                  </div>
-                </div>
+  {/* Active Sessions */}
+  <div className="col-md-3">
+    <div className="card border-0 shadow-sm h-100" style={{ borderRadius: '16px' }}>
+      <div className="card-body text-center" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
+        <div style={{
+          width: '48px',
+          height: '48px',
+          borderRadius: '12px',
+          background: 'linear-gradient(135deg, #8b5cf615, #8b5cf625)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          marginBottom: '12px'
+        }}>
+          <Activity size={24} style={{ color: '#8b5cf6' }} />
+        </div>
+        <div style={{ fontSize: '36px', fontWeight: '700', color: '#1f2937', marginBottom: '4px' }}>
+          {currentStats?.sessions_today || currentStats?.in_progress || 0}
+        </div>
+        <div style={{ fontSize: '14px', fontWeight: '600', color: '#6b7280', marginBottom: '16px' }}>
+          Active Sessions
+        </div>
+        <div style={{ fontSize: '12px', color: '#8b5cf6', fontWeight: '600' }}>
+          Currently in progress
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
 
                 {/* Status Breakdown Cards */}
                 <div className="row g-4 mb-4">
@@ -993,7 +1467,7 @@ const EnhancedSuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({ user,
                         <small className="text-muted">Confirmed</small>
                       </div>
                     </div>
-                  </div>
+                  </div> {/*
                   <div className="col-md-2">
                     <div className="card border-0 shadow-sm">
                       <div className="card-body text-center py-3">
@@ -1020,7 +1494,7 @@ const EnhancedSuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({ user,
                         <small className="text-muted">No Show</small>
                       </div>
                     </div>
-                  </div>
+                  </div>*/}
                   <div className="col-md-2">
                     <div className="card border-0 shadow-sm">
                       <div className="card-body text-center py-3">
@@ -1032,47 +1506,192 @@ const EnhancedSuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({ user,
                   </div>
                 </div>
 
+                {/* Status Distribution Donut Chart
+<div className="row mb-4">
+  <div className="col-md-6 offset-md-3">
+    <div className="card shadow-sm border-0" style={{ borderRadius: '16px' }}>
+      <div className="card-header bg-white border-0">
+        <h6 className="fw-bold mb-0 text-center">Status Distribution</h6>
+      </div>
+      <div className="card-body text-center">
+        <DonutChart 
+          data={[
+            currentStats?.completed || 0,
+            currentStats?.scheduled || 0,
+            currentStats?.cancelled || 0,
+            currentStats?.no_show || 0,
+            currentStats?.in_progress || 0
+          ]}
+          colors={['#10b981', '#3b82f6', '#ef4444', '#6b7280', '#8b5cf6']}
+          size={200}
+        />
+        <div style={{ marginTop: '20px' }}>
+          {[
+            { label: 'Completed', color: '#10b981', value: currentStats?.completed || 0 },
+            { label: 'Scheduled', color: '#3b82f6', value: currentStats?.scheduled || 0 },
+            { label: 'Cancelled', color: '#ef4444', value: currentStats?.cancelled || 0 },
+            { label: 'No Show', color: '#6b7280', value: currentStats?.no_show || 0 },
+            { label: 'In Progress', color: '#8b5cf6', value: currentStats?.in_progress || 0 }
+          ].map((item, index) => (
+            <div key={index} style={{ 
+              display: 'flex', 
+              alignItems: 'center', 
+              justifyContent: 'space-between',
+              padding: '8px 0',
+              borderBottom: index < 4 ? '1px solid #f3f4f6' : 'none'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <div style={{
+                  width: '12px', height: '12px',
+                  borderRadius: '3px', background: item.color
+                }} />
+                <span style={{ fontSize: '14px', color: '#6b7280', fontWeight: '500' }}>
+                  {item.label}
+                </span>
+              </div>
+              <span style={{ fontSize: '16px', fontWeight: '700', color: '#1f2937' }}>
+                {item.value}
+              </span>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  </div>
+</div>*/}
+
                 {/* Prescription Stats */}
-                {kpiStats.prescription_stats && (
-                  <div className="row g-4 mb-4">
-                    <div className="col-md-3">
-                      <div className="card border-0 shadow-sm">
-                        <div className="card-body text-center">
-                          <FileText size={28} className="text-warning mb-2" />
-                          <h4 className="fw-bold mb-1">{kpiStats.prescription_stats.today || 0}</h4>
-                          <p className="text-muted mb-0 small">Prescriptions Today</p>
-                        </div>
-                      </div>
-                    </div>
-                    <div className="col-md-3">
-                      <div className="card border-0 shadow-sm">
-                        <div className="card-body text-center">
-                          <FileText size={28} className="text-primary mb-2" />
-                          <h4 className="fw-bold mb-1">{kpiStats.prescription_stats.this_week || 0}</h4>
-                          <p className="text-muted mb-0 small">Prescriptions This Week</p>
-                        </div>
-                      </div>
-                    </div>
-                    <div className="col-md-3">
-                      <div className="card border-0 shadow-sm">
-                        <div className="card-body text-center">
-                          <FileText size={28} className="text-success mb-2" />
-                          <h4 className="fw-bold mb-1">{kpiStats.prescription_stats.this_month || 0}</h4>
-                          <p className="text-muted mb-0 small">Prescriptions This Month</p>
-                        </div>
-                      </div>
-                    </div>
-                    <div className="col-md-3">
-                      <div className="card border-0 shadow-sm">
-                        <div className="card-body text-center">
-                          <Award size={28} className="text-info mb-2" />
-                          <h4 className="fw-bold mb-1">{kpiStats.prescription_stats.total || 0}</h4>
-                          <p className="text-muted mb-0 small">Total Prescriptions</p>
-                        </div>
-                      </div>
-                    </div>
+                {/* Prescription Stats with Charts */}
+{kpiStats?.prescription_stats && (
+  <div className="row mb-4">
+    <div className="col-12">
+      <div className="card shadow-sm border-0" style={{ borderRadius: '16px' }}>
+        <div className="card-header bg-white border-0" style={{ borderRadius: '16px 16px 0 0' }}>
+          <h6 className="fw-bold mb-0">Prescription Activity</h6>
+        </div>
+        <div className="card-body">
+          <div className="row g-3">
+            {/* Today */}
+            <div className="col-md-3">
+              <div style={{
+                background: 'linear-gradient(135deg, #fef3c7, #fde68a)',
+                borderRadius: '12px',
+                padding: '20px',
+                border: '2px solid #fbbf24'
+              }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '12px' }}>
+                  <FileText size={28} style={{ color: '#d97706' }} />
+                  <div style={{ fontSize: '32px', fontWeight: '700', color: '#78350f' }}>
+                    {kpiStats.prescription_stats.today || 0}
                   </div>
-                )}
+                </div>
+                <div style={{ fontSize: '13px', fontWeight: '600', color: '#92400e', marginBottom: '12px' }}>
+                  Today
+                </div>
+                {kpiStats?.trends?.prescriptions && kpiStats.trends.prescriptions.length > 0 && (
+  <div style={{ height: '40px', background: 'rgba(255,255,255,0.5)', borderRadius: '6px', padding: '8px' }}>
+    <MiniBarChart data={kpiStats.trends.prescriptions} color="#d97706" />
+  </div>
+)}
+              </div>
+            </div>
+
+            {/* This Week */}
+            <div className="col-md-3">
+              <div style={{
+                background: 'linear-gradient(135deg, #dbeafe, #bfdbfe)',
+                borderRadius: '12px',
+                padding: '20px',
+                border: '2px solid #60a5fa'
+              }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '12px' }}>
+                  <FileText size={28} style={{ color: '#2563eb' }} />
+                  <div style={{ fontSize: '32px', fontWeight: '700', color: '#1e3a8a' }}>
+                    {kpiStats.prescription_stats.this_week || 0}
+                  </div>
+                </div>
+                <div style={{ fontSize: '13px', fontWeight: '600', color: '#1e40af', marginBottom: '12px' }}>
+                  This Week
+                </div>
+                {kpiStats?.trends?.prescriptions && kpiStats.trends.prescriptions.length > 0 && (
+  <div style={{ height: '40px', background: 'rgba(255,255,255,0.5)', borderRadius: '6px', padding: '8px', display: 'flex', alignItems: 'center' }}>
+    <LineSparkline data={kpiStats.trends.prescriptions} color="#2563eb" width={140} height={35} />
+  </div>
+)}
+              </div>
+            </div>
+
+            {/* This Month */}
+            <div className="col-md-3">
+              <div style={{
+                background: 'linear-gradient(135deg, #d1fae5, #a7f3d0)',
+                borderRadius: '12px',
+                padding: '20px',
+                border: '2px solid #34d399'
+              }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '12px' }}>
+                  <FileText size={28} style={{ color: '#059669' }} />
+                  <div style={{ fontSize: '32px', fontWeight: '700', color: '#064e3b' }}>
+                    {kpiStats.prescription_stats.this_month || 0}
+                  </div>
+                </div>
+                <div style={{ fontSize: '13px', fontWeight: '600', color: '#065f46', marginBottom: '12px' }}>
+                  This Month
+                </div>
+                {kpiStats?.trends?.prescriptions && kpiStats.trends.prescriptions.length > 0 && (
+  <div style={{ height: '40px', background: 'rgba(255,255,255,0.5)', borderRadius: '6px', padding: '8px' }}>
+    <MiniBarChart data={kpiStats.trends.prescriptions} color="#059669" />
+  </div>
+)}
+              </div>
+            </div>
+
+            {/* Total */}
+            <div className="col-md-3">
+              <div style={{
+                background: 'linear-gradient(135deg, #e0e7ff, #c7d2fe)',
+                borderRadius: '12px',
+                padding: '20px',
+                border: '2px solid #818cf8',
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center'
+              }}>
+                <div style={{ width: '100%', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
+                  <Award size={28} style={{ color: '#4f46e5' }} />
+                  <div style={{ fontSize: '32px', fontWeight: '700', color: '#312e81' }}>
+                    {kpiStats.prescription_stats.total || 0}
+                  </div>
+                </div>
+                <div style={{ fontSize: '13px', fontWeight: '600', color: '#3730a3', marginBottom: '8px', width: '100%' }}>
+                  Total Prescriptions
+                </div>
+                <div style={{ position: 'relative', width: '80px', height: '80px', marginTop: '4px' }}>
+                  <svg width="80" height="80" style={{ transform: 'rotate(-90deg)' }}>
+                    <circle cx="40" cy="40" r="32" fill="none" stroke="rgba(255,255,255,0.5)" strokeWidth="6" />
+                    <circle 
+                      cx="40" cy="40" r="32" fill="none" stroke="#4f46e5" strokeWidth="6"
+                      strokeDasharray={`${((kpiStats.prescription_stats.total || 0) / 10) * 201} 201`}
+                      strokeLinecap="round"
+                    />
+                  </svg>
+                  <div style={{
+                    position: 'absolute', top: '50%', left: '50%',
+                    transform: 'translate(-50%, -50%)',
+                    fontSize: '10px', fontWeight: '700',
+                    color: '#312e81', textAlign: 'center'
+                  }}>
+                    Growth
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+)}
 
                 {/* Charts Row */}
                 {chartData && (
@@ -2004,6 +2623,7 @@ const EnhancedSuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({ user,
           
       `}</style>
     </div>
+     </div>
   );
 };
 

@@ -101,6 +101,15 @@ class SuperAdminController extends Controller
                 'appointment_trends' => $this->getAppointmentTrends($selectedMonth, $selectedYear),
                 'prescription_stats' => $this->getPrescriptionStats($date, $startOfMonth, $endOfMonth),
                 'system_health' => $this->getSystemHealth(),
+                
+                // ADD THIS - Trend data for charts
+                'trends' => [
+                    'appointments' => $this->getAppointmentDailyTrend($startOfWeek, $endOfWeek),
+                    'completions' => $this->getCompletionDailyTrend($startOfWeek, $endOfWeek),
+                    'cancellations' => $this->getCancellationDailyTrend($startOfWeek, $endOfWeek),
+                    'prescriptions' => $this->getPrescriptionTrends($startOfWeek, $endOfWeek),
+                ],
+                
                 'selected_date' => $date->toDateString(),
                 'selected_week' => [
                     'start' => $startOfWeek->toDateString(),
@@ -115,9 +124,57 @@ class SuperAdminController extends Controller
             ]);
         } catch (\Exception $e) {
             \Log::error('Dashboard stats error: ' . $e->getMessage());
-            \Log::error('Stack trace: ' . $e->getTraceAsString());
             return response()->json(['error' => $e->getMessage()], 500);
         }
+    }
+
+    // Add these new helper methods
+    private function getAppointmentDailyTrend($start, $end)
+    {
+        $trends = Appointment::whereBetween('date', [$start, $end])
+            ->select(DB::raw('DATE(date) as date'), DB::raw('count(*) as count'))
+            ->groupBy('date')
+            ->orderBy('date')
+            ->get()
+            ->pluck('count', 'date');
+        
+        return $this->fillMissingDays($start, $end, $trends);
+    }
+
+    private function getCompletionDailyTrend($start, $end)
+    {
+        $trends = Appointment::whereBetween('date', [$start, $end])
+            ->where('status', 'completed')
+            ->select(DB::raw('DATE(date) as date'), DB::raw('count(*) as count'))
+            ->groupBy('date')
+            ->orderBy('date')
+            ->get()
+            ->pluck('count', 'date');
+        
+        return $this->fillMissingDays($start, $end, $trends);
+    }
+
+    private function getCancellationDailyTrend($start, $end)
+    {
+        $trends = Appointment::whereBetween('date', [$start, $end])
+            ->whereIn('status', ['cancelled', 'no_show'])
+            ->select(DB::raw('DATE(date) as date'), DB::raw('count(*) as count'))
+            ->groupBy('date')
+            ->orderBy('date')
+            ->get()
+            ->pluck('count', 'date');
+        
+        return $this->fillMissingDays($start, $end, $trends);
+    }
+
+    private function fillMissingDays($start, $end, $data)
+    {
+        $result = [];
+        for ($date = Carbon::parse($start); $date->lte(Carbon::parse($end)); $date->addDay()) {
+            $dateStr = $date->toDateString();
+            $result[] = $data[$dateStr] ?? 0;
+        }
+        return $result;
     }
 
     // --- Dashboard Helper Methods ---
@@ -240,6 +297,31 @@ class SuperAdminController extends Controller
 
         return array_values($formatted);
     }
+
+    private function getPrescriptionTrends($startOfMonth, $endOfMonth)
+{
+    $trends = Prescription::whereBetween('created_at', [$startOfMonth, $endOfMonth])
+        ->select(DB::raw('DATE(created_at) as date'), DB::raw('count(*) as count'))
+        ->groupBy('date')
+        ->orderBy('date')
+        ->get();
+
+    // Fill in missing days with 0
+    $start = Carbon::parse($startOfMonth);
+    $end = Carbon::parse($endOfMonth);
+    $allDays = [];
+    
+    for ($date = $start->copy(); $date->lte($end); $date->addDay()) {
+        $dateStr = $date->toDateString();
+        $allDays[$dateStr] = 0;
+    }
+    
+    foreach ($trends as $trend) {
+        $allDays[$trend->date] = $trend->count;
+    }
+    
+    return array_values($allDays);
+}
 
     private function getPrescriptionStats($date, $startOfMonth, $endOfMonth)
     {

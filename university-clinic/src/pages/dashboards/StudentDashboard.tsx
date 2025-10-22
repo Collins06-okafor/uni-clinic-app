@@ -164,6 +164,10 @@ const StudentAppointmentSystem: React.FC<Props> = ({
   type TabType = 'overview' | 'profile' | 'request' | 'history' | 'medical-history';
   const [activeTab, setActiveTab] = useState<TabType>('overview');
   const [appointments, setAppointments] = useState<Appointment[]>([]);
+
+  const [sidebarOpen, setSidebarOpen] = useState<boolean>(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(false);
+
   //const [specializations, setSpecializations] = useState<Specialization[]>([]);
   const [doctors, setDoctors] = useState<Doctor[]>([]);  // Add this state
   const [loading, setLoading] = useState<boolean>(false);
@@ -1418,535 +1422,679 @@ const AlternativeDatesModal = () => (
   )
 );
 
+// ==================== SIDEBAR COMPONENT ====================
+const Sidebar = () => {
+  const menuItems = [
+    { 
+      id: 'overview', 
+      icon: BarChart3, 
+      label: 'Dashboard' 
+    },
+    { 
+      id: 'request', 
+      icon: Calendar, 
+      label: 'Book Appointment' 
+    },
+    { 
+      id: 'history', 
+      icon: History, 
+      label: 'My Appointments' 
+    },
+    { 
+      id: 'medical-history', 
+      icon: FileText, 
+      label: 'Medical Records' 
+    },
+  ];
 
   return (
     <>
-      {/* Navigation Header - Updated for White Background */}
-      <nav 
-  className="navbar navbar-expand-lg navbar-light"
-  style={{
-    position: 'fixed',
-    top: 0,
-    left: 0,
-    right: 0,
-    width: '100%',
-    zIndex: 1030,
-    background: 'white',
-    boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
-    border: 'none',
-    borderBottom: 'none',
-    minHeight: '70px', // Reduced for mobile
-    padding: 0,
-    margin: 0
-  }}
->
-  <div 
-    className="container-fluid d-flex align-items-center justify-content-between h-100"
-    style={{
-      padding: '0.5rem 1rem', // Better mobile padding
-      margin: 0
-    }}
-  >
-    {/* Logo Section - Mobile responsive */}
-    <div 
-      className="navbar-brand d-flex align-items-center"
-      style={{
-        marginRight: 0,
-        padding: 0,
-        minWidth: '200px' // Ensure logo is always visible
-      }}
-    >
-      <img
-        src="/logo6.png"
-        alt="Final International University Logo"
+      {/* Mobile Overlay - Click anywhere to close sidebar */}
+      {sidebarOpen && window.innerWidth < 768 && (
+        <div
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: 'rgba(0, 0, 0, 0.6)',
+            zIndex: 1040,
+            backdropFilter: 'blur(2px)',
+            animation: 'fadeIn 0.2s ease',
+          }}
+          onClick={() => setSidebarOpen(false)}
+        />
+      )}
+
+      {/* Sidebar Container */}
+      <div
         style={{
-          width: 'clamp(40px, 10vw, 70px)', // Responsive logo size
-          height: 'clamp(40px, 10vw, 70px)',
-          objectFit: 'contain',
-          borderRadius: '8px',
-          marginRight: 'clamp(8px, 2vw, 12px)' // Responsive spacing
-        }}
-      />
-      <div>
-        <h5 
-          style={{
-            color: '#212529',
-            fontWeight: 'bold',
-            fontSize: 'clamp(0.9rem, 3vw, 1.25rem)', // Responsive font size
-            marginBottom: '2px',
-            lineHeight: 1.2
-          }}
-          className="d-none d-sm-block" // Hide on very small screens
-        >
-          Final International University
-        </h5>
-        <h6 
-          style={{
-            color: '#212529',
-            fontWeight: 'bold',
-            fontSize: '0.9rem',
-            marginBottom: '2px',
-            lineHeight: 1.2
-          }}
-          className="d-block d-sm-none" // Show abbreviated name on small screens
-        >
-          FIU Medical
-        </h6>
-        <small 
-          style={{
-            color: '#6c757d',
-            fontSize: 'clamp(0.7rem, 2vw, 0.875rem)',
-            lineHeight: 1
-          }}
-          className="d-none d-md-block" // Hide subtitle on mobile
-        >
-          Medical Appointments
-        </small>
-      </div>
-    </div>
-
-    {/* Mobile menu toggle */}
-    <button 
-      className="navbar-toggler d-lg-none border-0" 
-      type="button" 
-      data-bs-toggle="collapse" 
-      data-bs-target="#navbarContent"
-      aria-controls="navbarContent" 
-      aria-expanded="false" 
-      aria-label="Toggle navigation"
-      style={{
-        padding: '4px 8px',
-        fontSize: '1rem'
-      }}
-    >
-      <span className="navbar-toggler-icon"></span>
-    </button>
-
-    {/* Navigation Menu - Better spacing and layout */}
-    <div className="collapse navbar-collapse" id="navbarContent">
-      {/* Center Navigation */}
-      <ul 
-        className="navbar-nav mx-auto mb-0" 
-        style={{ 
+          position: 'fixed',
+          top: 0,
+          left: window.innerWidth < 768 ? (sidebarOpen ? 0 : '-300px') : 0,
+          bottom: 0,
+          width: sidebarCollapsed && window.innerWidth >= 768 ? '85px' : '280px',
+          background: '#1a1d29',
+          boxShadow: '4px 0 24px rgba(0, 0, 0, 0.12)',
+          transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+          zIndex: 1050,
           display: 'flex',
-          alignItems: 'center',
-          gap: '8px' // Consistent gap between nav items
+          flexDirection: 'column',
+          overflow: 'hidden',
         }}
       >
-        <li className="nav-item">
-          <button 
-            className={`nav-link btn ${activeTab === 'overview' ? 'active' : ''}`}
-            onClick={() => setActiveTab('overview')}
-            style={{
-              borderRadius: '8px', // Consistent border radius
-              border: 'none',
-              margin: 0,
-              padding: '10px 16px', // Better padding proportions
-              fontWeight: 600,
-              transition: 'all 0.3s ease',
-              backgroundColor: activeTab === 'overview' ? '#dc3545' : 'transparent',
-              color: activeTab === 'overview' ? 'white' : '#495057', // Better neutral color
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px', // Space between icon and text
-              minHeight: '44px' // Consistent button height
-            }}
-            onMouseEnter={(e) => {
-              if (activeTab !== 'overview') {
-                e.currentTarget.style.backgroundColor = 'rgba(220, 53, 69, 0.1)';
-                e.currentTarget.style.color = '#dc3545';
-              }
-            }}
-            onMouseLeave={(e) => {
-              if (activeTab !== 'overview') {
-                e.currentTarget.style.backgroundColor = 'transparent';
-                e.currentTarget.style.color = '#495057';
-              }
-            }}
-          >
-            <BarChart3 size={18} />
-            <span>{t('nav.overview')}</span>
-          </button>
-        </li>
-        
-        <li className="nav-item">
-          <button 
-            className={`nav-link btn ${activeTab === 'profile' ? 'active' : ''}`}
-            onClick={() => setActiveTab('profile')}
-            style={{
-              borderRadius: '8px',
-              border: 'none',
-              margin: 0,
-              padding: '10px 16px',
-              fontWeight: 600,
-              transition: 'all 0.3s ease',
-              backgroundColor: activeTab === 'profile' ? '#dc3545' : 'transparent',
-              color: activeTab === 'profile' ? 'white' : '#495057',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px',
-              minHeight: '44px'
-            }}
-            onMouseEnter={(e) => {
-              if (activeTab !== 'profile') {
-                e.currentTarget.style.backgroundColor = 'rgba(220, 53, 69, 0.1)';
-                e.currentTarget.style.color = '#dc3545';
-              }
-            }}
-            onMouseLeave={(e) => {
-              if (activeTab !== 'profile') {
-                e.currentTarget.style.backgroundColor = 'transparent';
-                e.currentTarget.style.color = '#495057';
-              }
-            }}
-          >
-            <User size={18} />
-            <span>{t('nav.profile')}</span>
-            {!profileComplete && (
-              <span 
-                className="badge bg-warning text-dark"
-                style={{ 
-                  fontSize: '0.7rem',
-                  marginLeft: '4px'
+        {/* Header Section */}
+        <div
+          style={{
+            padding: sidebarCollapsed && window.innerWidth >= 768 ? '24px 16px' : '24px',
+            borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            background: 'linear-gradient(135deg, #1e2230 0%, #1a1d29 100%)',
+            minHeight: '80px',
+          }}
+        >
+          {!(sidebarCollapsed && window.innerWidth >= 768) ? (
+            <div style={{ display: 'flex', alignItems: 'center', flex: 1 }}>
+              <div
+                style={{
+                  width: '48px',
+                  height: '48px',
+                  borderRadius: '12px',
+                  background: 'linear-gradient(135deg, #dc3545 0%, #c82333 100%)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  marginRight: '14px',
+                  boxShadow: '0 4px 12px rgba(220, 53, 69, 0.3)',
+                  overflow: 'hidden',
                 }}
               >
-                !
-              </span>
+                <img
+                  src="/logo6.png"
+                  alt="FIU Logo"
+                  style={{
+                    width: '32px',
+                    height: '32px',
+                    objectFit: 'cover',
+                  }}
+                />
+              </div>
+              <div>
+                <h6
+                  style={{
+                    color: '#ffffff',
+                    margin: 0,
+                    fontSize: '1.05rem',
+                    fontWeight: 700,
+                    letterSpacing: '-0.02em',
+                  }}
+                >
+                  FIU Medical
+                </h6>
+                <small
+                  style={{
+                    color: 'rgba(255, 255, 255, 0.6)',
+                    fontSize: '0.8rem',
+                    fontWeight: 500,
+                  }}
+                >
+                  Student Portal
+                </small>
+              </div>
+            </div>
+          ) : (
+            <div
+              style={{
+                width: '48px',
+                height: '48px',
+                borderRadius: '12px',
+                background: 'linear-gradient(135deg, #dc3545 0%, #c82333 100%)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                boxShadow: '0 4px 12px rgba(220, 53, 69, 0.3)',
+                margin: '0 auto',
+                overflow: 'hidden',
+              }}
+            >
+              <img
+                src="/logo6.png"
+                alt="FIU Logo"
+                style={{
+                  width: '32px',
+                  height: '32px',
+                  objectFit: 'cover',
+                }}
+              />
+            </div>
+          )}
+
+          {/* Collapse Toggle - Desktop Only */}
+          {window.innerWidth >= 768 && (
+            <button
+              onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+              style={{
+                background: 'linear-gradient(135deg, rgba(220, 53, 69, 0.15) 0%, rgba(200, 35, 51, 0.15) 100%)',
+                border: '1px solid rgba(220, 53, 69, 0.3)',
+                borderRadius: '10px',
+                width: '36px',
+                height: '36px',
+                color: '#dc3545',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                fontSize: '0.9rem',
+                fontWeight: 700,
+                boxShadow: '0 2px 8px rgba(220, 53, 69, 0.2)',
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.background = 'linear-gradient(135deg, rgba(220, 53, 69, 0.25) 0%, rgba(200, 35, 51, 0.25) 100%)';
+                e.currentTarget.style.transform = 'scale(1.05)';
+                e.currentTarget.style.boxShadow = '0 4px 12px rgba(220, 53, 69, 0.3)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.background = 'linear-gradient(135deg, rgba(220, 53, 69, 0.15) 0%, rgba(200, 35, 51, 0.15) 100%)';
+                e.currentTarget.style.transform = 'scale(1)';
+                e.currentTarget.style.boxShadow = '0 2px 8px rgba(220, 53, 69, 0.2)';
+              }}
+            >
+              {sidebarCollapsed ? '»' : '«'}
+            </button>
+          )}
+        </div>
+
+        {/* Navigation Menu */}
+        <nav
+          style={{
+            flex: 1,
+            overflowY: 'auto',
+            overflowX: 'hidden',
+            padding: sidebarCollapsed && window.innerWidth >= 768 ? '16px 8px' : '20px 16px',
+          }}
+        >
+          {/* Menu Section Label */}
+          {!(sidebarCollapsed && window.innerWidth >= 768) && (
+            <div
+              style={{
+                color: 'rgba(255, 255, 255, 0.5)',
+                fontSize: '0.75rem',
+                fontWeight: 600,
+                textTransform: 'uppercase',
+                letterSpacing: '0.08em',
+                marginBottom: '12px',
+                paddingLeft: '12px',
+              }}
+            >
+              Main Menu
+            </div>
+          )}
+
+          {/* Menu Items */}
+          {menuItems.map((item) => {
+            const Icon = item.icon;
+            const isActive = activeTab === item.id;
+
+            return (
+              <button
+                key={item.id}
+                onClick={() => {
+                  setActiveTab(item.id as TabType);
+                  if (window.innerWidth < 768) setSidebarOpen(false);
+                }}
+                style={{
+                  width: '100%',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent:
+                    sidebarCollapsed && window.innerWidth >= 768 ? 'center' : 'space-between',
+                  padding:
+                    sidebarCollapsed && window.innerWidth >= 768 ? '14px' : '14px 16px',
+                  marginBottom: '6px',
+                  background: isActive
+                    ? 'linear-gradient(135deg, rgba(220, 53, 69, 0.15) 0%, rgba(200, 35, 51, 0.15) 100%)'
+                    : 'transparent',
+                  border: isActive ? '1px solid rgba(220, 53, 69, 0.3)' : '1px solid transparent',
+                  borderRadius: '10px',
+                  color: isActive ? '#dc3545' : 'rgba(255, 255, 255, 0.75)',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+                  fontSize: '0.95rem',
+                  fontWeight: isActive ? 600 : 500,
+                  position: 'relative',
+                  overflow: 'hidden',
+                }}
+                onMouseEnter={(e) => {
+                  if (!isActive) {
+                    e.currentTarget.style.background = 'rgba(255, 255, 255, 0.06)';
+                    e.currentTarget.style.color = '#ffffff';
+                    e.currentTarget.style.transform = 'translateX(4px)';
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  if (!isActive) {
+                    e.currentTarget.style.background = 'transparent';
+                    e.currentTarget.style.color = 'rgba(255, 255, 255, 0.75)';
+                    e.currentTarget.style.transform = 'translateX(0)';
+                  }
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center' }}>
+                  <Icon size={20} style={{ minWidth: '20px' }} />
+                  {!(sidebarCollapsed && window.innerWidth >= 768) && (
+                    <span style={{ marginLeft: '14px' }}>{item.label}</span>
+                  )}
+                </div>
+
+                {/* Active Indicator */}
+                {isActive && (
+                  <div
+                    style={{
+                      position: 'absolute',
+                      left: 0,
+                      top: '50%',
+                      transform: 'translateY(-50%)',
+                      width: '4px',
+                      height: '60%',
+                      background: 'linear-gradient(180deg, #dc3545 0%, #c82333 100%)',
+                      borderRadius: '0 4px 4px 0',
+                    }}
+                  />
+                )}
+              </button>
+            );
+          })}
+
+          {/* Divider */}
+          <div
+            style={{
+              height: '1px',
+              background: 'rgba(255, 255, 255, 0.08)',
+              margin: '20px 0',
+            }}
+          />
+
+          {/* Profile Menu Item */}
+          <button
+            onClick={() => {
+              setActiveTab('profile');
+              if (window.innerWidth < 768) setSidebarOpen(false);
+            }}
+            style={{
+              width: '100%',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent:
+                sidebarCollapsed && window.innerWidth >= 768 ? 'center' : 'flex-start',
+              padding:
+                sidebarCollapsed && window.innerWidth >= 768 ? '14px' : '14px 16px',
+              marginBottom: '6px',
+              background: activeTab === 'profile'
+                ? 'linear-gradient(135deg, rgba(220, 53, 69, 0.15) 0%, rgba(200, 35, 51, 0.15) 100%)'
+                : 'transparent',
+              border: activeTab === 'profile' ? '1px solid rgba(220, 53, 69, 0.3)' : '1px solid transparent',
+              borderRadius: '10px',
+              color: activeTab === 'profile' ? '#dc3545' : 'rgba(255, 255, 255, 0.75)',
+              cursor: 'pointer',
+              transition: 'all 0.2s ease',
+              fontSize: '0.95rem',
+              fontWeight: activeTab === 'profile' ? 600 : 500,
+            }}
+            onMouseEnter={(e) => {
+              if (activeTab !== 'profile') {
+                e.currentTarget.style.background = 'rgba(255, 255, 255, 0.06)';
+                e.currentTarget.style.color = '#ffffff';
+              }
+            }}
+            onMouseLeave={(e) => {
+              if (activeTab !== 'profile') {
+                e.currentTarget.style.background = 'transparent';
+                e.currentTarget.style.color = 'rgba(255, 255, 255, 0.75)';
+              }
+            }}
+          >
+            <User size={20} />
+            {!(sidebarCollapsed && window.innerWidth >= 768) && (
+              <span style={{ marginLeft: '14px' }}>Profile</span>
             )}
           </button>
-        </li>
-        
-        <li className="nav-item">
-          <button 
-            className={`nav-link btn ${activeTab === 'request' ? 'active' : ''}`}
-            onClick={() => setActiveTab('request')}
-            style={{
-              borderRadius: '8px',
-              border: 'none',
-              margin: 0,
-              padding: '10px 16px',
-              fontWeight: 600,
-              transition: 'all 0.3s ease',
-              backgroundColor: activeTab === 'request' ? '#dc3545' : 'transparent',
-              color: activeTab === 'request' ? 'white' : '#495057',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px',
-              minHeight: '44px'
-            }}
-            onMouseEnter={(e) => {
-              if (activeTab !== 'request') {
-                e.currentTarget.style.backgroundColor = 'rgba(220, 53, 69, 0.1)';
-                e.currentTarget.style.color = '#dc3545';
-              }
-            }}
-            onMouseLeave={(e) => {
-              if (activeTab !== 'request') {
-                e.currentTarget.style.backgroundColor = 'transparent';
-                e.currentTarget.style.color = '#495057';
-              }
-            }}
-          >
-            <FileText size={18} />
-            <span>{t('nav.request')}</span>
-          </button>
-        </li>
-        
-        <li className="nav-item">
-          <button 
-            className={`nav-link btn ${activeTab === 'history' ? 'active' : ''}`}
-            onClick={() => setActiveTab('history')}
-            style={{
-              borderRadius: '8px',
-              border: 'none',
-              margin: 0,
-              padding: '10px 16px',
-              fontWeight: 600,
-              transition: 'all 0.3s ease',
-              backgroundColor: activeTab === 'history' ? '#dc3545' : 'transparent',
-              color: activeTab === 'history' ? 'white' : '#495057',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px',
-              minHeight: '44px'
-            }}
-            onMouseEnter={(e) => {
-              if (activeTab !== 'history') {
-                e.currentTarget.style.backgroundColor = 'rgba(220, 53, 69, 0.1)';
-                e.currentTarget.style.color = '#dc3545';
-              }
-            }}
-            onMouseLeave={(e) => {
-              if (activeTab !== 'history') {
-                e.currentTarget.style.backgroundColor = 'transparent';
-                e.currentTarget.style.color = '#495057';
-              }
-            }}
-          >
-            <History size={18} />
-            <span>{t('nav.history')}</span>
-          </button>
-        </li>
+        </nav>
 
-        <li className="nav-item">
-          <button 
-            className={`nav-link btn ${activeTab === 'medical-history' ? 'active' : ''}`}
-            onClick={() => {
-              setActiveTab('medical-history');
-              fetchMedicalHistory(); // Fetch when tab is clicked
-            }}
-            style={{
-              borderRadius: '8px',
-              border: 'none',
-              margin: 0,
-              padding: '10px 16px',
-              fontWeight: 600,
-              transition: 'all 0.3s ease',
-              backgroundColor: activeTab === 'medical-history' ? '#dc3545' : 'transparent',
-              color: activeTab === 'medical-history' ? 'white' : '#495057',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px',
-              minHeight: '44px'
-            }}
-            onMouseEnter={(e) => {
-              if (activeTab !== 'medical-history') {
-                e.currentTarget.style.backgroundColor = 'rgba(220, 53, 69, 0.1)';
-                e.currentTarget.style.color = '#dc3545';
-              }
-            }}
-            onMouseLeave={(e) => {
-              if (activeTab !== 'medical-history') {
-                e.currentTarget.style.backgroundColor = 'transparent';
-                e.currentTarget.style.color = '#495057';
-              }
-            }}
-          >
-            <Stethoscope size={18} />
-            <span>Medical History</span>
-          </button>
-        </li>
-      </ul>
-
-      {/* Right side controls - Better alignment */}
-      <div 
-        className="d-flex align-items-center"
-        style={{ 
-          gap: '12px', // Consistent gap
-          minWidth: '200px',
-          justifyContent: 'flex-end'
-        }}
-      >
-        
-
-        {/* User Profile Dropdown - Modified to remove name and move language inside */}
-<div className="dropdown">
-  <button 
-    className="btn btn-light dropdown-toggle d-flex align-items-center" 
-    data-bs-toggle="dropdown"
-    style={{ 
-      borderRadius: '25px',
-      border: '2px solid #dee2e6',
-      padding: '6px 12px',
-      background: '#f8f9fa',
-      color: '#212529',
-      height: '40px'
-    }}
-    onMouseEnter={(e) => {
-      e.currentTarget.style.background = '#e9ecef';
-      e.currentTarget.style.borderColor = '#ced4da';
-    }}
-    onMouseLeave={(e) => {
-      e.currentTarget.style.background = '#f8f9fa';
-      e.currentTarget.style.borderColor = '#dee2e6';
-    }}
-  >
-    <div 
-      className="rounded-circle me-2 d-flex align-items-center justify-content-center"
-      style={{
-        width: '28px',
-        height: '28px',
-        backgroundColor: '#dc3545',
-        color: 'white'
-      }}
-    >
-      {userProfile.avatar_url ? (
-        <img 
-          src={userProfile.avatar_url}
-          alt="Profile" 
+        {/* User Profile Section - Bottom */}
+        <div
           style={{
-            width: '28px',
-            height: '28px',
-            borderRadius: '50%',
-            objectFit: 'cover'
-          }}
-        />
-      ) : (
-        <User size={16} />
-      )}
-    </div>
-    {/* Removed the name span completely */}
-  </button>
-  
-  <ul 
-    className="dropdown-menu dropdown-menu-end" 
-    style={{ 
-      minWidth: '280px',
-      border: 'none',
-      boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
-      borderRadius: '12px',
-      padding: '8px 0'
-    }}
-  >
-    {/* User Info Header */}
-    <li 
-      className="dropdown-header"
-      style={{
-        padding: '16px 20px 16px 20px',
-        backgroundColor: '#f8f9fa',
-        borderBottom: '1px solid #e9ecef',
-        marginBottom: '8px',
-        borderTopLeftRadius: '12px',
-        borderTopRightRadius: '12px'
-      }}
-    >
-      <div className="d-flex align-items-center">
-        <div 
-          className="rounded-circle me-3 d-flex align-items-center justify-content-center"
-          style={{
-            width: '40px',
-            height: '40px',
-            backgroundColor: '#dc3545',
-            color: 'white'
+            padding: sidebarCollapsed && window.innerWidth >= 768 ? '16px 12px' : '20px',
+            borderTop: '1px solid rgba(255, 255, 255, 0.08)',
+            background: 'linear-gradient(180deg, transparent 0%, rgba(0, 0, 0, 0.2) 100%)',
           }}
         >
-          {userProfile.avatar_url ? (
-            <img 
-              src={userProfile.avatar_url}
-              alt="Profile" 
-              style={{
-                width: '40px',
-                height: '40px',
-                borderRadius: '50%',
-                objectFit: 'cover'
-              }}
-            />
+          {!(sidebarCollapsed && window.innerWidth >= 768) ? (
+            <div>
+              {/* User Info Display */}
+              <div
+                style={{
+                  background: 'rgba(255, 255, 255, 0.06)',
+                  border: '1px solid rgba(255, 255, 255, 0.1)',
+                  padding: '14px 16px',
+                  borderRadius: '12px',
+                  marginBottom: '12px',
+                  display: 'flex',
+                  alignItems: 'center',
+                }}
+              >
+                <div
+                  style={{
+                    width: '40px',
+                    height: '40px',
+                    borderRadius: '10px',
+                    background: 'linear-gradient(135deg, #dc3545 0%, #c82333 100%)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    marginRight: '12px',
+                    fontSize: '1.1rem',
+                    fontWeight: 700,
+                    boxShadow: '0 4px 12px rgba(220, 53, 69, 0.3)',
+                    color: 'white',
+                  }}
+                >
+                  {user?.name?.charAt(0).toUpperCase() || 'S'}
+                </div>
+                <div style={{ flex: 1, overflow: 'hidden' }}>
+                  <div
+                    style={{
+                      fontSize: '0.95rem',
+                      fontWeight: 600,
+                      color: 'white',
+                      whiteSpace: 'nowrap',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                    }}
+                  >
+                    {user?.name || 'Student'}
+                  </div>
+                  <small
+                    style={{
+                      color: 'rgba(255, 255, 255, 0.6)',
+                      fontSize: '0.75rem',
+                      fontWeight: 500,
+                    }}
+                  >
+                    Student Portal
+                  </small>
+                </div>
+              </div>
+
+              {/* ============== LANGUAGE SWITCHER SECTION ============== */}
+              <div
+                style={{
+                  marginBottom: '12px',
+                }}
+              >
+                {/* Language Label */}
+                <div
+                  style={{
+                    color: 'rgba(255, 255, 255, 0.5)',
+                    fontSize: '0.7rem',
+                    fontWeight: 600,
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.08em',
+                    marginBottom: '8px',
+                    paddingLeft: '4px',
+                  }}
+                >
+                  Language
+                </div>
+
+                {/* Language Buttons */}
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  <button
+                    onClick={() => i18n.changeLanguage('en')}
+                    style={{
+                      flex: 1,
+                      background: i18n.language === 'en'
+                        ? 'linear-gradient(135deg, rgba(220, 53, 69, 0.2) 0%, rgba(200, 35, 51, 0.2) 100%)'
+                        : 'rgba(255, 255, 255, 0.05)',
+                      border: i18n.language === 'en'
+                        ? '1px solid rgba(220, 53, 69, 0.4)'
+                        : '1px solid rgba(255, 255, 255, 0.1)',
+                      color: i18n.language === 'en' ? '#dc3545' : 'rgba(255, 255, 255, 0.7)',
+                      padding: '8px 12px',
+                      borderRadius: '8px',
+                      cursor: 'pointer',
+                      transition: 'all 0.2s ease',
+                      fontSize: '0.85rem',
+                      fontWeight: i18n.language === 'en' ? 600 : 500,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '6px',
+                    }}
+                    onMouseEnter={(e) => {
+                      if (i18n.language !== 'en') {
+                        e.currentTarget.style.background = 'rgba(255, 255, 255, 0.08)';
+                        e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.2)';
+                      }
+                    }}
+                    onMouseLeave={(e) => {
+                      if (i18n.language !== 'en') {
+                        e.currentTarget.style.background = 'rgba(255, 255, 255, 0.05)';
+                        e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.1)';
+                      }
+                    }}
+                  >
+                    <Globe size={14} />
+                    <span>EN</span>
+                    {i18n.language === 'en' && (
+                      <CheckCircle size={14} style={{ marginLeft: 'auto' }} />
+                    )}
+                  </button>
+
+                  <button
+                    onClick={() => i18n.changeLanguage('tr')}
+                    style={{
+                      flex: 1,
+                      background: i18n.language === 'tr'
+                        ? 'linear-gradient(135deg, rgba(220, 53, 69, 0.2) 0%, rgba(200, 35, 51, 0.2) 100%)'
+                        : 'rgba(255, 255, 255, 0.05)',
+                      border: i18n.language === 'tr'
+                        ? '1px solid rgba(220, 53, 69, 0.4)'
+                        : '1px solid rgba(255, 255, 255, 0.1)',
+                      color: i18n.language === 'tr' ? '#dc3545' : 'rgba(255, 255, 255, 0.7)',
+                      padding: '8px 12px',
+                      borderRadius: '8px',
+                      cursor: 'pointer',
+                      transition: 'all 0.2s ease',
+                      fontSize: '0.85rem',
+                      fontWeight: i18n.language === 'tr' ? 600 : 500,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '6px',
+                    }}
+                    onMouseEnter={(e) => {
+                      if (i18n.language !== 'tr') {
+                        e.currentTarget.style.background = 'rgba(255, 255, 255, 0.08)';
+                        e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.2)';
+                      }
+                    }}
+                    onMouseLeave={(e) => {
+                      if (i18n.language !== 'tr') {
+                        e.currentTarget.style.background = 'rgba(255, 255, 255, 0.05)';
+                        e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.1)';
+                      }
+                    }}
+                  >
+                    <Globe size={14} />
+                    <span>TR</span>
+                    {i18n.language === 'tr' && (
+                      <CheckCircle size={14} style={{ marginLeft: 'auto' }} />
+                    )}
+                  </button>
+                </div>
+              </div>
+              {/* ============== END LANGUAGE SWITCHER ============== */}
+
+              {/* Logout Button */}
+              <button
+                onClick={onLogout}
+                style={{
+                  width: '100%',
+                  background: 'rgba(220, 53, 69, 0.15)',
+                  border: '1px solid rgba(220, 53, 69, 0.3)',
+                  color: '#dc3545',
+                  padding: '12px',
+                  borderRadius: '10px',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s ease',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontSize: '0.95rem',
+                  fontWeight: 600,
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.background = 'rgba(220, 53, 69, 0.25)';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background = 'rgba(220, 53, 69, 0.15)';
+                }}
+              >
+                <LogOut size={18} style={{ marginRight: '8px' }} />
+                Logout
+              </button>
+            </div>
           ) : (
-            <User size={20} />
+            // Collapsed state - Just icons
+            <div>
+              {/* Language Icon Button - Collapsed */}
+              <button
+                onClick={() => i18n.changeLanguage(i18n.language === 'en' ? 'tr' : 'en')}
+                title={`Switch to ${i18n.language === 'en' ? 'Turkish' : 'English'}`}
+                style={{
+                  width: '100%',
+                  background: 'rgba(255, 255, 255, 0.06)',
+                  border: '1px solid rgba(255, 255, 255, 0.1)',
+                  color: 'rgba(255, 255, 255, 0.75)',
+                  padding: '12px',
+                  borderRadius: '10px',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s ease',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  marginBottom: '8px',
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.background = 'rgba(255, 255, 255, 0.1)';
+                  e.currentTarget.style.color = '#ffffff';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background = 'rgba(255, 255, 255, 0.06)';
+                  e.currentTarget.style.color = 'rgba(255, 255, 255, 0.75)';
+                }}
+              >
+                <Globe size={20} />
+              </button>
+
+              {/* Logout Icon Button - Collapsed */}
+              <button
+                onClick={onLogout}
+                title="Logout"
+                style={{
+                  width: '100%',
+                  background: 'rgba(220, 53, 69, 0.15)',
+                  border: '1px solid rgba(220, 53, 69, 0.3)',
+                  color: '#dc3545',
+                  padding: '12px',
+                  borderRadius: '10px',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s ease',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.background = 'rgba(220, 53, 69, 0.25)';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background = 'rgba(220, 53, 69, 0.15)';
+                }}
+              >
+                <LogOut size={20} />
+              </button>
+            </div>
           )}
-        </div>
-        <div>
-          <div className="fw-semibold">{userProfile.name || 'Student'}</div>
-          <small className="text-muted">{userProfile.email}</small>
-          <div>
-            <small className="text-muted">ID: {userProfile.student_id}</small>
-          </div>
-          <div>
-            <small className="text-muted">{userProfile.department}</small>
-          </div>
         </div>
       </div>
-    </li>
+    </>
+  );
+};
+// ==================== END SIDEBAR COMPONENT ====================
+
+
+  return (
+  <div 
+    className="dashboard-wrapper"
+    style={{
+      minHeight: '100vh',
+      background: 'linear-gradient(135deg, #e0f2fe 0%, #f0fdf4 100%)',
+    }}
+  >
+    {/* Add Sidebar */}
+    <Sidebar />
     
-    {/* Language Selection - NEW SECTION */}
-    <li>
-      <h6 className="dropdown-header" style={{ padding: '12px 20px 8px 20px', margin: 0, color: '#6c757d', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-        Language
-      </h6>
-    </li>
-    <li>
-      <button 
-        className="dropdown-item d-flex align-items-center"
-        style={{
-          padding: '12px 20px',
-          transition: 'background-color 0.2s ease'
-        }}
-        onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f8f9fa'}
-        onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
-        onClick={() => i18n.changeLanguage('en')}
-      >
-        <Globe size={16} className="me-3" />
-        <div className="flex-grow-1 d-flex justify-content-between align-items-center">
-          <span>🇺🇸 English</span>
-          {i18n.language === 'en' && (
-            <CheckCircle size={16} className="text-success" />
-          )}
-        </div>
-      </button>
-    </li>
-    <li>
-      <button 
-        className="dropdown-item d-flex align-items-center"
-        style={{
-          padding: '12px 20px',
-          transition: 'background-color 0.2s ease'
-        }}
-        onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f8f9fa'}
-        onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
-        onClick={() => i18n.changeLanguage('tr')}
-      >
-        <Globe size={16} className="me-3" />
-        <div className="flex-grow-1 d-flex justify-content-between align-items-center">
-          <span>🇹🇷 Türkçe</span>
-          {i18n.language === 'tr' && (
-            <CheckCircle size={16} className="text-success" />
-          )}
-        </div>
-      </button>
-    </li>
-    
-    <li><hr className="dropdown-divider" style={{ margin: '8px 0' }} /></li>
-    
-    {/* Profile Status */}
-    <li>
-      <button 
-        className="dropdown-item d-flex align-items-center"
-        style={{
-          padding: '12px 20px',
-          transition: 'background-color 0.2s ease'
-        }}
-        onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f8f9fa'}
-        onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
-        onClick={() => setActiveTab('profile')}
-      >
-        <User size={16} className="me-3" />
-        <div className="flex-grow-1">
-          Profile
-          {!profileComplete && (
-            <span className="badge bg-warning text-dark ms-2" style={{ fontSize: '0.7rem' }}>
-              Incomplete
-            </span>
-          )}
-        </div>
-      </button>
-    </li>
-    
-    <li><hr className="dropdown-divider" style={{ margin: '8px 0' }} /></li>
-    
-    {/* Logout */}
-    {onLogout && (
-      <li>
-        <button 
-          className="dropdown-item d-flex align-items-center text-danger" 
-          onClick={onLogout}
+    {/* Main Content Container */}
+    <div 
+      style={{
+        marginLeft: window.innerWidth < 768 ? 0 : (sidebarCollapsed ? '85px' : '280px'),
+        transition: 'margin-left 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+      }}
+    >
+      {/* Mobile Header */}
+      {window.innerWidth < 768 && (
+        <div
           style={{
-            padding: '12px 20px',
-            transition: 'background-color 0.2s ease'
+            position: 'sticky',
+            top: 0,
+            background: 'white',
+            boxShadow: '0 2px 8px rgba(0, 0, 0, 0.1)',
+            padding: '16px',
+            zIndex: 1000,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
           }}
-          onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f8f9fa'}
-          onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
         >
-          <LogOut size={16} className="me-3" />
-          {t('nav.logout')}
-        </button>
-      </li>
-    )}
-  </ul>
-</div>
-            </div>
-          </div>
+          <button
+            onClick={() => setSidebarOpen(true)}
+            style={{
+              background: 'linear-gradient(135deg, #dc3545 0%, #c82333 100%)',
+              border: 'none',
+              borderRadius: '10px',
+              width: '40px',
+              height: '40px',
+              color: 'white',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontSize: '1.2rem',
+            }}
+          >
+            ☰
+          </button>
+          <h5 style={{ margin: 0, fontWeight: 700 }}>Student Dashboard</h5>
+          <div style={{ width: '40px' }} />
         </div>
-      </nav>
+      )}
+  
+      
+      
 
       {/* Main Container */}
       <div className="student-appointment-container" style={{ paddingTop: '5px' }}>
@@ -3124,6 +3272,9 @@ const AlternativeDatesModal = () => (
 {activeTab === 'history' && (
   <div className="card card-custom">
     {/* Appointment History content */}
+    <div className="card-body">
+      {/* Add your appointment history content here */}
+    </div>
   </div>
 )}
 
@@ -3682,7 +3833,8 @@ const AlternativeDatesModal = () => (
   </>
 )}
     </div>
-    </>
+    </div>
+  </div>
   
   );
 };

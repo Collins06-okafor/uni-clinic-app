@@ -107,6 +107,9 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
   // ---- Tabs ----
   const [activeTab, setActiveTab] = useState<'dashboard' | 'profile' | 'users' | 'config'>('dashboard');
 
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+
   // ---- Settings (UI draft state) ----
   const [systemSettings, setSystemSettings] = useState<SystemSettings | null>(null);
   const [settingsDraft, setSettingsDraft] = useState<SystemSettings | null>(null);
@@ -458,6 +461,336 @@ const StatCard: React.FC<StatCardProps> = ({ title, value, icon: Icon, color, su
     </div>
   </div>
 );
+
+// Professional Sidebar Component for Admin
+const Sidebar = () => {
+  const menuItems = [
+    { 
+      id: 'dashboard', 
+      icon: LayoutGrid, 
+      label: t('admin.dashboard', 'Dashboard'),
+    },
+    { 
+      id: 'users', 
+      icon: Users, 
+      label: t('admin.user_management', 'User Management'),
+    },
+    { 
+      id: 'config', 
+      icon: Settings, 
+      label: t('admin.system_config', 'System Config'),
+    },
+    { 
+      id: 'profile', 
+      icon: UserCog, 
+      label: t('admin.profile', 'Profile'),
+    },
+  ];
+
+  return (
+    <>
+      {/* Mobile Overlay */}
+      {sidebarOpen && window.innerWidth < 768 && (
+        <div
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: 'rgba(0, 0, 0, 0.6)',
+            zIndex: 1040,
+            backdropFilter: 'blur(2px)',
+          }}
+          onClick={() => setSidebarOpen(false)}
+        />
+      )}
+
+      {/* Sidebar */}
+      <div
+        style={{
+          position: 'fixed',
+          top: 0,
+          left: window.innerWidth < 768 ? (sidebarOpen ? 0 : '-300px') : 0,
+          bottom: 0,
+          width: sidebarCollapsed && window.innerWidth >= 768 ? '85px' : '280px',
+          background: '#1a1d29',
+          boxShadow: '4px 0 24px rgba(0, 0, 0, 0.12)',
+          transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+          zIndex: 1050,
+          display: 'flex',
+          flexDirection: 'column',
+          overflow: 'hidden',
+        }}
+      >
+        {/* Header */}
+        <div
+          style={{
+            padding: sidebarCollapsed && window.innerWidth >= 768 ? '24px 16px' : '24px',
+            borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            background: 'linear-gradient(135deg, #1e2230 0%, #1a1d29 100%)',
+            minHeight: '80px',
+          }}
+        >
+          {!(sidebarCollapsed && window.innerWidth >= 768) ? (
+            <div style={{ display: 'flex', alignItems: 'center', flex: 1 }}>
+              <div
+                style={{
+                  width: '48px',
+                  height: '48px',
+                  borderRadius: '12px',
+                  background: 'linear-gradient(135deg, #dc3545 0%, #c82333 100%)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  marginRight: '14px',
+                  boxShadow: '0 4px 12px rgba(220, 53, 69, 0.3)',
+                  overflow: 'hidden',
+                }}
+              >
+                <img
+                  src="/logo6.png"
+                  alt="FIU Logo"
+                  style={{
+                    width: '32px',
+                    height: '32px',
+                    objectFit: 'cover',
+                  }}
+                />
+              </div>
+              <div>
+                <h6 style={{ color: '#ffffff', margin: 0, fontSize: '1.05rem', fontWeight: 700 }}>
+                  FIU Admin
+                </h6>
+                <small style={{ color: 'rgba(255, 255, 255, 0.6)', fontSize: '0.8rem', fontWeight: 500 }}>
+                  Admin Portal
+                </small>
+              </div>
+            </div>
+          ) : (
+            <div
+              style={{
+                width: '48px',
+                height: '48px',
+                borderRadius: '12px',
+                background: 'linear-gradient(135deg, #dc3545 0%, #c82333 100%)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                boxShadow: '0 4px 12px rgba(220, 53, 69, 0.3)',
+                margin: '0 auto',
+              }}
+            >
+              <img src="/logo6.png" alt="FIU Logo" style={{ width: '32px', height: '32px', objectFit: 'cover' }} />
+            </div>
+          )}
+
+          {window.innerWidth >= 768 && (
+            <button
+              onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+              style={{
+                background: 'linear-gradient(135deg, rgba(220, 53, 69, 0.15) 0%, rgba(200, 35, 51, 0.15) 100%)',
+                border: '1px solid rgba(220, 53, 69, 0.3)',
+                borderRadius: '10px',
+                width: '36px',
+                height: '36px',
+                color: '#dc3545',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                fontSize: '0.9rem',
+                fontWeight: 700,
+                boxShadow: '0 2px 8px rgba(220, 53, 69, 0.2)',
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.background = 'linear-gradient(135deg, rgba(220, 53, 69, 0.25) 0%, rgba(200, 35, 51, 0.25) 100%)';
+                e.currentTarget.style.transform = 'scale(1.05)';
+                e.currentTarget.style.boxShadow = '0 4px 12px rgba(220, 53, 69, 0.3)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.background = 'linear-gradient(135deg, rgba(220, 53, 69, 0.15) 0%, rgba(200, 35, 51, 0.15) 100%)';
+                e.currentTarget.style.transform = 'scale(1)';
+                e.currentTarget.style.boxShadow = '0 2px 8px rgba(220, 53, 69, 0.2)';
+              }}
+            >
+              {sidebarCollapsed ? '»' : '«'}
+            </button>
+          )}
+        </div>
+
+        {/* Menu */}
+        <nav style={{ flex: 1, overflowY: 'auto', padding: sidebarCollapsed && window.innerWidth >= 768 ? '16px 8px' : '20px 16px' }}>
+          {!(sidebarCollapsed && window.innerWidth >= 768) && (
+            <div style={{ color: 'rgba(255, 255, 255, 0.5)', fontSize: '0.75rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '12px', paddingLeft: '12px' }}>
+              Main Menu
+            </div>
+          )}
+
+          {menuItems.map((item) => {
+            const Icon = item.icon;
+            const isActive = activeTab === item.id;
+
+            return (
+              <button
+                key={item.id}
+                onClick={() => {
+                  setActiveTab(item.id as any);
+                  if (window.innerWidth < 768) setSidebarOpen(false);
+                }}
+                style={{
+                  width: '100%',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: sidebarCollapsed && window.innerWidth >= 768 ? 'center' : 'space-between',
+                  padding: sidebarCollapsed && window.innerWidth >= 768 ? '14px' : '14px 16px',
+                  marginBottom: '6px',
+                  background: isActive ? 'linear-gradient(135deg, rgba(220, 53, 69, 0.15) 0%, rgba(200, 35, 51, 0.15) 100%)' : 'transparent',
+                  border: isActive ? '1px solid rgba(220, 53, 69, 0.3)' : '1px solid transparent',
+                  borderRadius: '10px',
+                  color: isActive ? '#dc3545' : 'rgba(255, 255, 255, 0.75)',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+                  fontSize: '0.95rem',
+                  fontWeight: isActive ? 600 : 500,
+                  position: 'relative',
+                }}
+                onMouseEnter={(e) => {
+                  if (!isActive) {
+                    e.currentTarget.style.background = 'rgba(255, 255, 255, 0.06)';
+                    e.currentTarget.style.color = '#ffffff';
+                    e.currentTarget.style.transform = 'translateX(4px)';
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  if (!isActive) {
+                    e.currentTarget.style.background = 'transparent';
+                    e.currentTarget.style.color = 'rgba(255, 255, 255, 0.75)';
+                    e.currentTarget.style.transform = 'translateX(0)';
+                  }
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center' }}>
+                  <Icon size={20} />
+                  {!(sidebarCollapsed && window.innerWidth >= 768) && (
+                    <span style={{ marginLeft: '14px' }}>{item.label}</span>
+                  )}
+                </div>
+                {isActive && (
+                  <div
+                    style={{
+                      position: 'absolute',
+                      left: 0,
+                      top: '50%',
+                      transform: 'translateY(-50%)',
+                      width: '4px',
+                      height: '60%',
+                      background: 'linear-gradient(180deg, #dc3545 0%, #c82333 100%)',
+                      borderRadius: '0 4px 4px 0',
+                    }}
+                  />
+                )}
+              </button>
+            );
+          })}
+        </nav>
+
+        {/* User Profile */}
+        <div
+          style={{
+            padding: sidebarCollapsed && window.innerWidth >= 768 ? '16px 12px' : '20px',
+            borderTop: '1px solid rgba(255, 255, 255, 0.08)',
+            background: 'linear-gradient(180deg, transparent 0%, rgba(0, 0, 0, 0.2) 100%)',
+          }}
+        >
+          {!(sidebarCollapsed && window.innerWidth >= 768) ? (
+            <div className="dropdown dropup w-100">
+              <button
+                className="btn w-100 text-start"
+                data-bs-toggle="dropdown"
+                style={{
+                  background: 'rgba(255, 255, 255, 0.06)',
+                  border: '1px solid rgba(255, 255, 255, 0.1)',
+                  color: 'white',
+                  padding: '14px 16px',
+                  borderRadius: '12px',
+                  display: 'flex',
+                  alignItems: 'center',
+                }}
+              >
+                <div
+                  style={{
+                    width: '40px',
+                    height: '40px',
+                    borderRadius: '10px',
+                    background: 'linear-gradient(135deg, #dc3545 0%, #c82333 100%)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    marginRight: '12px',
+                    fontSize: '1.1rem',
+                    fontWeight: 700,
+                  }}
+                >
+                  {currentUser?.name?.charAt(0).toUpperCase() || 'A'}
+                </div>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: '0.95rem', fontWeight: 600 }}>
+                    {currentUser?.name || 'Admin'}
+                  </div>
+                  <small style={{ opacity: 0.7, fontSize: '0.75rem' }}>Administrator</small>
+                </div>
+                <Settings size={18} style={{ opacity: 0.6 }} />
+              </button>
+
+              <ul className="dropdown-menu dropdown-menu-end">
+                <li><h6 className="dropdown-header">Language</h6></li>
+                <li>
+                  <button className="dropdown-item" onClick={() => i18n.changeLanguage('en')}>
+                    <Globe size={16} className="me-2" />
+                    🇺🇸 English
+                  </button>
+                </li>
+                <li>
+                  <button className="dropdown-item" onClick={() => i18n.changeLanguage('tr')}>
+                    <Globe size={16} className="me-2" />
+                    🇹🇷 Türkçe
+                  </button>
+                </li>
+                <li><hr className="dropdown-divider" /></li>
+                <li>
+                  <button className="dropdown-item text-danger" onClick={onLogout}>
+                    <LogOut size={16} className="me-2" />
+                    Logout
+                  </button>
+                </li>
+              </ul>
+            </div>
+          ) : (
+            <button
+              onClick={onLogout}
+              style={{
+                width: '100%',
+                background: 'rgba(220, 53, 69, 0.15)',
+                border: '1px solid rgba(220, 53, 69, 0.3)',
+                color: '#dc3545',
+                padding: '12px',
+                borderRadius: '10px',
+                cursor: 'pointer',
+              }}
+            >
+              <LogOut size={20} />
+            </button>
+          )}
+        </div>
+      </div>
+    </>
+  );
+};
 
   // ---- Renders ----
   const renderTopBar = () => (
@@ -1677,22 +2010,63 @@ const renderUsers = () => (
 
   // ---- Page scaffold ----
    return (
-  <div style={{ minHeight: '100vh' }}>
-    {/* Toasts */}
-    <div className="position-fixed top-0 end-0 p-3" style={{ zIndex: 9999, width: 360 }}>
-      {notifications.map(n => <NotificationToast key={n.id} notification={n} />)}
+  <div style={{ minHeight: '100vh', display: 'flex' }}>
+    {/* Sidebar */}
+    <Sidebar />
+
+    {/* Mobile Header */}
+    <div
+      style={{
+        position: 'fixed',
+        top: 0,
+        left: 0,
+        right: 0,
+        height: '60px',
+        background: 'white',
+        boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+        display: window.innerWidth < 768 ? 'flex' : 'none',
+        alignItems: 'center',
+        padding: '0 20px',
+        zIndex: 1030,
+      }}
+    >
+      <button
+        onClick={() => setSidebarOpen(!sidebarOpen)}
+        style={{
+          background: 'none',
+          border: 'none',
+          fontSize: '1.5rem',
+          cursor: 'pointer',
+        }}
+      >
+        ☰
+      </button>
+      <h6 style={{ margin: 0, marginLeft: '15px', fontWeight: 600 }}>FIU Admin</h6>
     </div>
 
-    {/* Top bar */}
-    {renderTopBar()}
+    {/* Main Content Wrapper */}
+    <div
+      style={{
+        flex: 1,
+        marginLeft: window.innerWidth >= 768 ? (sidebarCollapsed ? '85px' : '280px') : '0',
+        paddingTop: window.innerWidth < 768 ? '60px' : '0',
+        transition: 'margin-left 0.3s ease',
+        minHeight: '100vh',
+      }}
+    >
+      {/* Toasts */}
+      <div className="position-fixed top-0 end-0 p-3" style={{ zIndex: 9999, width: 360 }}>
+        {notifications.map(n => <NotificationToast key={n.id} notification={n} />)}
+      </div>
 
-    {/* Main content with proper spacing */}
-    <div style={{ paddingTop: '80px' }}>
+      {/* Main content */}
+      <div style={{ padding: '20px' }}>
       {activeTab === 'dashboard' && renderDashboard()}
       {activeTab === 'profile' && renderProfile()}
       {activeTab === 'users' && renderUsers()}
       {activeTab === 'config' && renderConfig()}
     </div>
+  </div>
   </div>
 );
 };
