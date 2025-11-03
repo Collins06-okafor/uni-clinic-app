@@ -31,6 +31,8 @@ import EnhancedMedicalCardViewer from '../../components/clinical/EnhancedMedical
 import MedicationManagement from '../../components/clinical/MedicationManagement';
 import PhoneInput from "react-phone-input-2";
 import "react-phone-input-2/lib/style.css";
+import Select from 'react-select';
+
 
 ChartJS.register(
   CategoryScale,
@@ -225,25 +227,51 @@ interface QuickTimeSlotsProps {
 
 type TabType = 'overview' | 'appointments' | 'patients' | 'medications' | 'doctors' | 'walkin' | 'profile' | 'settings';
 
-const Modal: React.FC<ModalProps> = ({ title, children, onClose }) => (
-  <div className="modal fade show d-block" tabIndex={-1} style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
-    <div className="modal-dialog modal-dialog-centered">
-      <div className="modal-content" style={{ borderRadius: '1rem' }}>
-        <div className="modal-header border-0 pb-0">
-          <h5 className="modal-title fw-bold">{title}</h5>
-          <button
-            type="button"
-            className="btn-close"
-            onClick={onClose}
-          />
-        </div>
-        <div className="modal-body pt-0">
-          {children}
+
+
+const Modal: React.FC<ModalProps> = ({ title, children, onClose }) => {
+  const isMobile = window.innerWidth < 768;
+
+  return (
+    <div 
+      className="modal fade show d-block" 
+      tabIndex={-1} 
+      style={{ backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 1055 }}
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+    >
+      <div 
+        className="modal-dialog modal-dialog-centered modal-dialog-scrollable"
+        style={{
+          margin: isMobile ? '8px' : '1.75rem auto',
+          maxWidth: isMobile ? 'calc(100% - 16px)' : '500px',
+          maxHeight: isMobile ? 'calc(100vh - 16px)' : 'calc(100vh - 3.5rem)'
+        }}
+      >
+        <div className="modal-content" style={{ borderRadius: isMobile ? '12px' : '1rem' }}>
+          <div className="modal-header border-0" style={{ padding: isMobile ? '12px 16px' : '16px 20px' }}>
+            <h5 className="modal-title fw-bold" style={{ fontSize: isMobile ? '16px' : '18px' }}>
+              {title}
+            </h5>
+            <button
+              type="button"
+              className="btn-close"
+              onClick={onClose}
+              style={{
+                width: isMobile ? '36px' : '44px',
+                height: isMobile ? '36px' : '44px'
+              }}
+            />
+          </div>
+          <div className="modal-body" style={{ padding: isMobile ? '12px 16px' : '16px 20px' }}>
+            {children}
+          </div>
         </div>
       </div>
     </div>
-  </div>
-);
+  );
+};
 
 const MedicationForm: React.FC<MedicationFormProps> = React.memo(({ onSubmit, initialData = {} }) => {
   const [localFormData, setLocalFormData] = useState({
@@ -1581,109 +1609,134 @@ useEffect(() => {
 
 // Updated Navigation Component with inline styles for ClinicalStaffDashboard.tsx
 
-// Sidebar Component
+// ==================== SIDEBAR COMPONENT ====================
 const Sidebar = () => {
   const menuItems = [
-    { 
-      id: 'overview', 
-      icon: BarChart3, 
-      label: t('nav.overview', 'Overview'),
-      badge: null 
-    },
-    { 
-      id: 'appointments', 
-      icon: Calendar, 
-      label: t('nav.appointments', 'Appointments'),
-      badge: dashboardData?.today_overview?.pending_student_requests || null
-    },
-    { 
-      id: 'patients', 
-      icon: Users, 
-      label: t('nav.patients', 'Patients'),
-      badge: null 
-    },
-    { 
-      id: 'medications', 
-      icon: Pill, 
-      label: t('nav.medications', 'Medications'),
-      badge: null 
-    },
-    { 
-      id: 'doctors', 
-      icon: Stethoscope, 
-      label: t('nav.doctors', 'Doctors'),
-      badge: null 
-    },
-    { 
-      id: 'walkin', 
-      icon: UserPlus, 
-      label: t('nav.walkin_patients', 'Walk-in Patients'),
-      badge: urgentRequests.length > 0 ? urgentRequests.length : null
-    },
+    { id: 'overview', icon: BarChart3, label: 'Dashboard' },
+    { id: 'appointments', icon: Calendar, label: 'Appointments', 
+      badge: dashboardData?.today_overview?.pending_student_requests || null },
+    { id: 'patients', icon: Users, label: 'Patients' },
+    { id: 'medications', icon: Pill, label: 'Medications' },
+    { id: 'doctors', icon: Stethoscope, label: 'Doctors' },
+    { id: 'walkin', icon: UserPlus, label: 'Walk-in Patients',
+      badge: urgentRequests.length > 0 ? urgentRequests.length : null },
   ];
 
+  // Check if mobile
+  const isMobile = window.innerWidth < 768;
+  const isTablet = window.innerWidth >= 768 && window.innerWidth < 992;
+
   return (
-    <>
-      {/* Mobile Overlay */}
-      {sidebarOpen && window.innerWidth < 768 && (
+      <>
+        {/* Mobile Overlay */}
+        {sidebarOpen && isMobile && (
+          <div
+            style={{
+              position: 'fixed',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              backgroundColor: 'rgba(0, 0, 0, 0.6)',
+              zIndex: 1040,
+              backdropFilter: 'blur(2px)',
+            }}
+            onClick={() => setSidebarOpen(false)}
+          />
+        )}
+
+        {/* Sidebar Container */}
         <div
           style={{
             position: 'fixed',
             top: 0,
-            left: 0,
-            right: 0,
+            left: isMobile ? (sidebarOpen ? 0 : '-280px') : 0,
             bottom: 0,
-            backgroundColor: 'rgba(0, 0, 0, 0.6)',
-            zIndex: 1040,
-            backdropFilter: 'blur(2px)',
-            animation: 'fadeIn 0.2s ease',
-          }}
-          onClick={() => setSidebarOpen(false)}
-        />
-      )}
-
-      {/* Sidebar Container */}
-      <div
-        style={{
-          position: 'fixed',
-          top: 0,
-          left: window.innerWidth < 768 ? (sidebarOpen ? 0 : '-300px') : 0,
-          bottom: 0,
-          width: sidebarCollapsed && window.innerWidth >= 768 ? '85px' : '280px',
-          background: '#1a1d29',
-          boxShadow: '4px 0 24px rgba(0, 0, 0, 0.12)',
-          transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-          zIndex: 1050,
-          display: 'flex',
-          flexDirection: 'column',
-          overflow: 'hidden',
-        }}
-      >
-        {/* Header Section */}
-        <div
-          style={{
-            padding: sidebarCollapsed && window.innerWidth >= 768 ? '24px 16px' : '24px',
-            borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
+            width: sidebarCollapsed && !isMobile ? '80px' : '280px',
+            background: '#1a1d29',
+            boxShadow: '4px 0 24px rgba(0, 0, 0, 0.12)',
+            transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+            zIndex: 1050,
             display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            background: 'linear-gradient(135deg, #1e2230 0%, #1a1d29 100%)',
-            minHeight: '80px',
+            flexDirection: 'column',
+            overflow: 'hidden',
           }}
         >
-          {!(sidebarCollapsed && window.innerWidth >= 768) ? (
-            <div style={{ display: 'flex', alignItems: 'center', flex: 1 }}>
+          {/* Header */}
+          <div
+            style={{
+              padding: sidebarCollapsed && !isMobile ? '10px' : isMobile ? '12px 14px' : '14px 16px',
+              borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              background: 'linear-gradient(135deg, #1e2230 0%, #1a1d29 100%)',
+              minHeight: isMobile ? '60px' : '65px',
+              flexShrink: 0,
+            }}
+          >
+            {!(sidebarCollapsed && !isMobile) ? (
+              <div style={{ display: 'flex', alignItems: 'center', flex: 1 }}>
+                <div
+                  style={{
+                    width: isMobile ? '36px' : '42px',
+                    height: isMobile ? '36px' : '42px',
+                    borderRadius: isMobile ? '8px' : '10px',
+                    background: 'linear-gradient(135deg, #dc3545 0%, #c82333 100%)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    marginRight: isMobile ? '10px' : '12px',
+                    boxShadow: '0 4px 12px rgba(220, 53, 69, 0.3)',
+                    overflow: 'hidden',
+                  }}
+                >
+                  <img
+                    src="/logo6.png"
+                    alt="FIU Logo"
+                    style={{
+                      width: isMobile ? '24px' : '28px',
+                      height: isMobile ? '24px' : '28px',
+                      objectFit: 'cover',
+                    }}
+                  />
+                </div>
+                <div>
+                  <h6
+                    style={{
+                      color: '#ffffff',
+                      margin: 0,
+                      fontSize: isMobile ? '0.95rem' : '1rem',
+                      fontWeight: 700,
+                      letterSpacing: '-0.02em',
+                      lineHeight: 1.2,
+                    }}
+                  >
+                    FIU Medical
+                  </h6>
+                  <small
+                    style={{
+                      color: 'rgba(255, 255, 255, 0.6)',
+                      fontSize: isMobile ? '0.7rem' : '0.75rem',
+                      fontWeight: 500,
+                    }}
+                  >
+                    Clinical Portal
+                  </small>
+                </div>
+              </div>
+            ) : (
               <div
                 style={{
-                  width: '48px',
-                  height: '48px',
-                  borderRadius: '12px',
+                  width: '42px',
+                  height: '42px',
+                  borderRadius: '10px',
                   background: 'linear-gradient(135deg, #dc3545 0%, #c82333 100%)',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  marginRight: '14px',
                   boxShadow: '0 4px 12px rgba(220, 53, 69, 0.3)',
+                  margin: '0 auto',
                   overflow: 'hidden',
                 }}
               >
@@ -1691,464 +1744,448 @@ const Sidebar = () => {
                   src="/logo6.png"
                   alt="FIU Logo"
                   style={{
-                    width: '32px',
-                    height: '32px',
+                    width: '28px',
+                    height: '28px',
                     objectFit: 'cover',
                   }}
                 />
               </div>
-              <div>
-                <h6
-                  style={{
-                    color: '#ffffff',
-                    margin: 0,
-                    fontSize: '1.05rem',
-                    fontWeight: 700,
-                    letterSpacing: '-0.02em',
-                  }}
-                >
-                  FIU Medical
-                </h6>
-                <small
-                  style={{
-                    color: 'rgba(255, 255, 255, 0.6)',
-                    fontSize: '0.8rem',
-                    fontWeight: 500,
-                  }}
-                >
-                  Clinical Portal
-                </small>
-              </div>
-            </div>
-          ) : (
-            <div
-              style={{
-                width: '48px',
-                height: '48px',
-                borderRadius: '12px',
-                background: 'linear-gradient(135deg, #dc3545 0%, #c82333 100%)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                boxShadow: '0 4px 12px rgba(220, 53, 69, 0.3)',
-                margin: '0 auto',
-              }}
-            >
-              <img
-                src="/logo6.png"
-                alt="FIU Logo"
+            )}
+
+            {!isMobile && (
+              <button
+                onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
                 style={{
+                  background: 'linear-gradient(135deg, rgba(220, 53, 69, 0.15) 0%, rgba(200, 35, 51, 0.15) 100%)',
+                  border: '1px solid rgba(220, 53, 69, 0.3)',
+                  borderRadius: '8px',
                   width: '32px',
                   height: '32px',
-                  objectFit: 'cover',
-                }}
-              />
-            </div>
-          )}
-
-          {/* Collapse Toggle - Desktop Only */}
-          {window.innerWidth >= 768 && (
-          <button
-            onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
-            style={{
-              background: 'linear-gradient(135deg, rgba(220, 53, 69, 0.15) 0%, rgba(200, 35, 51, 0.15) 100%)',
-              border: '1px solid rgba(220, 53, 69, 0.3)',
-              borderRadius: '10px',
-              width: '36px',
-              height: '36px',
-              color: '#dc3545',
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-              fontSize: '0.9rem',
-              fontWeight: 700,
-              boxShadow: '0 2px 8px rgba(220, 53, 69, 0.2)',
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.background = 'linear-gradient(135deg, rgba(220, 53, 69, 0.25) 0%, rgba(200, 35, 51, 0.25) 100%)';
-              e.currentTarget.style.transform = 'scale(1.05)';
-              e.currentTarget.style.boxShadow = '0 4px 12px rgba(220, 53, 69, 0.3)';
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.background = 'linear-gradient(135deg, rgba(220, 53, 69, 0.15) 0%, rgba(200, 35, 51, 0.15) 100%)';
-              e.currentTarget.style.transform = 'scale(1)';
-              e.currentTarget.style.boxShadow = '0 2px 8px rgba(220, 53, 69, 0.2)';
-            }}
-          >
-            {sidebarCollapsed ? '»' : '«'}
-          </button>
-        )}
-        </div>
-
-        {/* Navigation Menu */}
-        <nav
-          style={{
-            flex: 1,
-            overflowY: 'auto',
-            overflowX: 'hidden',
-            padding: sidebarCollapsed && window.innerWidth >= 768 ? '16px 8px' : '20px 16px',
-          }}
-        >
-          {/* Menu Section Label */}
-          {!(sidebarCollapsed && window.innerWidth >= 768) && (
-            <div
-              style={{
-                color: 'rgba(255, 255, 255, 0.5)',
-                fontSize: '0.75rem',
-                fontWeight: 600,
-                textTransform: 'uppercase',
-                letterSpacing: '0.08em',
-                marginBottom: '12px',
-                paddingLeft: '12px',
-              }}
-            >
-              Main Menu
-            </div>
-          )}
-
-          {menuItems.map((item) => {
-            const Icon = item.icon;
-            const isActive = activeTab === item.id;
-
-            return (
-              <button
-                key={item.id}
-                onClick={() => {
-                  setActiveTab(item.id as TabType);
-                  if (window.innerWidth < 768) setSidebarOpen(false);
-                }}
-                style={{
-                  width: '100%',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent:
-                    sidebarCollapsed && window.innerWidth >= 768 ? 'center' : 'space-between',
-                  padding:
-                    sidebarCollapsed && window.innerWidth >= 768 ? '14px' : '14px 16px',
-                  marginBottom: '6px',
-                  background: isActive
-                    ? 'linear-gradient(135deg, rgba(220, 53, 69, 0.15) 0%, rgba(200, 35, 51, 0.15) 100%)'
-                    : 'transparent',
-                  border: isActive ? '1px solid rgba(220, 53, 69, 0.3)' : '1px solid transparent',
-                  borderRadius: '10px',
-                  color: isActive ? '#dc3545' : 'rgba(255, 255, 255, 0.75)',
+                  color: '#dc3545',
                   cursor: 'pointer',
-                  transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
-                  fontSize: '0.95rem',
-                  fontWeight: isActive ? 600 : 500,
-                  position: 'relative',
-                  overflow: 'hidden',
-                }}
-                onMouseEnter={(e) => {
-                  if (!isActive) {
-                    e.currentTarget.style.background = 'rgba(255, 255, 255, 0.06)';
-                    e.currentTarget.style.color = '#ffffff';
-                    e.currentTarget.style.transform = 'translateX(4px)';
-                  }
-                }}
-                onMouseLeave={(e) => {
-                  if (!isActive) {
-                    e.currentTarget.style.background = 'transparent';
-                    e.currentTarget.style.color = 'rgba(255, 255, 255, 0.75)';
-                    e.currentTarget.style.transform = 'translateX(0)';
-                  }
-                }}
-              >
-                <div style={{ display: 'flex', alignItems: 'center' }}>
-                  <Icon size={20} style={{ minWidth: '20px' }} />
-                  {!(sidebarCollapsed && window.innerWidth >= 768) && (
-                    <span style={{ marginLeft: '14px' }}>{item.label}</span>
-                  )}
-                </div>
-
-                {/* Notification Badge */}
-                {item.badge && item.badge > 0 && !(sidebarCollapsed && window.innerWidth >= 768) && (
-                  <span
-                    style={{
-                      background: 'linear-gradient(135deg, #dc3545 0%, #c82333 100%)',
-                      color: 'white',
-                      fontSize: '0.7rem',
-                      fontWeight: 700,
-                      padding: '2px 8px',
-                      borderRadius: '12px',
-                      minWidth: '24px',
-                      textAlign: 'center',
-                      boxShadow: '0 2px 8px rgba(220, 53, 69, 0.4)',
-                    }}
-                  >
-                    {item.badge}
-                  </span>
-                )}
-
-                {/* Active Indicator */}
-                {isActive && (
-                  <div
-                    style={{
-                      position: 'absolute',
-                      left: 0,
-                      top: '50%',
-                      transform: 'translateY(-50%)',
-                      width: '4px',
-                      height: '60%',
-                      background: 'linear-gradient(180deg, #dc3545 0%, #c82333 100%)',
-                      borderRadius: '0 4px 4px 0',
-                    }}
-                  />
-                )}
-              </button>
-            );
-          })}
-
-          {/* Divider */}
-          <div
-            style={{
-              height: '1px',
-              background: 'rgba(255, 255, 255, 0.08)',
-              margin: '20px 0',
-            }}
-          />
-
-          {/* Secondary Menu Item - Profile */}
-          <button
-            onClick={() => {
-              setActiveTab('profile');
-              if (window.innerWidth < 768) setSidebarOpen(false);
-            }}
-            style={{
-              width: '100%',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent:
-                sidebarCollapsed && window.innerWidth >= 768 ? 'center' : 'flex-start',
-              padding:
-                sidebarCollapsed && window.innerWidth >= 768 ? '14px' : '14px 16px',
-              marginBottom: '6px',
-              background: activeTab === 'profile'
-                ? 'linear-gradient(135deg, rgba(220, 53, 69, 0.15) 0%, rgba(200, 35, 51, 0.15) 100%)'
-                : 'transparent',
-              border: activeTab === 'profile' ? '1px solid rgba(220, 53, 69, 0.3)' : '1px solid transparent',
-              borderRadius: '10px',
-              color: activeTab === 'profile' ? '#dc3545' : 'rgba(255, 255, 255, 0.75)',
-              cursor: 'pointer',
-              transition: 'all 0.2s ease',
-              fontSize: '0.95rem',
-              fontWeight: activeTab === 'profile' ? 600 : 500,
-            }}
-            onMouseEnter={(e) => {
-              if (activeTab !== 'profile') {
-                e.currentTarget.style.background = 'rgba(255, 255, 255, 0.06)';
-                e.currentTarget.style.color = '#ffffff';
-              }
-            }}
-            onMouseLeave={(e) => {
-              if (activeTab !== 'profile') {
-                e.currentTarget.style.background = 'transparent';
-                e.currentTarget.style.color = 'rgba(255, 255, 255, 0.75)';
-              }
-            }}
-          >
-            <User size={20} />
-            {!(sidebarCollapsed && window.innerWidth >= 768) && (
-              <span style={{ marginLeft: '14px' }}>Profile</span>
-            )}
-          </button>
-        </nav>
-
-        {/* User Profile Section - Bottom */}
-        <div
-          style={{
-            padding: sidebarCollapsed && window.innerWidth >= 768 ? '16px 12px' : '20px',
-            borderTop: '1px solid rgba(255, 255, 255, 0.08)',
-            background: 'linear-gradient(180deg, transparent 0%, rgba(0, 0, 0, 0.2) 100%)',
-          }}
-        >
-          {!(sidebarCollapsed && window.innerWidth >= 768) ? (
-            <div className="dropdown dropup w-100">
-              <button
-                className="btn w-100 text-start"
-                data-bs-toggle="dropdown"
-                style={{
-                  background: 'rgba(255, 255, 255, 0.06)',
-                  border: '1px solid rgba(255, 255, 255, 0.1)',
-                  color: 'white',
-                  padding: '14px 16px',
-                  borderRadius: '12px',
                   display: 'flex',
                   alignItems: 'center',
-                  transition: 'all 0.2s ease',
+                  justifyContent: 'center',
+                  transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                  fontSize: '0.85rem',
+                  fontWeight: 700,
+                  boxShadow: '0 2px 8px rgba(220, 53, 69, 0.2)',
                 }}
                 onMouseEnter={(e) => {
-                  e.currentTarget.style.background = 'rgba(255, 255, 255, 0.1)';
-                  e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.2)';
+                  e.currentTarget.style.background = 'linear-gradient(135deg, rgba(220, 53, 69, 0.25) 0%, rgba(200, 35, 51, 0.25) 100%)';
+                  e.currentTarget.style.transform = 'scale(1.05)';
                 }}
                 onMouseLeave={(e) => {
-                  e.currentTarget.style.background = 'rgba(255, 255, 255, 0.06)';
-                  e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.1)';
+                  e.currentTarget.style.background = 'linear-gradient(135deg, rgba(220, 53, 69, 0.15) 0%, rgba(200, 35, 51, 0.15) 100%)';
+                  e.currentTarget.style.transform = 'scale(1)';
                 }}
               >
-                <div
+                {sidebarCollapsed ? '»' : '«'}
+              </button>
+            )}
+          </div>
+
+          {/* Navigation */}
+          <nav
+            style={{
+              flex: isMobile ? 'none' : 1,
+              flexShrink: isMobile ? 0 : 1,
+              overflowY: isMobile ? 'visible' : 'auto',
+              overflowX: 'hidden',
+              padding: sidebarCollapsed && !isMobile ? '12px 8px' : isMobile ? '8px 10px' : '16px 12px',
+              minHeight: isMobile ? 'auto' : 0,
+            }}
+          >
+            {!(sidebarCollapsed && !isMobile) && (
+              <div
+                style={{
+                  color: 'rgba(255, 255, 255, 0.5)',
+                  fontSize: isMobile ? '0.65rem' : '0.7rem',
+                  fontWeight: 600,
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.08em',
+                  marginBottom: isMobile ? '6px' : '8px',
+                  paddingLeft: isMobile ? '8px' : '12px',
+                }}
+              >
+                Main Menu
+              </div>
+            )}
+
+            {menuItems.map((item) => {
+              const Icon = item.icon;
+              const isActive = activeTab === item.id;
+
+              return (
+                <button
+                  key={item.id}
+                  onClick={() => {
+                    setActiveTab(item.id as TabType);
+                    if (isMobile) setSidebarOpen(false);
+                  }}
                   style={{
-                    width: '40px',
-                    height: '40px',
-                    borderRadius: '10px',
-                    background: 'linear-gradient(135deg, #dc3545 0%, #c82333 100%)',
+                    width: '100%',
                     display: 'flex',
                     alignItems: 'center',
-                    justifyContent: 'center',
-                    marginRight: '12px',
-                    fontSize: '1.1rem',
-                    fontWeight: 700,
-                    boxShadow: '0 4px 12px rgba(220, 53, 69, 0.3)',
+                    justifyContent: sidebarCollapsed && !isMobile ? 'center' : 'space-between',
+                    padding: sidebarCollapsed && !isMobile 
+                      ? '12px' 
+                      : isMobile 
+                      ? '10px 12px' 
+                      : '12px 14px',
+                    marginBottom: isMobile ? '4px' : '6px',
+                    background: isActive
+                      ? 'linear-gradient(135deg, rgba(220, 53, 69, 0.15) 0%, rgba(200, 35, 51, 0.15) 100%)'
+                      : 'transparent',
+                    border: isActive ? '1px solid rgba(220, 53, 69, 0.3)' : '1px solid transparent',
+                    borderRadius: isMobile ? '8px' : '10px',
+                    color: isActive ? '#dc3545' : 'rgba(255, 255, 255, 0.75)',
+                    cursor: 'pointer',
+                    transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+                    fontSize: isMobile ? '0.85rem' : '0.9rem',
+                    fontWeight: isActive ? 600 : 500,
+                    position: 'relative',
+                    overflow: 'hidden',
+                    minHeight: '44px',
+                  }}
+                  onMouseEnter={(e) => {
+                    if (!isActive) {
+                      e.currentTarget.style.background = 'rgba(255, 255, 255, 0.06)';
+                      e.currentTarget.style.color = '#ffffff';
+                      e.currentTarget.style.transform = 'translateX(4px)';
+                    }
+                  }}
+                  onMouseLeave={(e) => {
+                    if (!isActive) {
+                      e.currentTarget.style.background = 'transparent';
+                      e.currentTarget.style.color = 'rgba(255, 255, 255, 0.75)';
+                      e.currentTarget.style.transform = 'translateX(0)';
+                    }
                   }}
                 >
-                  {user?.name?.charAt(0).toUpperCase() || 'U'}
-                </div>
-                <div style={{ flex: 1, overflow: 'hidden' }}>
+                  <div style={{ display: 'flex', alignItems: 'center' }}>
+                    <Icon size={isMobile ? 18 : 20} style={{ minWidth: isMobile ? '18px' : '20px' }} />
+                    {!(sidebarCollapsed && !isMobile) && (
+                      <span style={{ marginLeft: isMobile ? '10px' : '14px' }}>{item.label}</span>
+                    )}
+                  </div>
+
+                  {item.badge && item.badge > 0 && !(sidebarCollapsed && !isMobile) && (
+                    <span
+                      style={{
+                        background: 'linear-gradient(135deg, #dc3545 0%, #c82333 100%)',
+                        color: 'white',
+                        fontSize: isMobile ? '0.7rem' : '0.75rem',
+                        fontWeight: 700,
+                        padding: isMobile ? '2px 6px' : '3px 8px',
+                        borderRadius: '12px',
+                        minWidth: isMobile ? '20px' : '24px',
+                        textAlign: 'center',
+                        boxShadow: '0 2px 8px rgba(220, 53, 69, 0.4)',
+                      }}
+                    >
+                      {item.badge}
+                    </span>
+                  )}
+
+                  {isActive && (
+                    <div
+                      style={{
+                        position: 'absolute',
+                        left: 0,
+                        top: '50%',
+                        transform: 'translateY(-50%)',
+                        width: isMobile ? '3px' : '4px',
+                        height: '60%',
+                        background: 'linear-gradient(180deg, #dc3545 0%, #c82333 100%)',
+                        borderRadius: '0 4px 4px 0',
+                      }}
+                    />
+                  )}
+                </button>
+              );
+            })}
+
+            <div
+              style={{
+                height: '1px',
+                background: 'rgba(255, 255, 255, 0.08)',
+                margin: isMobile ? '8px 0' : '12px 0',
+              }}
+            />
+
+            <button
+              onClick={() => {
+                setActiveTab('profile');
+                if (isMobile) setSidebarOpen(false);
+              }}
+              style={{
+                width: '100%',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: sidebarCollapsed && !isMobile ? 'center' : 'flex-start',
+                padding: sidebarCollapsed && !isMobile 
+                  ? '12px' 
+                  : isMobile 
+                  ? '10px 12px' 
+                  : '12px 14px',
+                marginBottom: isMobile ? '4px' : '6px',
+                background: activeTab === 'profile'
+                  ? 'linear-gradient(135deg, rgba(220, 53, 69, 0.15) 0%, rgba(200, 35, 51, 0.15) 100%)'
+                  : 'transparent',
+                border: activeTab === 'profile' ? '1px solid rgba(220, 53, 69, 0.3)' : '1px solid transparent',
+                borderRadius: isMobile ? '8px' : '10px',
+                color: activeTab === 'profile' ? '#dc3545' : 'rgba(255, 255, 255, 0.75)',
+                cursor: 'pointer',
+                transition: 'all 0.2s ease',
+                fontSize: isMobile ? '0.85rem' : '0.9rem',
+                fontWeight: activeTab === 'profile' ? 600 : 500,
+                minHeight: '44px',
+              }}
+              onMouseEnter={(e) => {
+                if (activeTab !== 'profile') {
+                  e.currentTarget.style.background = 'rgba(255, 255, 255, 0.06)';
+                  e.currentTarget.style.color = '#ffffff';
+                }
+              }}
+              onMouseLeave={(e) => {
+                if (activeTab !== 'profile') {
+                  e.currentTarget.style.background = 'transparent';
+                  e.currentTarget.style.color = 'rgba(255, 255, 255, 0.75)';
+                }
+              }}
+            >
+              <User size={isMobile ? 18 : 20} />
+              {!(sidebarCollapsed && !isMobile) && (
+                <span style={{ marginLeft: isMobile ? '10px' : '14px' }}>Profile</span>
+              )}
+            </button>
+          </nav>
+
+          {!isMobile && <div style={{ flex: 1, minHeight: 0 }} />}
+
+          {/* Footer */}
+          <div
+            style={{
+              padding: sidebarCollapsed && !isMobile ? '14px 10px' : isMobile ? '10px 12px' : '16px',
+              borderTop: '1px solid rgba(255, 255, 255, 0.08)',
+              background: 'linear-gradient(180deg, transparent 0%, rgba(0, 0, 0, 0.2) 100%)',
+              flexShrink: 0,
+            }}
+          >
+            {!(sidebarCollapsed && !isMobile) ? (
+              <div>
+                <div
+                  style={{
+                    background: 'rgba(255, 255, 255, 0.06)',
+                    border: '1px solid rgba(255, 255, 255, 0.1)',
+                    padding: isMobile ? '8px 10px' : '10px 12px',
+                    borderRadius: isMobile ? '8px' : '10px',
+                    marginBottom: isMobile ? '8px' : '10px',
+                    display: 'flex',
+                    alignItems: 'center',
+                  }}
+                >
                   <div
                     style={{
-                      fontSize: '0.95rem',
-                      fontWeight: 600,
-                      whiteSpace: 'nowrap',
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
-                    }}
-                  >
-                    {user?.name || 'User'}
-                  </div>
-                  <small
-                    style={{
-                      opacity: 0.7,
-                      fontSize: '0.75rem',
-                      fontWeight: 500,
-                    }}
-                  >
-                    Clinical Staff
-                  </small>
-                </div>
-                <Settings size={18} style={{ opacity: 0.6, minWidth: '18px' }} />
-              </button>
-
-              {/* Dropdown Menu */}
-              <ul
-                className="dropdown-menu dropdown-menu-end"
-                style={{
-                  minWidth: '220px',
-                  borderRadius: '12px',
-                  border: 'none',
-                  boxShadow: '0 8px 32px rgba(0, 0, 0, 0.15)',
-                  padding: '8px',
-                }}
-              >
-                <li>
-                  <h6
-                    className="dropdown-header"
-                    style={{
-                      fontSize: '0.7rem',
-                      textTransform: 'uppercase',
-                      color: '#999',
+                      width: isMobile ? '32px' : '36px',
+                      height: isMobile ? '32px' : '36px',
+                      borderRadius: isMobile ? '6px' : '8px',
+                      background: 'linear-gradient(135deg, #dc3545 0%, #c82333 100%)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      marginRight: isMobile ? '8px' : '10px',
+                      fontSize: isMobile ? '0.9rem' : '1rem',
                       fontWeight: 700,
-                      letterSpacing: '0.05em',
-                      padding: '8px 16px',
+                      boxShadow: '0 4px 12px rgba(220, 53, 69, 0.3)',
+                      color: 'white',
+                    }}
+                  >
+                    {user?.name?.charAt(0).toUpperCase() || 'C'}
+                  </div>
+                  <div style={{ flex: 1, overflow: 'hidden' }}>
+                    <div
+                      style={{
+                        fontSize: isMobile ? '0.85rem' : '0.9rem',
+                        fontWeight: 600,
+                        color: 'white',
+                        whiteSpace: 'nowrap',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        lineHeight: 1.2,
+                      }}
+                    >
+                      {user?.name || 'Clinical Staff'}
+                    </div>
+                    <small
+                      style={{
+                        color: 'rgba(255, 255, 255, 0.6)',
+                        fontSize: isMobile ? '0.65rem' : '0.7rem',
+                        fontWeight: 500,
+                      }}
+                    >
+                      Clinical Portal
+                    </small>
+                  </div>
+                </div>
+
+                <div style={{ marginBottom: isMobile ? '8px' : '10px' }}>
+                  <div
+                    style={{
+                      color: 'rgba(255, 255, 255, 0.5)',
+                      fontSize: isMobile ? '0.6rem' : '0.65rem',
+                      fontWeight: 600,
+                      textTransform: 'uppercase',
+                      letterSpacing: '0.08em',
+                      marginBottom: isMobile ? '4px' : '6px',
+                      paddingLeft: '4px',
                     }}
                   >
                     Language
-                  </h6>
-                </li>
-                <li>
-                  <button
-                    className="dropdown-item"
-                    onClick={() => i18n.changeLanguage('en')}
-                    style={{
-                      padding: '10px 16px',
-                      borderRadius: '8px',
-                      display: 'flex',
-                      alignItems: 'center',
-                      fontSize: '0.9rem',
-                    }}
-                  >
-                    <Globe size={16} className="me-3" />
-                    <span>🇺🇸 English</span>
-                    {i18n.language === 'en' && (
-                      <CheckCircle size={16} className="text-success ms-auto" />
-                    )}
-                  </button>
-                </li>
-                <li>
-                  <button
-                    className="dropdown-item"
-                    onClick={() => i18n.changeLanguage('tr')}
-                    style={{
-                      padding: '10px 16px',
-                      borderRadius: '8px',
-                      display: 'flex',
-                      alignItems: 'center',
-                      fontSize: '0.9rem',
-                    }}
-                  >
-                    <Globe size={16} className="me-3" />
-                    <span>🇹🇷 Türkçe</span>
-                    {i18n.language === 'tr' && (
-                      <CheckCircle size={16} className="text-success ms-auto" />
-                    )}
-                  </button>
-                </li>
-                <li>
-                  <hr className="dropdown-divider" style={{ margin: '8px 0' }} />
-                </li>
-                <li>
-                  <button
-                    className="dropdown-item text-danger"
-                    onClick={onLogout}
-                    style={{
-                      padding: '10px 16px',
-                      borderRadius: '8px',
-                      display: 'flex',
-                      alignItems: 'center',
-                      fontSize: '0.9rem',
-                      fontWeight: 600,
-                    }}
-                  >
-                    <LogOut size={16} className="me-3" />
-                    Logout
-                  </button>
-                </li>
-              </ul>
-            </div>
-          ) : (
-            // Collapsed state - Just logout button
-            <button
-              onClick={onLogout}
-              title="Logout"
-              style={{
-                width: '100%',
-                background: 'rgba(220, 53, 69, 0.15)',
-                border: '1px solid rgba(220, 53, 69, 0.3)',
-                color: '#dc3545',
-                padding: '12px',
-                borderRadius: '10px',
-                cursor: 'pointer',
-                transition: 'all 0.2s ease',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.background = 'rgba(220, 53, 69, 0.25)';
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.background = 'rgba(220, 53, 69, 0.15)';
-              }}
-            >
-              <LogOut size={20} />
-            </button>
-          )}
+                  </div>
+
+                  <div style={{ display: 'flex', gap: isMobile ? '4px' : '6px' }}>
+                    <button
+                      onClick={() => i18n.changeLanguage('en')}
+                      style={{
+                        flex: 1,
+                        background: i18n.language === 'en'
+                          ? 'linear-gradient(135deg, rgba(220, 53, 69, 0.2) 0%, rgba(200, 35, 51, 0.2) 100%)'
+                          : 'rgba(255, 255, 255, 0.05)',
+                        border: i18n.language === 'en'
+                          ? '1px solid rgba(220, 53, 69, 0.4)'
+                          : '1px solid rgba(255, 255, 255, 0.1)',
+                        color: i18n.language === 'en' ? '#dc3545' : 'rgba(255, 255, 255, 0.7)',
+                        padding: isMobile ? '6px 8px' : '8px 10px',
+                        borderRadius: isMobile ? '6px' : '8px',
+                        cursor: 'pointer',
+                        transition: 'all 0.2s ease',
+                        fontSize: isMobile ? '0.75rem' : '0.8rem',
+                        fontWeight: i18n.language === 'en' ? 600 : 500,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: isMobile ? '4px' : '5px',
+                        minHeight: '36px',
+                      }}
+                    >
+                      <Globe size={isMobile ? 12 : 13} />
+                      <span>EN</span>
+                      {i18n.language === 'en' && <CheckCircle size={isMobile ? 10 : 12} />}
+                    </button>
+
+                    <button
+                      onClick={() => i18n.changeLanguage('tr')}
+                      style={{
+                        flex: 1,
+                        background: i18n.language === 'tr'
+                          ? 'linear-gradient(135deg, rgba(220, 53, 69, 0.2) 0%, rgba(200, 35, 51, 0.2) 100%)'
+                          : 'rgba(255, 255, 255, 0.05)',
+                        border: i18n.language === 'tr'
+                          ? '1px solid rgba(220, 53, 69, 0.4)'
+                          : '1px solid rgba(255, 255, 255, 0.1)',
+                        color: i18n.language === 'tr' ? '#dc3545' : 'rgba(255, 255, 255, 0.7)',
+                        padding: isMobile ? '6px 8px' : '8px 10px',
+                        borderRadius: isMobile ? '6px' : '8px',
+                        cursor: 'pointer',
+                        transition: 'all 0.2s ease',
+                        fontSize: isMobile ? '0.75rem' : '0.8rem',
+                        fontWeight: i18n.language === 'tr' ? 600 : 500,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: isMobile ? '4px' : '5px',
+                        minHeight: '36px',
+                      }}
+                    >
+                      <Globe size={isMobile ? 12 : 13} />
+                      <span>TR</span>
+                      {i18n.language === 'tr' && <CheckCircle size={isMobile ? 10 : 12} />}
+                    </button>
+                  </div>
+                </div>
+
+                <button
+                  onClick={onLogout}
+                  style={{
+                    width: '100%',
+                    background: 'rgba(220, 53, 69, 0.15)',
+                    border: '1px solid rgba(220, 53, 69, 0.3)',
+                    color: '#dc3545',
+                    padding: isMobile ? '10px' : '12px',
+                    borderRadius: isMobile ? '6px' : '8px',
+                    cursor: 'pointer',
+                    transition: 'all 0.2s ease',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontSize: isMobile ? '0.85rem' : '0.9rem',
+                    fontWeight: 600,
+                    minHeight: '44px',
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.background = 'rgba(220, 53, 69, 0.25)';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.background = 'rgba(220, 53, 69, 0.15)';
+                  }}
+                >
+                  <LogOut size={isMobile ? 16 : 18} style={{ marginRight: isMobile ? '6px' : '8px' }} />
+                  Logout
+                </button>
+              </div>
+            ) : (
+              <div>
+                <button
+                  onClick={() => i18n.changeLanguage(i18n.language === 'en' ? 'tr' : 'en')}
+                  title={`Switch to ${i18n.language === 'en' ? 'Turkish' : 'English'}`}
+                  style={{
+                    width: '100%',
+                    background: 'rgba(255, 255, 255, 0.06)',
+                    border: '1px solid rgba(255, 255, 255, 0.1)',
+                    color: 'rgba(255, 255, 255, 0.75)',
+                    padding: '12px',
+                    borderRadius: '10px',
+                    cursor: 'pointer',
+                    transition: 'all 0.2s ease',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    marginBottom: '8px',
+                    minHeight: '44px',
+                  }}
+                >
+                  <Globe size={18} />
+                </button>
+
+                <button
+                  onClick={onLogout}
+                  title="Logout"
+                  style={{
+                    width: '100%',
+                    background: 'rgba(220, 53, 69, 0.15)',
+                    border: '1px solid rgba(220, 53, 69, 0.3)',
+                    color: '#dc3545',
+                    padding: '12px',
+                    borderRadius: '10px',
+                    cursor: 'pointer',
+                    transition: 'all 0.2s ease',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    minHeight: '44px',
+                  }}
+                >
+                  <LogOut size={18} />
+                </button>
+              </div>
+            )}
+          </div>
         </div>
-      </div>
-    </>
-  );
-};
+      </>
+    );
+  };
 
 
   // Dashboard Overview Component
@@ -3670,18 +3707,34 @@ const AppointmentsTab: React.FC = () => {
                     <label className="form-label fw-semibold">
                       Gender <span className="text-danger">*</span>
                     </label>
-                    <select
-                      className="form-select"
-                      value={userProfile.gender}
-                      onChange={(e) => setUserProfile({ ...userProfile, gender: e.target.value })}
-                      required
-                    >
-                      <option value="">Select gender</option>
-                      <option value="male">Male</option>
-                      <option value="female">Female</option>
-                      <option value="other">Other</option>
-                      <option value="prefer_not_to_say">Prefer not to say</option>
-                    </select>
+                    <Select
+  value={[
+    { value: 'male', label: 'Male' },
+    { value: 'female', label: 'Female' }
+  ].find(option => option.value === userProfile.gender)}
+  onChange={(option) => setUserProfile({ ...userProfile, gender: option?.value || '' })}
+  options={[
+    { value: 'male', label: 'Male' },
+    { value: 'female', label: 'Female' }
+  ]}
+  placeholder="Select gender"
+  menuPortalTarget={document.body}
+  menuPosition="fixed"
+  styles={{
+    control: (base) => ({
+      ...base,
+      minHeight: '38px'
+    }),
+    menu: (base) => ({
+      ...base,
+      zIndex: 9999
+    }),
+    menuPortal: (base) => ({ 
+      ...base, 
+      zIndex: 9999 
+    })
+  }}
+/>
                   </div>
 
                   {/* Department - Read Only */}
@@ -3938,21 +3991,41 @@ const AppointmentsTab: React.FC = () => {
             createAppointment();
           }}>
             <div className="mb-3">
-              <label className="form-label">Patient <span className="text-danger">*</span></label>
-              <select
-                className="form-select"
-                value={formData.patient_id || ''}
-                onChange={(e) => setFormData({...formData, patient_id: e.target.value})}
-                required
-              >
-                <option value="">Select Patient</option>
-                {patients.map(patient => (
-                  <option key={patient.id} value={patient.id}>
-                    {patient.name} ({patient.student_id})
-                  </option>
-                ))}
-              </select>
-            </div>
+  <label className="form-label">Patient <span className="text-danger">*</span></label>
+  <Select
+    value={patients.map(patient => ({
+      value: String(patient.id),
+      label: `${patient.name} (${patient.student_id})`
+    })).find(option => option.value === String(formData.patient_id))}
+    onChange={(option) => setFormData({...formData, patient_id: option?.value || ''})}
+    options={patients.map(patient => ({
+      value: String(patient.id),
+      label: `${patient.name} (${patient.student_id})`
+    }))}
+    placeholder="Select Patient"
+    menuPortalTarget={document.body}
+    menuPosition="fixed"
+    styles={{
+      control: (base) => ({
+        ...base,
+        minHeight: '38px'
+      }),
+      menu: (base) => ({
+        ...base,
+        maxHeight: window.innerWidth < 768 ? '200px' : '300px',
+        zIndex: 9999
+      }),
+      menuList: (base) => ({
+        ...base,
+        maxHeight: window.innerWidth < 768 ? '200px' : '300px',
+      }),
+      menuPortal: (base) => ({ 
+        ...base, 
+        zIndex: 9999 
+      })
+    }}
+  />
+</div>
             
             {/* Enhanced Date and Time selection */}
 {/* Enhanced Date and Time selection */}
@@ -4018,28 +4091,45 @@ const AppointmentsTab: React.FC = () => {
             
             {/* Doctor selection - shows available doctors based on date/time */}
             <div className="mb-3">
-              <label className="form-label">Available Doctors <span className="text-danger">*</span></label>
-              <select
-                className="form-select"
-                value={formData.doctor_id || ''}
-                onChange={(e) => setFormData({...formData, doctor_id: e.target.value})}
-                required
-                disabled={!formData.appointment_date || !formData.appointment_time}
-              >
-                <option value="">
-                  {!formData.appointment_date || !formData.appointment_time 
-                    ? 'Select date and time first' 
-                    : availableDoctors.length === 0 
-                    ? 'No doctors available for selected time' 
-                    : 'Select Doctor'}
-                </option>
-                {availableDoctors.map(doctor => (
-                  <option key={doctor.id} value={doctor.id}>
-                    {doctor.name || doctor.full_name} - {doctor.specialty || doctor.specialization} ({doctor.department})
-                    {doctor.availability_status && ` - ${doctor.availability_status}`}
-                  </option>
-                ))}
-              </select>
+  <label className="form-label">Available Doctors <span className="text-danger">*</span></label>
+  <Select
+    value={availableDoctors.map(doctor => ({
+      value: String(doctor.id),
+      label: `${doctor.name || doctor.full_name} - ${doctor.specialty || doctor.specialization} (${doctor.department})${doctor.availability_status ? ` - ${doctor.availability_status}` : ''}`
+    })).find(option => option.value === String(formData.doctor_id))}
+    onChange={(option) => setFormData({...formData, doctor_id: option?.value || ''})}
+    options={availableDoctors.map(doctor => ({
+      value: String(doctor.id),
+      label: `${doctor.name || doctor.full_name} - ${doctor.specialty || doctor.specialization} (${doctor.department})${doctor.availability_status ? ` - ${doctor.availability_status}` : ''}`
+    }))}
+    isDisabled={!formData.appointment_date || !formData.appointment_time}
+    placeholder={!formData.appointment_date || !formData.appointment_time 
+      ? 'Select date and time first' 
+      : availableDoctors.length === 0 
+      ? 'No doctors available for selected time' 
+      : 'Select Doctor'}
+    menuPortalTarget={document.body}
+    menuPosition="fixed"
+    styles={{
+      control: (base) => ({
+        ...base,
+        minHeight: '38px'
+      }),
+      menu: (base) => ({
+        ...base,
+        maxHeight: window.innerWidth < 768 ? '200px' : '300px',
+        zIndex: 9999
+      }),
+      menuList: (base) => ({
+        ...base,
+        maxHeight: window.innerWidth < 768 ? '200px' : '300px',
+      }),
+      menuPortal: (base) => ({ 
+        ...base, 
+        zIndex: 9999 
+      })
+    }}
+  />
               {formData.appointment_date && formData.appointment_time && availableDoctors.length === 0 && (
                 <small className="text-warning">
                   No doctors are available at the selected date and time. Please choose a different slot.
@@ -4068,15 +4158,36 @@ const AppointmentsTab: React.FC = () => {
             
             <div className="mb-3">
               <label className="form-label">Priority</label>
-              <select
-                className="form-select"
-                value={formData.priority || 'normal'}
-                onChange={(e) => setFormData({...formData, priority: e.target.value})}
-              >
-                <option value="normal">Normal</option>
-                <option value="high">High</option>
-                <option value="urgent">Urgent</option>
-              </select>
+              <Select
+  value={[
+    { value: 'normal', label: 'Normal' },
+    { value: 'high', label: 'High' },
+    { value: 'urgent', label: 'Urgent' }
+  ].find(option => option.value === (formData.priority || 'normal'))}
+  onChange={(option) => setFormData({...formData, priority: option?.value || 'normal'})}
+  options={[
+    { value: 'normal', label: 'Normal' },
+    { value: 'high', label: 'High' },
+    { value: 'urgent', label: 'Urgent' }
+  ]}
+  placeholder="Select Priority"
+  menuPortalTarget={document.body}
+  menuPosition="fixed"
+  styles={{
+    control: (base) => ({
+      ...base,
+      minHeight: '38px'
+    }),
+    menu: (base) => ({
+      ...base,
+      zIndex: 9999
+    }),
+    menuPortal: (base) => ({ 
+      ...base, 
+      zIndex: 9999 
+    })
+  }}
+/>
             </div>
             <div className="mb-3">
               <label className="form-label">Notes</label>
@@ -4155,17 +4266,40 @@ const AppointmentsTab: React.FC = () => {
             </div>
             <div className="mb-3">
               <label className="form-label">Status</label>
-              <select
-                className="form-select"
-                value={formData.status || 'scheduled'}
-                onChange={(e) => setFormData({...formData, status: e.target.value})}
-              >
-                <option value="scheduled">Scheduled</option>
-                <option value="confirmed">Confirmed</option>
-                <option value="in_progress">In Progress</option>
-                <option value="completed">Completed</option>
-                <option value="cancelled">Cancelled</option>
-              </select>
+              <Select
+  value={[
+    { value: 'scheduled', label: 'Scheduled' },
+    { value: 'confirmed', label: 'Confirmed' },
+    { value: 'in_progress', label: 'In Progress' },
+    { value: 'completed', label: 'Completed' },
+    { value: 'cancelled', label: 'Cancelled' }
+  ].find(option => option.value === (formData.status || 'scheduled'))}
+  onChange={(option) => setFormData({...formData, status: option?.value || 'scheduled'})}
+  options={[
+    { value: 'scheduled', label: 'Scheduled' },
+    { value: 'confirmed', label: 'Confirmed' },
+    { value: 'in_progress', label: 'In Progress' },
+    { value: 'completed', label: 'Completed' },
+    { value: 'cancelled', label: 'Cancelled' }
+  ]}
+  placeholder="Select Status"
+  menuPortalTarget={document.body}
+  menuPosition="fixed"
+  styles={{
+    control: (base) => ({
+      ...base,
+      minHeight: '38px'
+    }),
+    menu: (base) => ({
+      ...base,
+      zIndex: 9999
+    }),
+    menuPortal: (base) => ({ 
+      ...base, 
+      zIndex: 9999 
+    })
+  }}
+/>
             </div>
             <div className="mb-3">
               <label className="form-label">Priority</label>
@@ -4503,32 +4637,75 @@ const AppointmentsTab: React.FC = () => {
               </div>
               <div className="col-md-6">
                 <label className="form-label">Frequency <span className="text-danger">*</span></label>
-                <select
-                  className="form-select"
-                  value={formData.frequency || 'daily'}
-                  onChange={(e) => setFormData({...formData, frequency: e.target.value})}
-                  required
-                >
-                  <option value="daily">Daily</option>
-                  <option value="twice_daily">Twice Daily</option>
-                  <option value="weekly">Weekly</option>
-                  <option value="as_needed">As Needed</option>
-                </select>
+                <Select
+  value={[
+    { value: 'daily', label: 'Daily' },
+    { value: 'twice_daily', label: 'Twice Daily' },
+    { value: 'weekly', label: 'Weekly' },
+    { value: 'as_needed', label: 'As Needed' }
+  ].find(option => option.value === (formData.frequency || 'daily'))}
+  onChange={(option) => setFormData({...formData, frequency: option?.value || 'daily'})}
+  options={[
+    { value: 'daily', label: 'Daily' },
+    { value: 'twice_daily', label: 'Twice Daily' },
+    { value: 'weekly', label: 'Weekly' },
+    { value: 'as_needed', label: 'As Needed' }
+  ]}
+  placeholder="Select Frequency"
+  menuPortalTarget={document.body}
+  menuPosition="fixed"
+  styles={{
+    control: (base) => ({
+      ...base,
+      minHeight: '38px'
+    }),
+    menu: (base) => ({
+      ...base,
+      zIndex: 9999
+    }),
+    menuPortal: (base) => ({ 
+      ...base, 
+      zIndex: 9999 
+    })
+  }}
+/>
               </div>
               <div className="col-md-6">
                 <label className="form-label">Route <span className="text-danger">*</span></label>
-                <select
-                  className="form-select"
-                  value={formData.route || 'oral'}
-                  onChange={(e) => setFormData({...formData, route: e.target.value})}
-                  required
-                >
-                  <option value="oral">Oral</option>
-                  <option value="topical">Topical</option>
-                  <option value="injection">Injection</option>
-                  <option value="inhalation">Inhalation</option>
-                  <option value="sublingual">Sublingual</option>
-                </select>
+                <Select
+  value={[
+    { value: 'oral', label: 'Oral' },
+    { value: 'topical', label: 'Topical' },
+    { value: 'injection', label: 'Injection' },
+    { value: 'inhalation', label: 'Inhalation' },
+    { value: 'sublingual', label: 'Sublingual' }
+  ].find(option => option.value === (formData.route || 'oral'))}
+  onChange={(option) => setFormData({...formData, route: option?.value || 'oral'})}
+  options={[
+    { value: 'oral', label: 'Oral' },
+    { value: 'topical', label: 'Topical' },
+    { value: 'injection', label: 'Injection' },
+    { value: 'inhalation', label: 'Inhalation' },
+    { value: 'sublingual', label: 'Sublingual' }
+  ]}
+  placeholder="Select Route"
+  menuPortalTarget={document.body}
+  menuPosition="fixed"
+  styles={{
+    control: (base) => ({
+      ...base,
+      minHeight: '38px'
+    }),
+    menu: (base) => ({
+      ...base,
+      zIndex: 9999
+    }),
+    menuPortal: (base) => ({ 
+      ...base, 
+      zIndex: 9999 
+    })
+  }}
+/>
               </div>
               <div className="col-md-6">
                 <label className="form-label">Start Date <span className="text-danger">*</span></label>
@@ -4795,19 +4972,39 @@ const AppointmentsTab: React.FC = () => {
       {formData.reviewAction === 'approve' && (
         <div className="mb-3">
           <label className="form-label">Assign to Doctor <span className="text-danger">*</span></label>
-          <select
-            className="form-select"
-            value={formData.doctor_id || ''}
-            onChange={(e) => setFormData({...formData, doctor_id: e.target.value})}
-            required
-          >
-            <option value="">Select Doctor</option>
-            {doctors.map(doctor => (
-              <option key={doctor.id} value={doctor.id}>
-                {doctor.name} - {doctor.specialty}
-              </option>
-            ))}
-          </select>
+          <Select
+  value={doctors.map(doctor => ({
+    value: String(doctor.id),
+    label: `${doctor.name} - ${doctor.specialty || doctor.specialization} (${doctor.department})`
+  })).find(option => option.value === String(formData.doctor_id))}
+  onChange={(option) => setFormData({...formData, doctor_id: option?.value || ''})}
+  options={doctors.map(doctor => ({
+    value: String(doctor.id),
+    label: `${doctor.name} - ${doctor.specialty || doctor.specialization} (${doctor.department})`
+  }))}
+  placeholder="Select Doctor"
+  menuPortalTarget={document.body}
+  menuPosition="fixed"
+  styles={{
+    control: (base) => ({
+      ...base,
+      minHeight: '38px'
+    }),
+    menu: (base) => ({
+      ...base,
+      maxHeight: window.innerWidth < 768 ? '200px' : '300px',
+      zIndex: 9999
+    }),
+    menuList: (base) => ({
+      ...base,
+      maxHeight: window.innerWidth < 768 ? '200px' : '300px',
+    }),
+    menuPortal: (base) => ({ 
+      ...base, 
+      zIndex: 9999 
+    })
+  }}
+/>
         </div>
       )}
       

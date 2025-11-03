@@ -1,4 +1,4 @@
-/* RegisterPage.css */
+/* RegisterPage.css - FIXED VERSION */
 .wehealth-register-container {
   min-height: 100vh;
   background: linear-gradient(135deg, #fbf7f7 0%, #d4b8b8 100%);
@@ -7,6 +7,7 @@
   justify-content: center;
   padding: 20px;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+  position: relative; /* FIXED: Added for proper positioning context */
 }
 
 .wehealth-register-card {
@@ -16,8 +17,10 @@
   background: #ffffff;
   border-radius: 24px;
   box-shadow: 0 20px 60px rgba(0, 0, 0, 0.1);
-  overflow: hidden;
+  overflow: visible; /* FIXED: Changed from hidden to visible to allow dropdown to show */
   display: flex;
+  position: relative; /* FIXED: Added for stacking context */
+  z-index: 1; /* Lower than language switcher */
 }
 
 /* Left Panel - Register Form */
@@ -27,8 +30,9 @@
   align-items: center;
   text-align: center;
   padding: 20px;
-  flex: 1.5; /* Bigger than login to accommodate more fields */
-  overflow-y: auto;
+  flex: 1.5;
+  overflow-y: auto; /* Allow scrolling if content is too long */
+  overflow-x: hidden; /* Prevent horizontal overflow */
   max-height: 700px;
 }
 
@@ -445,12 +449,12 @@
   margin-top: 20px;
 }
 
-/* ===== LANGUAGE SWITCHER STYLES ===== */
+/* ===== LANGUAGE SWITCHER STYLES - FIXED ===== */
 
-/* Language Switcher Container */
+/* Language Switcher Container - FIXED Z-INDEX */
 .language-switcher {
   position: relative;
-  z-index: 1000;
+  z-index: 9999; /* FIXED: Much higher z-index to ensure it's above everything */
 }
 
 /* Language Button Styling */
@@ -471,6 +475,8 @@
   box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
   min-width: 120px;
   justify-content: center;
+  position: relative; /* FIXED: Added for proper stacking */
+  z-index: 9999; /* FIXED: Ensure button is also high */
 }
 
 .language-switcher button:hover:not(:disabled) {
@@ -501,7 +507,7 @@
   animation: spin 0.8s linear infinite;
 }
 
-/* Dropdown styling */
+/* Dropdown styling - FIXED */
 .language-switcher .dropdown {
   position: absolute;
   top: 100%;
@@ -513,7 +519,7 @@
   box-shadow: 0 20px 60px rgba(0, 0, 0, 0.15);
   border: 1px solid rgba(220, 38, 38, 0.1);
   overflow: hidden;
-  z-index: 1001;
+  z-index: 10000; /* FIXED: Higher than button to ensure it shows on top */
 }
 
 .language-switcher .dropdown-header {
@@ -569,51 +575,73 @@
   color: #dc2626;
 }
 
-/* Integration with register page */
+/* Integration with register page - FIXED */
 .wehealth-register-container .language-switcher {
   position: absolute;
   top: 20px;
   right: 20px;
+  z-index: 9999; /* FIXED: Ensure it's above the card */
 }
 
 /* Responsive Design */
 @media (max-width: 992px) {
+  .wehealth-register-container {
+    padding: 10px;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
   .wehealth-register-card {
     flex-direction: column;
     height: auto;
-    max-width: 500px;
+    max-width: calc(100vw - 20px) !important; /* FIXED: Fit within viewport */
     min-height: auto;
+    overflow-y: auto;
+    overflow-x: hidden;
+    margin: 0 auto;
   }
   
   .register-panel {
-    padding: 30px;
+    padding: 25px 20px;
     max-height: none;
   }
   
   .register-doctor-panel {
-    padding: 30px;
-    min-height: 400px;
+    padding: 25px 20px;
+    min-height: 350px;
   }
   
   .register-doctor-image {
-    width: 200px;
-    height: 250px;
+    width: 180px;
+    height: 240px;
   }
   
   .register-form-title {
-    font-size: 24px;
+    font-size: 22px;
   }
   
   .register-brand-name {
-    font-size: 18px;
+    font-size: 16px;
   }
 
+  /* FIXED: Form rows stack on mobile */
   .register-form-row {
     flex-direction: column;
     gap: 0;
   }
 
-  /* Language switcher responsive */
+  /* FIXED: Prevent iOS zoom */
+  .register-form-input,
+  .register-form-select,
+  input[type="text"],
+  input[type="email"],
+  input[type="password"],
+  select {
+    font-size: 16px !important;
+    max-width: 100%;
+  }
+
+  /* FIXED: Language switcher dropdown positioning */
   .language-switcher button {
     padding: 8px 12px;
     min-width: 100px;
@@ -621,45 +649,84 @@
   }
   
   .language-switcher .dropdown {
+    position: fixed !important; /* FIXED: Use fixed positioning on mobile */
+    top: 60px !important;
+    right: 10px !important;
+    left: auto !important;
     min-width: 180px;
+    max-width: calc(100vw - 20px) !important; /* FIXED: Prevent overflow */
+    max-height: 60vh !important;
+    overflow-y: auto !important;
+  }
+
+  /* FIXED: Form container */
+  .register-form-container {
+    max-width: 100%;
+    padding: 0 5px;
   }
 }
 
-
-
 @media (max-width: 768px) {
   .wehealth-register-container {
-    padding: 10px;
+    padding: 5px;
+  }
+  
+  .wehealth-register-card {
+    max-width: calc(100vw - 10px) !important;
   }
   
   .register-panel {
-    padding: 20px;
+    padding: 20px 15px;
   }
   
   .register-doctor-panel {
-    padding: 20px;
+    padding: 20px 15px;
+    min-height: 300px;
   }
   
   .register-doctor-image {
     width: 160px;
-    height: 200px;
+    height: 210px;
   }
   
   .register-info-bubble {
-    max-width: 240px;
-    padding: 16px 20px;
+    max-width: 220px;
+    padding: 14px 18px;
   }
 
   .register-form-container {
+    max-width: 100%;
+    padding: 0;
+  }
+
+  /* FIXED: Phone input responsive */
+  .register-phone-container .react-tel-input .form-control {
+    font-size: 16px !important;
+    padding: 12px 16px 12px 52px !important;
+  }
+
+  /* FIXED: Select dropdown constrained */
+  .register-form-select option {
     max-width: 100%;
   }
 }
 
 @media (max-width: 480px) {
+  .wehealth-register-container {
+    padding: 5px;
+  }
+
+  .wehealth-register-card {
+    max-width: calc(100vw - 10px) !important; /* FIXED: Full width */
+    border-radius: 16px;
+    margin: 5px;
+  }
+
+  /* FIXED: Form inputs */
   .register-form-input,
   .register-form-select {
-    padding: 12px 16px;
-    font-size: 14px;
+    padding: 12px 14px !important;
+    font-size: 16px !important;
   }
   
   .register-button {
@@ -668,27 +735,119 @@
   }
   
   .register-brand-logo {
-    width: 80px;
-    height: 60px;
+    width: 70px;
+    height: 55px;
   }
   
   .register-brand-name {
-    font-size: 16px;
+    font-size: 14px;
+  }
+
+  .register-form-title {
+    font-size: 20px;
+  }
+
+  .register-form-subtitle {
+    font-size: 13px;
+  }
+
+  .register-panel {
+    padding: 15px 10px;
+  }
+
+  .register-doctor-panel {
+    padding: 15px 10px;
+    min-height: 250px;
+  }
+
+  .register-doctor-image {
+    width: 130px;
+    height: 170px;
   }
 
   /* Language switcher mobile */
   .wehealth-register-container .language-switcher {
-    top: 15px;
-    right: 15px;
+    top: 10px;
+    right: 10px;
   }
   
   .language-switcher button {
-    padding: 6px 10px;
-    min-width: 80px;
-    font-size: 12px;
+    padding: 6px 8px;
+    min-width: 70px;
+    font-size: 11px;
+  }
+  
+  /* FIXED: Dropdown full width on very small screens */
+  .language-switcher .dropdown {
+    right: 5px !important;
+    left: 5px !important;
+    width: auto !important;
+    min-width: auto !important;
+    max-width: calc(100vw - 10px) !important;
   }
   
   .language-switcher button span:last-child {
-    display: none; /* Hide text on very small screens, keep only flag */
+    display: none;
+  }
+
+  /* FIXED: Role section */
+  .register-role-section {
+    padding: 15px;
+    margin-bottom: 15px;
+  }
+
+  .register-role-title {
+    font-size: 14px;
+  }
+
+  /* FIXED: Form labels and text */
+  .register-form-label {
+    font-size: 13px;
+    margin-bottom: 5px;
+  }
+
+  .register-form-text,
+  .register-invalid-feedback {
+    font-size: 11px;
+  }
+
+  /* FIXED: Phone input on small screens */
+  .register-phone-container .react-tel-input .form-control {
+    padding: 11px 14px 11px 48px !important;
+    font-size: 16px !important;
+  }
+
+  .register-phone-container .react-tel-input .flag-dropdown {
+    width: 45px !important;
+  }
+
+  /* FIXED: Password wrapper */
+  .register-password-wrapper input {
+    padding-right: 45px !important;
+  }
+
+  .register-password-toggle {
+    right: 12px;
+    font-size: 14px;
+  }
+
+  /* FIXED: Info bubble */
+  .register-info-bubble {
+    max-width: 200px;
+    padding: 12px 16px;
+  }
+
+  .register-bubble-icon {
+    width: 40px;
+    height: 40px;
+    font-size: 16px;
+  }
+
+  .register-bubble-content h4 {
+    font-size: 14px;
+  }
+
+  .register-bubble-content p {
+    font-size: 12px;
   }
 }

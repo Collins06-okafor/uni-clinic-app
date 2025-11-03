@@ -4,11 +4,13 @@ namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
+use App\Models\SystemSetting;
 use App\Models\User;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\Cache;
 
 class AdminController extends Controller
 {
@@ -586,93 +588,356 @@ public function getProfile()
      */
     public function getSettings(Request $request): JsonResponse
     {
-        // In real implementation, fetch from database or config files
-        return response()->json([
-            'general' => [
-                'site_name' => 'University Health System',
-                'site_description' => 'Comprehensive university Health platform',
-                'timezone' => 'UTC +3',
-                'default_language' => 'en',
-                'maintenance_mode' => false,
-                'registration_enabled' => true,
-                'email_verification_required' => true
-            ],
-            'authentication' => [
-                'password_min_length' => 8,
-                'password_require_uppercase' => true,
-                'password_require_lowercase' => true,
-                'password_require_numbers' => true,
-                'password_require_symbols' => false,
-                'session_timeout' => 1440, // minutes
-                'max_login_attempts' => 5,
-                'lockout_duration' => 15, // minutes
-                'two_factor_enabled' => false
-            ],
-            'email' => [
-                'smtp_host' => 'smtp.university.edu',
-                'smtp_port' => 587,
-                'smtp_encryption' => 'tls',
-                'from_address' => 'noreply@university.edu',
-                'from_name' => 'University Health System'
-            ],
-            'file_uploads' => [
-                'max_file_size' => 10240, // KB
-                'allowed_extensions' => ['pdf', 'doc', 'docx', 'jpg', 'png'],
-                'upload_path' => '/uploads/',
-                'antivirus_enabled' => true
-            ],
-            'security' => [
-                'force_https' => true,
-                'csrf_protection' => true,
-                'rate_limiting_enabled' => true,
-                'ip_whitelist_enabled' => false,
-                'audit_logging_enabled' => true,
-                'password_history_count' => 5
-            ],
-            'backup' => [
-                'automatic_backups' => true,
-                'backup_frequency' => 'daily',
-                'backup_retention_days' => 30,
-                'backup_location' => 's3://university-backups/',
-                'last_backup' => now()->subHours(2)->format('Y-m-d H:i:s')
-            ]
-        ]);
+        try {
+            $settings = SystemSetting::getInstance();
+            
+            return response()->json($settings->getAllSettings());
+        } catch (\Exception $e) {
+            \Log::error('Failed to fetch settings', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+            
+            return response()->json([
+                'message' => 'Failed to load system settings',
+                'error' => config('app.debug') ? $e->getMessage() : 'Internal server error'
+            ], 500);
+        }
     }
 
     /**
      * Update system settings
      */
-    public function updateSettings(Request $request): JsonResponse
-    {
-        $validated = $request->validate([
-            'general.site_name' => 'sometimes|string|max:255',
-            'general.timezone' => 'sometimes|string|max:50',
-            'general.maintenance_mode' => 'sometimes|boolean',
-            'general.registration_enabled' => 'sometimes|boolean',
-            'authentication.password_min_length' => 'sometimes|integer|min:6|max:50',
-            'authentication.session_timeout' => 'sometimes|integer|min:30|max:10080',
-            'authentication.max_login_attempts' => 'sometimes|integer|min:3|max:20',
-            'security.force_https' => 'sometimes|boolean',
-            'security.rate_limiting_enabled' => 'sometimes|boolean',
-            'backup.automatic_backups' => 'sometimes|boolean',
-            'backup.backup_frequency' => 'sometimes|in:hourly,daily,weekly'
-        ]);
-
-        // In real implementation, update settings in database or config files
+   /**
+ * Update system settings
+ */
+public function updateSettings(Request $request): JsonResponse
+{
+    // Log incoming request
+    \Log::info('Settings update attempt', [
+        'user_id' => $request->user()->id ?? 'unknown',
+        'data_keys' => array_keys($request->all()),
+        'data' => $request->all()
+    ]);
+    
+    try {
+        $settings = SystemSetting::getInstance();
+        $requestData = $request->all();
         
+        // Check if data is empty
+        if (empty($requestData)) {
+            \Log::warning('Empty settings data received');
+            return response()->json([
+                'message' => 'No settings data provided',
+                'error' => 'EMPTY_DATA'
+            ], 422);
+        }
+        
+        // Get valid sections
+        $allowedSections = ['general', 'authentication', 'email', 'file_uploads', 'security', 'backup'];
+        $sectionsToUpdate = array_intersect_key($requestData, array_flip($allowedSections));
+        
+        if (empty($sectionsToUpdate)) {
+            \Log::warning('No valid sections found', [
+                'received_keys' => array_keys($requestData),
+                'allowed_sections' => $allowedSections
+            ]);
+            
+            return response()->json([
+                'message' => 'No valid settings sections provided',
+                'error' => 'INVALID_SECTIONS',
+                'received_keys' => array_keys($requestData),
+                'allowed_sections' => $allowedSections
+            ], 422);
+        }
+        
+        // Validate and update each section
+        foreach ($sectionsToUpdate as $section => $data) {
+            if (!is_array($data)) {
+                \Log::error("Invalid data type for section {$section}", [
+                    'type' => gettype($data),
+                    'value' => $data
+                ]);
+                
+                return response()->json([
+                    'message' => "Invalid data format for section: {$section}",
+                    'error' => 'INVALID_DATA_FORMAT',
+                    'expected' => 'array',
+                    'received' => gettype($data)
+                ], 422);
+            }
+            
+            // Validate section data
+            try {
+                $this->validateSection($section, $data);
+            } catch (\Illuminate\Validation\ValidationException $e) {
+                \Log::error("Validation failed for section: {$section}", [
+                    'errors' => $e->errors(),
+                    'data' => $data
+                ]);
+                
+                return response()->json([
+                    'message' => "Validation failed for section: {$section}",
+                    'errors' => $e->errors(),
+                    'section' => $section
+                ], 422);
+            }
+            
+            // Merge with existing settings
+            $currentSection = $settings->$section ?? [];
+            $updatedSection = array_merge($currentSection, $data);
+            $settings->$section = $updatedSection;
+        }
+        
+        // Save to database
+        $saved = $settings->save();
+        
+        if (!$saved) {
+            \Log::error('Failed to save settings to database');
+            return response()->json([
+                'message' => 'Failed to save settings',
+                'error' => 'SAVE_FAILED'
+            ], 500);
+        }
+        
+        // Clear cache
+        Cache::forget('system_settings');
+        
+        // Log success
         $this->logAdminAction($request->user(), 'settings_update', [
-            'settings_updated' => array_keys($validated),
-            'previous_values' => [], // Get from database
-            'new_values' => $validated
+            'sections_updated' => array_keys($sectionsToUpdate),
+            'timestamp' => now()
         ]);
-
+        
+        \Log::info('Settings updated successfully', [
+            'sections' => array_keys($sectionsToUpdate),
+            'user_id' => $request->user()->id
+        ]);
+        
         return response()->json([
             'message' => 'Settings updated successfully',
-            'updated_settings' => array_keys($validated),
+            'settings' => $settings->getAllSettings(),
             'updated_by' => $request->user()->name,
             'updated_at' => now()
         ]);
+        
+    } catch (\Exception $e) {
+        \Log::error('Settings update failed with exception', [
+            'error' => $e->getMessage(),
+            'trace' => $e->getTraceAsString(),
+            'user_id' => $request->user()->id ?? null
+        ]);
+        
+        return response()->json([
+            'message' => 'Failed to update system settings',
+            'error' => config('app.debug') ? $e->getMessage() : 'Internal server error',
+            'debug' => config('app.debug') ? [
+                'exception' => get_class($e),
+                'file' => $e->getFile(),
+                'line' => $e->getLine()
+            ] : null
+        ], 500);
     }
+}
+
+/**
+ * Validate a specific settings section
+ */
+private function validateSection(string $section, array $data): void
+{
+    $rules = [];
+    
+    switch ($section) {
+        case 'general':
+            $rules = [
+                'site_name' => 'sometimes|string|max:255',
+                'site_description' => 'sometimes|string|max:1000',
+                'timezone' => 'sometimes|string|max:50',
+                'default_language' => 'sometimes|string|in:en,tr,de,fr,es,it,pt,ru,ar,zh,ja,ko',
+                'maintenance_mode' => 'sometimes|boolean',
+                'registration_enabled' => 'sometimes|boolean',
+                'email_verification_required' => 'sometimes|boolean',
+            ];
+            break;
+            
+        case 'authentication':
+            $rules = [
+                'password_min_length' => 'sometimes|integer|min:6|max:128',
+                'password_require_uppercase' => 'sometimes|boolean',
+                'password_require_lowercase' => 'sometimes|boolean',
+                'password_require_numbers' => 'sometimes|boolean',
+                'password_require_symbols' => 'sometimes|boolean',
+                'session_timeout' => 'sometimes|integer|min:1|max:43200',
+                'max_login_attempts' => 'sometimes|integer|min:1|max:50',
+                'lockout_duration' => 'sometimes|integer|min:1|max:1440',
+                'two_factor_enabled' => 'sometimes|boolean',
+            ];
+            break;
+            
+        case 'email':
+            $rules = [
+                'smtp_host' => 'sometimes|string|max:255',
+                'smtp_port' => 'sometimes|integer|min:1|max:65535',
+                'smtp_encryption' => 'sometimes|string|in:,tls,ssl',
+                'from_address' => 'sometimes|nullable|email|max:255',
+                'from_name' => 'sometimes|string|max:255',
+                'smtp_username' => 'sometimes|nullable|string|max:255',
+                'smtp_password' => 'sometimes|nullable|string|max:255',
+            ];
+            break;
+            
+        case 'file_uploads':
+            $rules = [
+                'max_file_size' => 'sometimes|integer|min:1|max:102400',
+                'allowed_extensions' => 'sometimes|array',
+                'allowed_extensions.*' => 'string|max:10',
+                'upload_path' => 'sometimes|string|max:255',
+                'antivirus_enabled' => 'sometimes|boolean',
+            ];
+            break;
+            
+        case 'security':
+            $rules = [
+                'force_https' => 'sometimes|boolean',
+                'csrf_protection' => 'sometimes|boolean',
+                'rate_limiting_enabled' => 'sometimes|boolean',
+                'ip_whitelist_enabled' => 'sometimes|boolean',
+                'audit_logging_enabled' => 'sometimes|boolean',
+                'password_history_count' => 'sometimes|integer|min:0|max:24',
+            ];
+            break;
+            
+        case 'backup':
+            $rules = [
+                'automatic_backups' => 'sometimes|boolean',
+                'backup_frequency' => 'sometimes|string|in:hourly,daily,weekly,monthly',
+                'backup_retention_days' => 'sometimes|integer|min:1|max:365',
+                'backup_location' => 'sometimes|nullable|string|max:500',
+                'last_backup' => 'sometimes|nullable|date',
+            ];
+            break;
+    }
+    
+    if (!empty($rules)) {
+        \Log::debug("Validating section: {$section}", [
+            'rules' => array_keys($rules),
+            'data_keys' => array_keys($data)
+        ]);
+        
+        Validator::make($data, $rules)->validate();
+    }
+}
+
+    /**
+     * Reset settings to default values
+     */
+    public function resetSettings(Request $request): JsonResponse
+    {
+        $validator = Validator::make($request->all(), [
+            'section' => 'required|string|in:all,general,authentication,email,file_uploads,security,backup',
+            'confirm_reset' => 'required|boolean|accepted'
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'message' => 'Validation failed',
+                'errors' => $validator->errors()
+            ], 422);
+        }
+
+        try {
+            $settings = SystemSetting::getInstance();
+            $section = $request->section;
+            
+            $defaults = [
+                'general' => [
+                    'site_name' => 'University Health System',
+                    'site_description' => 'Comprehensive university Health platform',
+                    'timezone' => 'UTC+3',
+                    'default_language' => 'en',
+                    'maintenance_mode' => false,
+                    'registration_enabled' => true,
+                    'email_verification_required' => true
+                ],
+                'authentication' => [
+                    'password_min_length' => 8,
+                    'password_require_uppercase' => true,
+                    'password_require_lowercase' => true,
+                    'password_require_numbers' => true,
+                    'password_require_symbols' => false,
+                    'session_timeout' => 1440,
+                    'max_login_attempts' => 5,
+                    'lockout_duration' => 15,
+                    'two_factor_enabled' => false
+                ],
+                'email' => [
+                    'smtp_host' => '',
+                    'smtp_port' => 587,
+                    'smtp_encryption' => 'tls',
+                    'from_address' => '',
+                    'from_name' => ''
+                ],
+                'file_uploads' => [
+                    'max_file_size' => 10240,
+                    'allowed_extensions' => ['pdf', 'doc', 'docx', 'jpg', 'png'],
+                    'upload_path' => '/uploads/',
+                    'antivirus_enabled' => true
+                ],
+                'security' => [
+                    'force_https' => true,
+                    'csrf_protection' => true,
+                    'rate_limiting_enabled' => true,
+                    'ip_whitelist_enabled' => false,
+                    'audit_logging_enabled' => true,
+                    'password_history_count' => 5
+                ],
+                'backup' => [
+                    'automatic_backups' => true,
+                    'backup_frequency' => 'daily',
+                    'backup_retention_days' => 30,
+                    'backup_location' => '',
+                    'last_backup' => null
+                ]
+            ];
+            
+            if ($section === 'all') {
+                foreach ($defaults as $key => $value) {
+                    $settings->$key = $value;
+                }
+            } else {
+                $settings->$section = $defaults[$section];
+            }
+            
+            $settings->save();
+            
+            // Clear cache
+            Cache::forget('system_settings');
+            
+            // Log the action
+            $this->logAdminAction($request->user(), 'settings_reset', [
+                'section' => $section
+            ]);
+            
+            return response()->json([
+                'message' => 'Settings reset to defaults successfully',
+                'section' => $section,
+                'settings' => $settings->getAllSettings()
+            ]);
+            
+        } catch (\Exception $e) {
+            \Log::error('Failed to reset settings', [
+                'error' => $e->getMessage(),
+                'section' => $request->section
+            ]);
+            
+            return response()->json([
+                'message' => 'Failed to reset settings',
+                'error' => config('app.debug') ? $e->getMessage() : 'Internal server error'
+            ], 500);
+        }
+    }
+
+    
 
     /**
      * Get available roles and their permissions

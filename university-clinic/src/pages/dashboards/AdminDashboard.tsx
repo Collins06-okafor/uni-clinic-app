@@ -2,12 +2,13 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
   Users, Settings, Activity, CheckCircle, Clock, Calendar,
-  AlertTriangle, Trash2, User, X, Upload, LogOut, UserCog, LayoutGrid, Globe, Image as ImageIcon
+  AlertTriangle, Trash2, User, X, Upload, UserX, LogOut, UserCog, LayoutGrid, Globe, Image as ImageIcon
 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import i18n from '../../services/i18n';
 import PhoneInput from "react-phone-input-2";
 import "react-phone-input-2/lib/style.css";
+import AdminDashboardKPIs from '../../components/AdminDashboardKPIs';
 
 
 // API configuration
@@ -37,9 +38,18 @@ interface DashboardData {
   system_overview?: {
     total_users: number;
     active_users: number;
+    inactive_users?: number;
     new_registrations_today: number;
+    new_registrations_this_week?: number;
+    new_registrations_this_month?: number;
     pending_verifications: number;
   };
+  user_breakdown?: Record<string, {
+    total: number;
+    active: number;
+    pending: number;
+    inactive: number;
+  }>;
 }
 
 interface SystemSettings {
@@ -291,6 +301,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
   };
   
   const updateSettings = async (settings: SystemSettings) => {
+    setSettingsSaving(true);
     try {
       await fetchJson(`${apiBaseUrl}/settings`, {
         method: 'PUT',
@@ -302,6 +313,9 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
     } catch (error) {
       console.error('Settings update error:', error);
       addNotification((error as Error).message || 'Failed to update settings', 'error');
+      throw error; // Re-throw to be caught by the button handler
+    } finally {
+      setSettingsSaving(false);
     }
   };
 
@@ -1200,70 +1214,427 @@ const Sidebar = () => {
     </div>
   </div>
 );
+// Enhanced renderDashboard function for AdminDashboard.tsx
+// Replace your existing renderDashboard function with this
 
-  const renderDashboard = () => (
-  <div className="container-fluid px-4 py-4" style={{ backgroundColor: '#f8fafc' }}>
-    <div className="row g-4">
-      {/* Welcome Card */}
-      <div className="col-12">
-        <div className="rounded-4 shadow-sm p-5 text-white position-relative overflow-hidden"
-             style={{ background: 'linear-gradient(135deg, #e53e3e 0%, #c53030 100%)' }}>
-          <div className="row align-items-center">
-            <div className="col-md-8">
-              <h1 className="fw-bold mb-3">{t('admin.welcome_back')}</h1>
-              <p className="mb-2 opacity-90 fs-5">{t('admin.medical_appointments')}</p>
-              <p className="mb-0 opacity-75">{t('admin.monitor_system')}</p>
-              {dashboardData?.admin?.last_login && (
-                <p className="mb-0 opacity-75 mt-2">
-                  {t('admin.last_login', { date: new Date(dashboardData.admin.last_login).toLocaleString() })}
-                </p>
-              )}
+const renderDashboard = () => {
+  // Calculate derived metrics
+  const calculateMetrics = () => {
+    if (!dashboardData?.system_overview) return null;
+
+    const { system_overview, user_breakdown } = dashboardData;
+    
+    const activationRate = system_overview.total_users > 0
+      ? ((system_overview.active_users / system_overview.total_users) * 100).toFixed(1)
+      : '0';
+
+    const pendingRate = system_overview.total_users > 0
+      ? ((system_overview.pending_verifications / system_overview.total_users) * 100).toFixed(1)
+      : '0';
+
+    const dailyAverage = (system_overview.new_registrations_this_week ?? 0) / 7;
+    const growthTrend = system_overview.new_registrations_today > dailyAverage ? 'up' : 'down';
+    const growthPercentage = dailyAverage > 0
+      ? Math.abs(((system_overview.new_registrations_today - dailyAverage) / dailyAverage) * 100).toFixed(1)
+      : '0';
+
+    return { activationRate, pendingRate, growthTrend, growthPercentage, dailyAverage: dailyAverage.toFixed(1) };
+  };
+
+  const metrics = calculateMetrics();
+
+  return (
+    <div className="container-fluid px-4 py-4" style={{ backgroundColor: '#f8fafc' }}>
+      <div className="row g-4">
+        {/* Welcome Card */}
+        <div className="col-12">
+          <div className="rounded-4 shadow-sm p-5 text-white position-relative overflow-hidden"
+               style={{ background: 'linear-gradient(135deg, #e53e3e 0%, #c53030 100%)' }}>
+            <div className="row align-items-center">
+              <div className="col-md-8">
+                <h1 className="fw-bold mb-3">{t('admin.welcome_back')}</h1>
+                <p className="mb-2 opacity-90 fs-5">{t('admin.medical_appointments')}</p>
+                <p className="mb-0 opacity-75">{t('admin.monitor_system')}</p>
+                {dashboardData?.admin?.last_login && (
+                  <p className="mb-0 opacity-75 mt-2">
+                    {t('admin.last_login', { date: new Date(dashboardData.admin.last_login).toLocaleString() })}
+                  </p>
+                )}
+              </div>
             </div>
           </div>
         </div>
-      </div>
 
-      {/* KPI Cards with translations */}
-      <div className="col-12"><h4 className="fw-bold mb-3">{t('admin.system_overview')}</h4></div>
-      <div className="col-lg-3 col-md-6">
-        <StatCard 
-          title={t('admin.total_users')} 
-          value={dashboardData?.system_overview?.total_users || 0} 
-          icon={Users} 
-          color="#e53e3e" 
-          subtitle={t('admin.all_registered')} 
-        />
-      </div>
-      <div className="col-lg-3 col-md-6">
-        <StatCard 
-          title={t('admin.active_users')} 
-          value={dashboardData?.system_overview?.active_users || 0} 
-          icon={Activity} 
-          color="#38a169" 
-          subtitle={t('admin.currently_active')} 
-        />
-      </div>
-      <div className="col-lg-3 col-md-6">
-        <StatCard 
-          title={t('admin.new_registrations_today')} 
-          value={dashboardData?.system_overview?.new_registrations_today || 0} 
-          icon={CheckCircle} 
-          color="#3182ce" 
-          subtitle={t('admin.todays_signups')} 
-        />
-      </div>
-      <div className="col-lg-3 col-md-6">
-        <StatCard 
-          title={t('admin.pending_verifications')} 
-          value={dashboardData?.system_overview?.pending_verifications || 0} 
-          icon={Clock} 
-          color="#d69e2e" 
-          subtitle={t('admin.awaiting_verification')} 
-        />
+        {/* Primary KPI Cards */}
+        <div className="col-12">
+          <h4 className="fw-bold mb-3">{t('admin.system_overview')}</h4>
+        </div>
+
+        {/* Row 1: Main Metrics */}
+        <div className="col-lg-3 col-md-6">
+          <div className="card border-0 shadow-sm h-100 rounded-4" style={{ transition: 'transform 0.2s' }}>
+            <div className="card-body">
+              <div className="d-flex justify-content-between align-items-start mb-3">
+                <div className="p-3 rounded-3" style={{ backgroundColor: '#fee2e2' }}>
+                  <Users size={24} style={{ color: '#e53e3e' }} />
+                </div>
+              </div>
+              <h6 className="text-muted fw-normal mb-2" style={{ fontSize: '0.875rem' }}>
+                {t('admin.total_users')}
+              </h6>
+              <h2 className="mb-2 fw-bold" style={{ fontSize: '2rem' }}>
+                {dashboardData?.system_overview?.total_users.toLocaleString() || 0}
+              </h2>
+              <div className="small text-muted">{t('admin.all_registered')}</div>
+            </div>
+          </div>
+        </div>
+
+        <div className="col-lg-3 col-md-6">
+          <div className="card border-0 shadow-sm h-100 rounded-4" style={{ transition: 'transform 0.2s' }}>
+            <div className="card-body">
+              <div className="d-flex justify-content-between align-items-start mb-3">
+                <div className="p-3 rounded-3" style={{ backgroundColor: '#d1fae5' }}>
+                  <Activity size={24} style={{ color: '#38a169' }} />
+                </div>
+                {metrics && (
+                  <div className="badge" style={{ backgroundColor: '#d1fae5', color: '#38a169' }}>
+                    {metrics.activationRate}%
+                  </div>
+                )}
+              </div>
+              <h6 className="text-muted fw-normal mb-2" style={{ fontSize: '0.875rem' }}>
+                {t('admin.active_users')}
+              </h6>
+              <h2 className="mb-2 fw-bold" style={{ fontSize: '2rem' }}>
+                {dashboardData?.system_overview?.active_users.toLocaleString() || 0}
+              </h2>
+              {metrics && (
+                <div className="small mb-1">
+                  <strong style={{ color: '#38a169' }}>{metrics.activationRate}%</strong>
+                  <span className="text-muted"> {t('admin.activation_rate') || 'activation rate'}</span>
+                </div>
+              )}
+              <div className="small text-muted">{t('admin.currently_active')}</div>
+            </div>
+          </div>
+        </div>
+
+        <div className="col-lg-3 col-md-6">
+          <div className="card border-0 shadow-sm h-100 rounded-4" style={{ transition: 'transform 0.2s' }}>
+            <div className="card-body">
+              <div className="d-flex justify-content-between align-items-start mb-3">
+                <div className="p-3 rounded-3" style={{ backgroundColor: '#dbeafe' }}>
+                  <CheckCircle size={24} style={{ color: '#3182ce' }} />
+                </div>
+                {metrics && metrics.growthTrend && (
+                  <div className="badge" style={{ 
+                    backgroundColor: metrics.growthTrend === 'up' ? '#d1fae5' : '#fee2e2',
+                    color: metrics.growthTrend === 'up' ? '#38a169' : '#e53e3e'
+                  }}>
+                    {metrics.growthTrend === 'up' ? '↑' : '↓'} {metrics.growthPercentage}%
+                  </div>
+                )}
+              </div>
+              <h6 className="text-muted fw-normal mb-2" style={{ fontSize: '0.875rem' }}>
+                {t('admin.new_registrations_today')}
+              </h6>
+              <h2 className="mb-2 fw-bold" style={{ fontSize: '2rem' }}>
+                {dashboardData?.system_overview?.new_registrations_today.toLocaleString() || 0}
+              </h2>
+              {metrics && (
+                <div className="small text-muted mb-1">
+                  {t('admin.vs_daily_avg') || 'vs daily avg'}
+                </div>
+              )}
+              <div className="small text-muted">{t('admin.todays_signups')}</div>
+            </div>
+          </div>
+        </div>
+
+        <div className="col-lg-3 col-md-6">
+          <div className="card border-0 shadow-sm h-100 rounded-4" style={{ transition: 'transform 0.2s' }}>
+            <div className="card-body">
+              <div className="d-flex justify-content-between align-items-start mb-3">
+                <div className="p-3 rounded-3" style={{ backgroundColor: '#fef3c7' }}>
+                  <Clock size={24} style={{ color: '#d69e2e' }} />
+                </div>
+                {metrics && (
+                  <div className="badge" style={{ backgroundColor: '#fef3c7', color: '#d69e2e' }}>
+                    {metrics.pendingRate}%
+                  </div>
+                )}
+              </div>
+              <h6 className="text-muted fw-normal mb-2" style={{ fontSize: '0.875rem' }}>
+                {t('admin.pending_verifications')}
+              </h6>
+              <h2 className="mb-2 fw-bold" style={{ fontSize: '2rem' }}>
+                {dashboardData?.system_overview?.pending_verifications.toLocaleString() || 0}
+              </h2>
+              {metrics && (
+                <div className="small mb-1">
+                  <strong style={{ color: '#d69e2e' }}>{metrics.pendingRate}%</strong>
+                  <span className="text-muted"> {t('admin.of_total') || 'of total'}</span>
+                </div>
+              )}
+              <div className="small text-muted">{t('admin.awaiting_verification')}</div>
+            </div>
+          </div>
+        </div>
+
+        {/* Row 2: Growth Metrics */}
+        <div className="col-12 mt-4">
+          <h5 className="fw-bold mb-3">{t('admin.growth_metrics') || 'Growth Metrics'}</h5>
+        </div>
+
+        <div className="col-lg-4 col-md-6">
+          <div className="card border-0 shadow-sm h-100 rounded-4">
+            <div className="card-body">
+              <div className="d-flex justify-content-between align-items-start mb-3">
+                <div className="p-3 rounded-3" style={{ backgroundColor: '#e0e7ff' }}>
+                  <Calendar size={24} style={{ color: '#5a67d8' }} />
+                </div>
+              </div>
+              <h6 className="text-muted fw-normal mb-2" style={{ fontSize: '0.875rem' }}>
+                {t('admin.new_this_week') || 'New Users This Week'}
+              </h6>
+              <h2 className="mb-2 fw-bold" style={{ fontSize: '2rem' }}>
+                {dashboardData?.system_overview?.new_registrations_this_week?.toLocaleString() || 0}
+              </h2>
+              {metrics && (
+                <div className="small text-muted mb-1">
+                  <strong style={{ color: '#5a67d8' }}>{metrics.dailyAverage}</strong> {t('admin.per_day') || 'per day avg'}
+                </div>
+              )}
+              <div className="small text-muted">{t('admin.last_7_days') || 'Last 7 days'}</div>
+            </div>
+          </div>
+        </div>
+
+        <div className="col-lg-4 col-md-6">
+          <div className="card border-0 shadow-sm h-100 rounded-4">
+            <div className="card-body">
+              <div className="d-flex justify-content-between align-items-start mb-3">
+                <div className="p-3 rounded-3" style={{ backgroundColor: '#ddd6fe' }}>
+                  <Activity size={24} style={{ color: '#7c3aed' }} />
+                </div>
+              </div>
+              <h6 className="text-muted fw-normal mb-2" style={{ fontSize: '0.875rem' }}>
+                {t('admin.new_this_month') || 'New Users This Month'}
+              </h6>
+              <h2 className="mb-2 fw-bold" style={{ fontSize: '2rem' }}>
+                {dashboardData?.system_overview?.new_registrations_this_month?.toLocaleString() || 0}
+              </h2>
+              <div className="small text-muted">{t('admin.current_month') || 'Current month'}</div>
+            </div>
+          </div>
+        </div>
+
+        <div className="col-lg-4 col-md-6">
+          <div className="card border-0 shadow-sm h-100 rounded-4">
+            <div className="card-body">
+              <div className="d-flex justify-content-between align-items-start mb-3">
+                <div className="p-3 rounded-3" style={{ backgroundColor: '#e2e8f0' }}>
+                  <UserX size={24} style={{ color: '#64748b' }} />
+                </div>
+              </div>
+              <h6 className="text-muted fw-normal mb-2" style={{ fontSize: '0.875rem' }}>
+                {t('admin.inactive_users') || 'Inactive Users'}
+              </h6>
+              <h2 className="mb-2 fw-bold" style={{ fontSize: '2rem' }}>
+                {dashboardData?.system_overview?.inactive_users?.toLocaleString() || 0}
+              </h2>
+              <div className="small text-muted">{t('admin.deactivated_accounts') || 'Deactivated accounts'}</div>
+            </div>
+          </div>
+        </div>
+
+        {/* Row 3: User Breakdown by Role */}
+        {dashboardData?.user_breakdown && (
+          <>
+            <div className="col-12 mt-4">
+              <h5 className="fw-bold mb-3">{t('admin.user_breakdown') || 'User Breakdown by Role'}</h5>
+            </div>
+
+            <div className="col-lg-6">
+              <div className="card border-0 shadow-sm rounded-4">
+                <div className="card-body">
+                  <div className="d-flex justify-content-between align-items-start mb-4">
+                    <div>
+                      <h5 className="fw-bold mb-1">{t('admin.students') || 'Students'}</h5>
+                      <p className="text-muted mb-0 small">{t('admin.student_accounts') || 'Student accounts overview'}</p>
+                    </div>
+                    <div className="p-3 rounded-3" style={{ backgroundColor: '#dbeafe' }}>
+                      <Users size={24} style={{ color: '#3182ce' }} />
+                    </div>
+                  </div>
+
+                  <div className="mb-4">
+                    <h2 className="fw-bold mb-2" style={{ fontSize: '2.5rem' }}>
+                      {dashboardData.user_breakdown.students?.total.toLocaleString() || 0}
+                    </h2>
+                    <p className="text-muted small mb-0">{t('admin.total_students') || 'Total Students'}</p>
+                  </div>
+
+                  <div className="mb-3">
+                    <div className="d-flex justify-content-between align-items-center mb-2">
+                      <span className="small">{t('admin.active') || 'Active'}</span>
+                      <strong style={{ color: '#38a169' }}>
+                        {dashboardData.user_breakdown.students?.active.toLocaleString() || 0}
+                      </strong>
+                    </div>
+                    <div className="progress mb-3" style={{ height: '8px' }}>
+                      <div 
+                        className="progress-bar" 
+                        style={{ 
+                          backgroundColor: '#38a169',
+                          width: `${dashboardData.user_breakdown.students?.total ? 
+                            (dashboardData.user_breakdown.students.active / dashboardData.user_breakdown.students.total * 100) : 0}%` 
+                        }}
+                      ></div>
+                    </div>
+                  </div>
+
+                  <div className="mb-3">
+                    <div className="d-flex justify-content-between align-items-center mb-2">
+                      <span className="small">{t('admin.pending') || 'Pending'}</span>
+                      <strong style={{ color: '#d69e2e' }}>
+                        {dashboardData.user_breakdown.students?.pending.toLocaleString() || 0}
+                      </strong>
+                    </div>
+                    <div className="progress mb-3" style={{ height: '8px' }}>
+                      <div 
+                        className="progress-bar" 
+                        style={{ 
+                          backgroundColor: '#d69e2e',
+                          width: `${dashboardData.user_breakdown.students?.total ? 
+                            (dashboardData.user_breakdown.students.pending / dashboardData.user_breakdown.students.total * 100) : 0}%` 
+                        }}
+                      ></div>
+                    </div>
+                  </div>
+
+                  <div>
+                    <div className="d-flex justify-content-between align-items-center mb-2">
+                      <span className="small">{t('admin.inactive') || 'Inactive'}</span>
+                      <strong style={{ color: '#64748b' }}>
+                        {dashboardData.user_breakdown.students?.inactive.toLocaleString() || 0}
+                      </strong>
+                    </div>
+                    <div className="progress" style={{ height: '8px' }}>
+                      <div 
+                        className="progress-bar" 
+                        style={{ 
+                          backgroundColor: '#64748b',
+                          width: `${dashboardData.user_breakdown.students?.total ? 
+                            (dashboardData.user_breakdown.students.inactive / dashboardData.user_breakdown.students.total * 100) : 0}%` 
+                        }}
+                      ></div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="col-lg-6">
+              <div className="card border-0 shadow-sm rounded-4">
+                <div className="card-body">
+                  <div className="d-flex justify-content-between align-items-start mb-4">
+                    <div>
+                      <h5 className="fw-bold mb-1">{t('admin.doctors') || 'Doctors'}</h5>
+                      <p className="text-muted mb-0 small">{t('admin.doctor_accounts') || 'Doctor accounts overview'}</p>
+                    </div>
+                    <div className="p-3 rounded-3" style={{ backgroundColor: '#d1fae5' }}>
+                      <Activity size={24} style={{ color: '#38a169' }} />
+                    </div>
+                  </div>
+
+                  <div className="mb-4">
+                    <h2 className="fw-bold mb-2" style={{ fontSize: '2.5rem' }}>
+                      {dashboardData.user_breakdown.doctors?.total.toLocaleString() || 0}
+                    </h2>
+                    <p className="text-muted small mb-0">{t('admin.total_doctors') || 'Total Doctors'}</p>
+                  </div>
+
+                  <div className="mb-3">
+                    <div className="d-flex justify-content-between align-items-center mb-2">
+                      <span className="small">{t('admin.active') || 'Active'}</span>
+                      <strong style={{ color: '#38a169' }}>
+                        {dashboardData.user_breakdown.doctors?.active.toLocaleString() || 0}
+                      </strong>
+                    </div>
+                    <div className="progress mb-3" style={{ height: '8px' }}>
+                      <div 
+                        className="progress-bar" 
+                        style={{ 
+                          backgroundColor: '#38a169',
+                          width: `${dashboardData.user_breakdown.doctors?.total ? 
+                            (dashboardData.user_breakdown.doctors.active / dashboardData.user_breakdown.doctors.total * 100) : 0}%` 
+                        }}
+                      ></div>
+                    </div>
+                  </div>
+
+                  <div className="mb-3">
+                    <div className="d-flex justify-content-between align-items-center mb-2">
+                      <span className="small">{t('admin.pending') || 'Pending'}</span>
+                      <strong style={{ color: '#d69e2e' }}>
+                        {dashboardData.user_breakdown.doctors?.pending.toLocaleString() || 0}
+                      </strong>
+                    </div>
+                    <div className="progress mb-3" style={{ height: '8px' }}>
+                      <div 
+                        className="progress-bar" 
+                        style={{ 
+                          backgroundColor: '#d69e2e',
+                          width: `${dashboardData.user_breakdown.doctors?.total ? 
+                            (dashboardData.user_breakdown.doctors.pending / dashboardData.user_breakdown.doctors.total * 100) : 0}%` 
+                        }}
+                      ></div>
+                    </div>
+                  </div>
+
+                  <div>
+                    <div className="d-flex justify-content-between align-items-center mb-2">
+                      <span className="small">{t('admin.inactive') || 'Inactive'}</span>
+                      <strong style={{ color: '#64748b' }}>
+                        {dashboardData.user_breakdown.doctors?.inactive.toLocaleString() || 0}
+                      </strong>
+                    </div>
+                    <div className="progress" style={{ height: '8px' }}>
+                      <div 
+                        className="progress-bar" 
+                        style={{ 
+                          backgroundColor: '#64748b',
+                          width: `${dashboardData.user_breakdown.doctors?.total ? 
+                            (dashboardData.user_breakdown.doctors.inactive / dashboardData.user_breakdown.doctors.total * 100) : 0}%` 
+                        }}
+                      ></div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </>
+        )}
+
+        {/* Critical Alerts */}
+        {(dashboardData?.system_overview?.pending_verifications ?? 0) > 10 && (
+          <div className="col-12 mt-4">
+            <div className="alert alert-warning d-flex align-items-center rounded-4 shadow-sm" role="alert">
+              <AlertTriangle className="me-3" size={24} />
+              <div>
+                <strong>{t('admin.action_required') || 'Action Required'}:</strong> 
+                {' '}{t('admin.pending_alert', { count: dashboardData?.system_overview?.pending_verifications ?? 0 }) || 
+                  `You have ${(dashboardData?.system_overview?.pending_verifications ?? 0)} pending verifications that need attention.`}
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
-  </div>
-);
+  );
+};
 
 const renderProfile = () => (
   <div className="container py-4">
@@ -1331,7 +1702,7 @@ const renderProfile = () => (
                       <option value="Sciences">{t('admin.sciences')}</option>
                     </select>
                   </div>
-                  <div className="col-12">
+                  {/*<div className="col-12">
                     <label className="form-label">{t('admin.bio')}</label>
                     <textarea
                       className="form-control"
@@ -1340,7 +1711,7 @@ const renderProfile = () => (
                       onChange={(e) => setProfile({ ...profile, bio: e.target.value })}
                       placeholder={t('admin.tell_about_yourself')}
                     />
-                  </div>
+                  </div>*/}
                 </div>
 
                 <div className="mt-3 text-end">

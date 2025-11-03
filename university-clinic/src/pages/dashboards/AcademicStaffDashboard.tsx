@@ -3,8 +3,9 @@ import React, { useState, useEffect } from 'react';
 import { 
   Calendar, Clock, User, FileText, History, Edit, X, CheckCircle, 
   Stethoscope, Heart, Brain, Thermometer, BarChart3, Activity, 
-  Users, TrendingUp, Phone, Mail, LogOut, Globe, Plus, UserCog, Camera, AlertTriangle
+  Users, TrendingUp, Phone, Mail, LogOut, Globe, Plus, UserCog, Camera, AlertTriangle, Save
 } from 'lucide-react';
+import Select from 'react-select';
 import { APPOINTMENT_STATUSES, getStatusText, getStatusBadgeClass } from '../../constants/appointmentStatuses';
 import type { AppointmentStatus } from '../../constants/appointmentStatuses';
 import { useTranslation } from 'react-i18next';
@@ -12,6 +13,7 @@ import i18n from '../../services/i18n';
 import PhoneInput from "react-phone-input-2";
 import "react-phone-input-2/lib/style.css";
 import { ClinicHoursCard, AppointmentTipsCard, EmergencyContactsCard } from '../../components/ClinicInfoSidebar';
+import './AcademicStaffDashboard.css'
 
 // API configuration
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://127.0.0.1:8000";
@@ -117,6 +119,7 @@ const AcademicStaffDashboard: React.FC<AcademicStaffDashboardProps> = ({ user, o
   const [loading, setLoading] = useState<boolean>(false);
   const [message, setMessage] = useState<Message>({ type: '', text: '' });
   const [avatarError, setAvatarError] = useState<boolean>(false);
+  const [profileComplete, setProfileComplete] = useState<boolean>(false);
 
   
   // Profile states
@@ -181,6 +184,56 @@ const AcademicStaffDashboard: React.FC<AcademicStaffDashboardProps> = ({ user, o
     '12:00', '12:30', '13:00', '13:30', '14:00', '14:30',
     '15:00', '15:30', '16:00', '16:30'
   ];
+
+  const timeSlotOptions = availableSlots.map(slot => ({
+  value: slot,
+  label: slot
+}));
+
+// First, add this near the top with other options (around line 265):
+const departmentOptions = [
+  { value: '', label: 'Select Department' },
+  { value: 'Medicine', label: 'Medicine' },
+  { value: 'Engineering', label: 'Engineering' },
+  { value: 'Business Administration', label: 'Business Administration' },
+  { value: 'Computer Science', label: 'Computer Science' },
+  { value: 'Education', label: 'Education' },
+  { value: 'Arts & Sciences', label: 'Arts & Sciences' },
+  { value: 'Pharmacy', label: 'Pharmacy' },
+  { value: 'Dentistry', label: 'Dentistry' },
+  { value: 'Nursing', label: 'Nursing' },
+  { value: 'Architecture', label: 'Architecture' }
+];
+
+const genderOptions = [
+  { value: '', label: 'Select gender' },
+  { value: 'male', label: 'Male' },
+  { value: 'female', label: 'Female' }
+];
+
+const bloodTypeOptions = [
+  { value: '', label: 'Select blood type' },
+  { value: 'A+', label: 'A+' },
+  { value: 'A-', label: 'A-' },
+  { value: 'B+', label: 'B+' },
+  { value: 'B-', label: 'B-' },
+  { value: 'AB+', label: 'AB+' },
+  { value: 'AB-', label: 'AB-' },
+  { value: 'O+', label: 'O+' },
+  { value: 'O-', label: 'O-' },
+  { value: 'Unknown', label: 'Unknown' }
+];
+
+const relationshipOptions = [
+  { value: '', label: 'Select relationship' },
+  { value: 'spouse', label: 'Spouse' },
+  { value: 'parent', label: 'Parent' },
+  { value: 'sibling', label: 'Sibling' },
+  { value: 'child', label: 'Child' },
+  { value: 'friend', label: 'Friend' },
+  { value: 'colleague', label: 'Colleague' },
+  { value: 'other', label: 'Other' }
+];
 
   const urgencyLevels = [
     { value: 'normal', label: 'Normal', color: 'text-success', description: 'Regular appointment' },
@@ -252,15 +305,31 @@ const AcademicStaffDashboard: React.FC<AcademicStaffDashboardProps> = ({ user, o
   useEffect(() => {
     fetchDashboardData();
     fetchDoctors();
+    fetchAppointments();      // ✅ ADD THIS
+    fetchMedicalHistory();
   }, []);
+
+// 🔥 FIX: Fetch profile when switching to profile tab
+useEffect(() => {
+  if (activeTab === 'profile') {
+    fetchProfile();
+  }
+}, [activeTab]);
+
+// 🔥 FIX: Check profile completeness on mount and when userProfile changes
+useEffect(() => {
+  checkProfileComplete();
+}, [userProfile]);
 
   // Profile API functions
   const fetchProfile = async (): Promise<void> => {
   setProfileLoading(true);
   try {
+    const token = localStorage.getItem('token');
+    
     const response = await fetch(`${API_BASE_URL}/api/academic-staff/profile`, {
       headers: {
-        'Authorization': `Bearer ${localStorage.getItem('token')}`,
+        'Authorization': `Bearer ${token}`,
         'Content-Type': 'application/json'
       }
     });
@@ -268,20 +337,22 @@ const AcademicStaffDashboard: React.FC<AcademicStaffDashboardProps> = ({ user, o
     if (response.ok) {
       const data = await response.json();
       
-      // Format date properly for input[type="date"]
+      console.log('📥 Profile data received:', data); // DEBUG
+      
+      // Format date properly
       let formattedDate = '';
       if (data.date_of_birth) {
         try {
-          // Handle both YYYY-MM-DD and other date formats
           const dateObj = new Date(data.date_of_birth);
           if (!isNaN(dateObj.getTime())) {
-            formattedDate = dateObj.toISOString().split('T')[0]; // YYYY-MM-DD
+            formattedDate = dateObj.toISOString().split('T')[0];
           }
         } catch (e) {
           console.error('Date parsing error:', e);
         }
       }
       
+      // 🔥 FIX: Properly set ALL fields including those that might be null
       setUserProfile({
         name: data.name || '',
         email: data.email || '',
@@ -298,70 +369,155 @@ const AcademicStaffDashboard: React.FC<AcademicStaffDashboardProps> = ({ user, o
         blood_type: data.blood_type || 'Unknown',
         gender: data.gender || '',
         allergies: data.allergies || '',
-        has_known_allergies: data.has_known_allergies || false,
-        allergies_uncertain: data.allergies_uncertain || false,
+        has_known_allergies: Boolean(data.has_known_allergies),
+        allergies_uncertain: Boolean(data.allergies_uncertain),
         addictions: data.addictions || '',
         medical_history: data.medical_history || ''
       });
+      
+      console.log('✅ Profile state updated'); // DEBUG
     } else {
       console.error('Failed to fetch profile:', response.status);
-      showMessage('error', 'Failed to fetch profile');
     }
   } catch (error) {
     console.error('Error fetching profile:', error);
-    showMessage('error', 'Failed to fetch profile');
   } finally {
     setProfileLoading(false);
   }
 };
 
   const saveProfile = async (e?: React.FormEvent): Promise<void> => {
-    e?.preventDefault();
-    setProfileSaving(true);
-    try {
-      // Prepare payload with only non-empty values
-      const payload: Record<string, any> = {
-        name: userProfile.name,
-        phone: userProfile.phone || null,
-        department: userProfile.department || null,
-        bio: userProfile.bio || null,
-        date_of_birth: userProfile.date_of_birth || null,
-        emergency_contact_name: userProfile.emergency_contact_name || null,
-        emergency_contact_phone: userProfile.emergency_contact_phone || null,
-        emergency_contact_relationship: userProfile.emergency_contact_relationship || null,
-        emergency_contact_email: userProfile.emergency_contact_email || null,
-        blood_type: userProfile.blood_type || 'Unknown',
-        gender: userProfile.gender || null,
-        allergies: userProfile.allergies || null,
-        has_known_allergies: Boolean(userProfile.has_known_allergies),
-        allergies_uncertain: Boolean(userProfile.allergies_uncertain),
-        addictions: userProfile.addictions || null,
-        medical_history: userProfile.medical_history || null
-      };
-
-      const response = await fetch(`${API_BASE_URL}/api/academic-staff/profile`, {
-        method: 'PUT',
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(payload)
+  if (e) {
+    e.preventDefault();
+  }
+  
+  setProfileSaving(true);
+  
+  try {
+    // Validate required fields
+    const required: (keyof typeof userProfile)[] = [
+      'name', 
+      'phone', 
+      'department',
+      'date_of_birth', 
+      'emergency_contact_name', 
+      'emergency_contact_phone',
+      'emergency_contact_relationship',
+      'emergency_contact_email',
+      'blood_type',
+      'gender'
+    ];
+    
+    const missingFields = required.filter(field => {
+      const value = userProfile[field];
+      return !value || String(value).trim() === '';
+    });
+    
+    if (missingFields.length > 0) {
+      const fieldNames = missingFields.map(field => {
+        const formatted = field.replace(/_/g, ' ')
+          .split(' ')
+          .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+          .join(' ');
+        return formatted;
       });
-
-      if (response.ok) {
-        showMessage('success', 'Profile updated successfully!');
-      } else {
-        const errorData = await response.json();
-        console.error('Profile update error:', errorData);
-        showMessage('error', errorData.message || 'Failed to update profile');
-      }
-    } catch (error) {
-      console.error('Error saving profile:', error);
-      showMessage('error', 'Failed to update profile');
-    } finally {
+      
+      showMessage('error', `Please fill in all required fields: ${fieldNames.join(', ')}`);
       setProfileSaving(false);
+      return;
     }
-  };
+
+    // Clean and prepare payload - remove empty strings, keep false/0
+    const payload: Record<string, any> = {
+      name: userProfile.name?.trim() || '',
+      phone: userProfile.phone?.trim() || null,
+      department: userProfile.department?.trim() || null,
+      bio: userProfile.bio?.trim() || null,
+      date_of_birth: userProfile.date_of_birth || null,
+      emergency_contact_name: userProfile.emergency_contact_name?.trim() || null,
+      emergency_contact_phone: userProfile.emergency_contact_phone?.trim() || null,
+      emergency_contact_relationship: userProfile.emergency_contact_relationship?.trim() || null,
+      emergency_contact_email: userProfile.emergency_contact_email?.trim() || null,
+      blood_type: userProfile.blood_type || 'Unknown',
+      gender: userProfile.gender || null,
+      allergies: userProfile.allergies?.trim() || null,
+      has_known_allergies: Boolean(userProfile.has_known_allergies),
+      allergies_uncertain: Boolean(userProfile.allergies_uncertain),
+      addictions: userProfile.addictions?.trim() || null,
+      medical_history: userProfile.medical_history?.trim() || null
+    };
+
+    const token = localStorage.getItem('token');
+    if (!token) {
+      throw new Error('Authentication token not found. Please log in again.');
+    }
+
+    console.log('📤 Sending profile update:', payload);
+    
+    const response = await fetch(`${API_BASE_URL}/api/academic-staff/profile`, {
+      method: 'PUT',
+      headers: {  
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+        'Accept': 'application/json'
+      },
+      body: JSON.stringify(payload)
+    });
+    
+    console.log('📡 Response status:', response.status);
+    
+    if (!response.ok) {
+      let errorMessage = `Profile save failed with status ${response.status}`;
+      
+      try {
+        const errorData = await response.json();
+        console.error('❌ Error details:', errorData);
+        
+        if (response.status === 422) {
+          if (errorData.errors) {
+            const validationErrors = Object.entries(errorData.errors)
+              .map(([field, messages]) => `${field}: ${Array.isArray(messages) ? messages.join(', ') : messages}`)
+              .join('; ');
+            errorMessage = `Validation errors: ${validationErrors}`;
+          } else {
+            errorMessage = errorData.message || 'Validation failed';
+          }
+        } else {
+          errorMessage = errorData.message || errorData.error || errorMessage;
+        }
+      } catch (parseError) {
+        console.error('Could not parse error response:', parseError);
+      }
+      
+      throw new Error(errorMessage);
+    }
+    
+    const responseData = await response.json();
+    console.log('✅ Profile saved successfully:', responseData);
+    
+    // Update local state with the response
+    if (responseData.user) {
+      setUserProfile(prev => ({
+        ...prev,
+        ...responseData.user
+      }));
+    }
+    
+    showMessage('success', 'Profile updated successfully!');
+    
+    // Auto-hide success message after 3 seconds
+    setTimeout(() => setMessage({ type: '', text: '' }), 3000);
+    
+  } catch (error) {
+    console.error('💥 Error saving profile:', error);
+    showMessage('error', error instanceof Error ? error.message : 'Failed to save profile. Please try again.');
+    
+    // Keep error message visible longer
+    setTimeout(() => setMessage({ type: '', text: '' }), 5000);
+  } finally {
+    setProfileSaving(false);
+  }
+};
 
   const handleImageUpload = async (file: File | null): Promise<void> => {
   if (!file) return;
@@ -548,6 +704,14 @@ if (!allowedTypes.includes(file.type)) {
     }
   };
 
+  const doctorOptions = [
+  { value: '', label: 'Any available doctor' },
+  ...doctors.map(doctor => ({
+    value: doctor.id,
+    label: `Dr. ${doctor.name} - ${doctor.specialization}`
+  }))
+];
+
   const fetchDoctors = async (): Promise<void> => {
     try {
       const response = await fetch(`${API_BASE_URL}/api/academic-staff/doctor-availability`, {
@@ -567,78 +731,122 @@ if (!allowedTypes.includes(file.type)) {
   };
 
   const fetchAvailableSlots = async (doctorId: string, date: string): Promise<void> => {
-    if (!date) return;
-    
-    try {
-      const url = doctorId 
-        ? `${API_BASE_URL}/api/academic-staff/available-slots?doctor_id=${doctorId}&date=${date}`
-        : `${API_BASE_URL}/api/academic-staff/available-slots?date=${date}`;
-        
-      const response = await fetch(url, {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`,
-          'Content-Type': 'application/json'
-        }
-      });
+  if (!date) return;
+  
+  try {
+    const url = doctorId 
+      ? `${API_BASE_URL}/api/academic-staff/available-slots?doctor_id=${doctorId}&date=${date}`
+      : `${API_BASE_URL}/api/academic-staff/available-slots?date=${date}`;
       
-      if (response.ok) {
-        const data = await response.json();
-        setAvailableSlots(data.available_slots || timeSlots);
+    const response = await fetch(url, {
+      headers: {
+        'Authorization': `Bearer ${localStorage.getItem('token')}`,
+        'Content-Type': 'application/json'
       }
-    } catch (error) {
-      console.error('Error fetching available slots:', error);
+    });
+    
+    if (response.ok) {
+      const data = await response.json();
+      setAvailableSlots(data.available_slots || timeSlots);
+    } else {
+      // If API fails, use all time slots as fallback
+      console.warn('Failed to fetch available slots, using all slots');
       setAvailableSlots(timeSlots);
     }
-  };
+  } catch (error) {
+    console.error('Error fetching available slots:', error);
+    // On error, use all time slots as fallback
+    setAvailableSlots(timeSlots);
+  }
+};
+
+  const checkProfileComplete = (profileData = userProfile): boolean => {
+  const required: (keyof typeof userProfile)[] = [
+    'name', 
+    'phone', 
+    'department', 
+    'date_of_birth', 
+    'emergency_contact_name', 
+    'emergency_contact_phone',
+    'emergency_contact_relationship',
+    'emergency_contact_email',
+    'blood_type',
+    'gender'
+  ];
+  const isComplete = required.every(field => profileData[field] && String(profileData[field]).trim() !== '');
+  setProfileComplete(isComplete);
+  return isComplete;
+};
 
   const handleScheduleAppointment = async (e: React.FormEvent): Promise<void> => {
-    e.preventDefault();
-    
-    if (!appointmentForm.date || !appointmentForm.time || !appointmentForm.reason) {
-      showMessage('error', 'Please fill in all required fields (date, time, and reason).');
-      return;
-    }
+  e.preventDefault();
+  
+  if (!appointmentForm.date || !appointmentForm.time || !appointmentForm.reason) {
+    showMessage('error', 'Please fill in all required fields (date, time, and reason).');
+    return;
+  }
 
-    setLoading(true);
+  // Validate date is a weekday
+  if (!isWeekday(appointmentForm.date)) {
+    showMessage('error', getDateClosureReason(appointmentForm.date) + '. Please select a weekday (Monday-Friday).');
+    return;
+  }
 
-    try {
-      const response = await fetch(`${API_BASE_URL}/api/academic-staff/schedule-appointment`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          ...appointmentForm,
-          urgency: appointmentForm.urgency  // ✅ This will now be included
-        })
+  setLoading(true);
+
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/academic-staff/schedule-appointment`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${localStorage.getItem('token')}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        ...appointmentForm,
+        urgency: appointmentForm.urgency
+      })
+    });
+
+    const data = await response.json();
+
+    if (response.ok) {
+      // Clear form
+      setAppointmentForm({ 
+        doctor_id: '', 
+        date: '', 
+        time: '', 
+        reason: '',
+        urgency: 'normal'
       });
-
-      const data = await response.json();
-
-      if (response.ok) {
-        showMessage('success', data.message);
-        setAppointmentForm({ 
-          doctor_id: '', 
-          date: '', 
-          time: '', 
-          reason: '',
-          urgency: 'normal'  // ✅ Reset to default
-        });
-        setAvailableSlots([]);
-        if (activeTab === 'appointments') {
-          fetchAppointments();
-        }
-      } else {
-        showMessage('error', data.message);
+      setAvailableSlots([]);
+      
+      // Show success message
+      showMessage('success', data.message || 'Appointment scheduled successfully!');
+      
+      // Refresh appointments if on that tab
+      if (activeTab === 'appointments') {
+        fetchAppointments();
       }
-    } catch (error) {
-      console.error('Error scheduling appointment:', error);
-      showMessage('error', 'Failed to schedule appointment');
-    } finally {
-      setLoading(false);
+
+      await fetchAppointments();
+  
+  // 🔥 FIX: Switch to appointments tab to show the new appointment
+  setActiveTab('appointments');
+      
+      // Auto-hide success message after 5 seconds
+      setTimeout(() => setMessage({ type: '', text: '' }), 5000);
+    } else {
+      showMessage('error', data.message || 'Failed to schedule appointment');
+      setTimeout(() => setMessage({ type: '', text: '' }), 5000);
     }
-  };
+  } catch (error) {
+    console.error('Error scheduling appointment:', error);
+    showMessage('error', 'Failed to schedule appointment. Please try again.');
+    setTimeout(() => setMessage({ type: '', text: '' }), 5000);
+  } finally {
+    setLoading(false);
+  }
+};
 
   const handleRescheduleAppointment = async (e: React.FormEvent): Promise<void> => {
     e.preventDefault();
@@ -691,23 +899,20 @@ const formatDate = (dateString: string): string => {
 
 const formatTime = (timeString: string): string => {
   try {
-    // Handle both HH:mm format and ISO datetime format
     let date: Date;
     if (timeString.includes('T')) {
-      // ISO format like "2025-10-16T11:00:00.000000Z"
       date = new Date(timeString);
     } else {
-      // HH:mm format like "11:00"
       const [hours, minutes] = timeString.split(':');
-      date = new Date();
-      date.setHours(parseInt(hours), parseInt(minutes), 0);
+      // Use UTC to avoid timezone issues
+      date = new Date(Date.UTC(2000, 0, 1, parseInt(hours), parseInt(minutes), 0));
     }
     
     return date.toLocaleTimeString('en-US', {
       hour: 'numeric',
       minute: '2-digit',
-      second: '2-digit',
-      hour12: true
+      hour12: true,
+      timeZone: 'UTC' // Force UTC interpretation
     });
   } catch (error) {
     return timeString;
@@ -856,9 +1061,11 @@ const Sidebar = () => {
     { id: 'medical-history', icon: FileText, label: 'Medical Records' },
   ];
 
+  const isMobile = window.innerWidth < 768;
+
   return (
     <>
-      {sidebarOpen && window.innerWidth < 768 && (
+      {sidebarOpen && isMobile && (
         <div
           style={{
             position: 'fixed',
@@ -878,9 +1085,9 @@ const Sidebar = () => {
         style={{
           position: 'fixed',
           top: 0,
-          left: window.innerWidth < 768 ? (sidebarOpen ? 0 : '-300px') : 0,
+          left: isMobile ? (sidebarOpen ? 0 : '-300px') : 0,
           bottom: 0,
-          width: sidebarCollapsed && window.innerWidth >= 768 ? '85px' : '280px',
+          width: sidebarCollapsed && !isMobile ? '85px' : '280px',
           background: '#1a1d29',
           boxShadow: '4px 0 24px rgba(0, 0, 0, 0.12)',
           transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
@@ -890,39 +1097,41 @@ const Sidebar = () => {
           overflow: 'hidden',
         }}
       >
+        {/* HEADER */}
         <div
           style={{
-            padding: sidebarCollapsed && window.innerWidth >= 768 ? '24px 16px' : '24px',
+            padding: sidebarCollapsed && !isMobile ? '10px 10px' : isMobile ? '10px 14px' : '14px 16px',
             borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
             background: 'linear-gradient(135deg, #1e2230 0%, #1a1d29 100%)',
-            minHeight: '80px',
+            minHeight: isMobile ? '55px' : '65px',
+            flexShrink: 0,
           }}
         >
-          {!(sidebarCollapsed && window.innerWidth >= 768) ? (
+          {!(sidebarCollapsed && !isMobile) ? (
             <div style={{ display: 'flex', alignItems: 'center', flex: 1 }}>
               <div
                 style={{
-                  width: '48px',
-                  height: '48px',
-                  borderRadius: '12px',
+                  width: isMobile ? '35px' : '42px',
+                  height: isMobile ? '35px' : '42px',
+                  borderRadius: isMobile ? '7px' : '10px',
                   background: 'linear-gradient(135deg, #dc3545 0%, #c82333 100%)',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  marginRight: '14px',
+                  marginRight: isMobile ? '9px' : '12px',
                   boxShadow: '0 4px 12px rgba(220, 53, 69, 0.3)',
                 }}
               >
-                <img src="/logo6.png" alt="FIU Logo" style={{ width: '32px', height: '32px', objectFit: 'cover' }} />
+                <img src="/logo6.png" alt="FIU Logo" style={{ width: isMobile ? '24px' : '28px', height: isMobile ? '24px' : '28px', objectFit: 'cover' }} />
               </div>
               <div>
-                <h6 style={{ color: '#ffffff', margin: 0, fontSize: '1.05rem', fontWeight: 700 }}>
+                <h6 style={{ color: '#ffffff', margin: 0, fontSize: isMobile ? '0.9rem' : '1rem', fontWeight: 700, lineHeight: 1.2 }}>
                   FIU Medical
                 </h6>
-                <small style={{ color: 'rgba(255, 255, 255, 0.6)', fontSize: '0.8rem' }}>
+                <small style={{ color: 'rgba(255, 255, 255, 0.6)', fontSize: isMobile ? '0.68rem' : '0.75rem' }}>
                   Academic Staff Portal
                 </small>
               </div>
@@ -930,9 +1139,9 @@ const Sidebar = () => {
           ) : (
             <div
               style={{
-                width: '48px',
-                height: '48px',
-                borderRadius: '12px',
+                width: '42px',
+                height: '42px',
+                borderRadius: '10px',
                 background: 'linear-gradient(135deg, #dc3545 0%, #c82333 100%)',
                 display: 'flex',
                 alignItems: 'center',
@@ -940,25 +1149,27 @@ const Sidebar = () => {
                 margin: '0 auto',
               }}
             >
-              <img src="/logo6.png" alt="FIU Logo" style={{ width: '32px', height: '32px', objectFit: 'cover' }} />
+              <img src="/logo6.png" alt="FIU Logo" style={{ width: '28px', height: '28px', objectFit: 'cover' }} />
             </div>
           )}
 
-          {window.innerWidth >= 768 && (
+          {!isMobile && (
             <button
               onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
               style={{
                 background: 'linear-gradient(135deg, rgba(220, 53, 69, 0.15) 0%, rgba(200, 35, 51, 0.15) 100%)',
                 border: '1px solid rgba(220, 53, 69, 0.3)',
-                borderRadius: '10px',
-                width: '36px',
-                height: '36px',
+                borderRadius: '8px',
+                width: '32px',
+                height: '32px',
                 color: '#dc3545',
                 cursor: 'pointer',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
                 transition: 'all 0.3s ease',
+                fontSize: '0.85rem',
+                fontWeight: 700,
               }}
             >
               {sidebarCollapsed ? '»' : '«'}
@@ -966,24 +1177,27 @@ const Sidebar = () => {
           )}
         </div>
 
+        {/* NAVIGATION */}
         <nav
           style={{
-            flex: 1,
-            overflowY: 'auto',
+            flex: isMobile ? 'none' : 1,
+            flexShrink: isMobile ? 0 : 1,
+            overflowY: isMobile ? 'visible' : 'auto',
             overflowX: 'hidden',
-            padding: sidebarCollapsed && window.innerWidth >= 768 ? '16px 8px' : '20px 16px',
+            padding: sidebarCollapsed && !isMobile ? '12px 8px' : isMobile ? '6px 10px' : '16px 12px',
+            minHeight: isMobile ? 'auto' : 0,
           }}
         >
-          {!(sidebarCollapsed && window.innerWidth >= 768) && (
+          {!(sidebarCollapsed && !isMobile) && (
             <div
               style={{
                 color: 'rgba(255, 255, 255, 0.5)',
-                fontSize: '0.75rem',
+                fontSize: isMobile ? '0.62rem' : '0.7rem',
                 fontWeight: 600,
                 textTransform: 'uppercase',
                 letterSpacing: '0.08em',
-                marginBottom: '12px',
-                paddingLeft: '12px',
+                marginBottom: isMobile ? '3px' : '8px',
+                paddingLeft: isMobile ? '8px' : '12px',
               }}
             >
               Main Menu
@@ -999,31 +1213,43 @@ const Sidebar = () => {
                 key={item.id}
                 onClick={() => {
                   setActiveTab(item.id);
-                  if (window.innerWidth < 768) setSidebarOpen(false);
+                  if (isMobile) setSidebarOpen(false);
                 }}
                 style={{
                   width: '100%',
                   display: 'flex',
                   alignItems: 'center',
-                  justifyContent: sidebarCollapsed && window.innerWidth >= 768 ? 'center' : 'flex-start',
-                  padding: sidebarCollapsed && window.innerWidth >= 768 ? '14px' : '14px 16px',
-                  marginBottom: '6px',
+                  justifyContent: sidebarCollapsed && !isMobile ? 'center' : 'flex-start',
+                  padding: sidebarCollapsed && !isMobile ? '14px' : isMobile ? '7px 10px' : '10px 14px',
+                  marginBottom: isMobile ? '2px' : '4px',
                   background: isActive
                     ? 'linear-gradient(135deg, rgba(220, 53, 69, 0.15) 0%, rgba(200, 35, 51, 0.15) 100%)'
                     : 'transparent',
                   border: isActive ? '1px solid rgba(220, 53, 69, 0.3)' : '1px solid transparent',
-                  borderRadius: '10px',
+                  borderRadius: isMobile ? '6px' : '10px',
                   color: isActive ? '#dc3545' : 'rgba(255, 255, 255, 0.75)',
                   cursor: 'pointer',
                   transition: 'all 0.2s ease',
-                  fontSize: '0.95rem',
+                  fontSize: isMobile ? '0.82rem' : '0.9rem',
                   fontWeight: isActive ? 600 : 500,
                   position: 'relative',
                 }}
+                onMouseEnter={(e) => {
+                  if (!isActive) {
+                    e.currentTarget.style.background = 'rgba(255, 255, 255, 0.06)';
+                    e.currentTarget.style.color = '#ffffff';
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  if (!isActive) {
+                    e.currentTarget.style.background = 'transparent';
+                    e.currentTarget.style.color = 'rgba(255, 255, 255, 0.75)';
+                  }
+                }}
               >
-                <Icon size={20} style={{ minWidth: '20px' }} />
-                {!(sidebarCollapsed && window.innerWidth >= 768) && (
-                  <span style={{ marginLeft: '14px' }}>{item.label}</span>
+                <Icon size={isMobile ? 15 : 18} style={{ minWidth: isMobile ? '15px' : '18px' }} />
+                {!(sidebarCollapsed && !isMobile) && (
+                  <span style={{ marginLeft: isMobile ? '9px' : '14px' }}>{item.label}</span>
                 )}
                 {isActive && (
                   <div
@@ -1032,7 +1258,7 @@ const Sidebar = () => {
                       left: 0,
                       top: '50%',
                       transform: 'translateY(-50%)',
-                      width: '4px',
+                      width: isMobile ? '3px' : '4px',
                       height: '60%',
                       background: 'linear-gradient(180deg, #dc3545 0%, #c82333 100%)',
                       borderRadius: '0 4px 4px 0',
@@ -1043,69 +1269,86 @@ const Sidebar = () => {
             );
           })}
 
-          <div style={{ height: '1px', background: 'rgba(255, 255, 255, 0.08)', margin: '20px 0' }} />
+          <div style={{ height: '1px', background: 'rgba(255, 255, 255, 0.08)', margin: isMobile ? '6px 0' : '12px 0' }} />
 
           <button
             onClick={() => {
               setActiveTab('profile');
-              if (window.innerWidth < 768) setSidebarOpen(false);
+              if (isMobile) setSidebarOpen(false);
             }}
             style={{
               width: '100%',
               display: 'flex',
               alignItems: 'center',
-              justifyContent: sidebarCollapsed && window.innerWidth >= 768 ? 'center' : 'flex-start',
-              padding: sidebarCollapsed && window.innerWidth >= 768 ? '14px' : '14px 16px',
-              marginBottom: '6px',
+              justifyContent: sidebarCollapsed && !isMobile ? 'center' : 'flex-start',
+              padding: sidebarCollapsed && !isMobile ? '14px' : isMobile ? '7px 10px' : '10px 14px',
+              marginBottom: isMobile ? '0' : '4px',
               background: activeTab === 'profile'
                 ? 'linear-gradient(135deg, rgba(220, 53, 69, 0.15) 0%, rgba(200, 35, 51, 0.15) 100%)'
                 : 'transparent',
               border: activeTab === 'profile' ? '1px solid rgba(220, 53, 69, 0.3)' : '1px solid transparent',
-              borderRadius: '10px',
+              borderRadius: isMobile ? '6px' : '10px',
               color: activeTab === 'profile' ? '#dc3545' : 'rgba(255, 255, 255, 0.75)',
               cursor: 'pointer',
               transition: 'all 0.2s ease',
-              fontSize: '0.95rem',
+              fontSize: isMobile ? '0.82rem' : '0.9rem',
               fontWeight: activeTab === 'profile' ? 600 : 500,
             }}
+            onMouseEnter={(e) => {
+              if (activeTab !== 'profile') {
+                e.currentTarget.style.background = 'rgba(255, 255, 255, 0.06)';
+                e.currentTarget.style.color = '#ffffff';
+              }
+            }}
+            onMouseLeave={(e) => {
+              if (activeTab !== 'profile') {
+                e.currentTarget.style.background = 'transparent';
+                e.currentTarget.style.color = 'rgba(255, 255, 255, 0.75)';
+              }
+            }}
           >
-            <User size={20} />
-            {!(sidebarCollapsed && window.innerWidth >= 768) && (
-              <span style={{ marginLeft: '14px' }}>Profile</span>
+            <User size={isMobile ? 15 : 18} />
+            {!(sidebarCollapsed && !isMobile) && (
+              <span style={{ marginLeft: isMobile ? '9px' : '14px' }}>Profile</span>
             )}
           </button>
         </nav>
 
+        {/* SPACER - Desktop only */}
+        {!isMobile && <div style={{ flex: 1, minHeight: 0 }} />}
+
+        {/* FOOTER */}
         <div
           style={{
-            padding: sidebarCollapsed && window.innerWidth >= 768 ? '16px 12px' : '20px',
+            padding: sidebarCollapsed && !isMobile ? '16px 12px' : isMobile ? '8px 12px' : '16px',
             borderTop: '1px solid rgba(255, 255, 255, 0.08)',
+            flexShrink: 0,
           }}
         >
-          {!(sidebarCollapsed && window.innerWidth >= 768) ? (
+          {!(sidebarCollapsed && !isMobile) ? (
             <div>
               <div
                 style={{
                   background: 'rgba(255, 255, 255, 0.06)',
                   border: '1px solid rgba(255, 255, 255, 0.1)',
-                  padding: '14px 16px',
-                  borderRadius: '12px',
-                  marginBottom: '12px',
+                  padding: isMobile ? '7px 9px' : '10px 12px',
+                  borderRadius: isMobile ? '8px' : '10px',
+                  marginBottom: isMobile ? '5px' : '8px',
                   display: 'flex',
                   alignItems: 'center',
                 }}
               >
                 <div
                   style={{
-                    width: '40px',
-                    height: '40px',
-                    borderRadius: '10px',
+                    width: isMobile ? '30px' : '36px',
+                    height: isMobile ? '30px' : '36px',
+                    borderRadius: isMobile ? '6px' : '8px',
                     background: 'linear-gradient(135deg, #dc3545 0%, #c82333 100%)',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
-                    marginRight: '12px',
-                    fontSize: '1.1rem',
+                    marginRight: isMobile ? '7px' : '10px',
+                    fontSize: isMobile ? '0.85rem' : '1rem',
                     fontWeight: 700,
                     color: 'white',
                   }}
@@ -1115,37 +1358,38 @@ const Sidebar = () => {
                 <div style={{ flex: 1, overflow: 'hidden' }}>
                   <div
                     style={{
-                      fontSize: '0.95rem',
+                      fontSize: isMobile ? '0.82rem' : '0.9rem',
                       fontWeight: 600,
                       color: 'white',
                       whiteSpace: 'nowrap',
                       overflow: 'hidden',
                       textOverflow: 'ellipsis',
+                      lineHeight: 1.2,
                     }}
                   >
                     {user?.name || 'Staff'}
                   </div>
-                  <small style={{ color: 'rgba(255, 255, 255, 0.6)', fontSize: '0.75rem' }}>
+                  <small style={{ color: 'rgba(255, 255, 255, 0.6)', fontSize: isMobile ? '0.63rem' : '0.7rem' }}>
                     Academic Staff
                   </small>
                 </div>
               </div>
 
-              <div style={{ marginBottom: '12px' }}>
+              <div style={{ marginBottom: isMobile ? '5px' : '8px' }}>
                 <div
                   style={{
                     color: 'rgba(255, 255, 255, 0.5)',
-                    fontSize: '0.7rem',
+                    fontSize: isMobile ? '0.58rem' : '0.65rem',
                     fontWeight: 600,
                     textTransform: 'uppercase',
                     letterSpacing: '0.08em',
-                    marginBottom: '8px',
+                    marginBottom: isMobile ? '3px' : '5px',
                     paddingLeft: '4px',
                   }}
                 >
                   Language
                 </div>
-                <div style={{ display: 'flex', gap: '8px' }}>
+                <div style={{ display: 'flex', gap: isMobile ? '4px' : '6px' }}>
                   <button
                     onClick={() => i18n.changeLanguage('en')}
                     style={{
@@ -1155,21 +1399,21 @@ const Sidebar = () => {
                         : 'rgba(255, 255, 255, 0.05)',
                       border: i18n.language === 'en' ? '1px solid rgba(220, 53, 69, 0.4)' : '1px solid rgba(255, 255, 255, 0.1)',
                       color: i18n.language === 'en' ? '#dc3545' : 'rgba(255, 255, 255, 0.7)',
-                      padding: '8px 12px',
-                      borderRadius: '8px',
+                      padding: isMobile ? '4px 5px' : '6px 8px',
+                      borderRadius: isMobile ? '6px' : '8px',
                       cursor: 'pointer',
                       transition: 'all 0.2s ease',
-                      fontSize: '0.85rem',
+                      fontSize: isMobile ? '0.72rem' : '0.8rem',
                       fontWeight: i18n.language === 'en' ? 600 : 500,
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
-                      gap: '6px',
+                      gap: isMobile ? '3px' : '4px',
                     }}
                   >
-                    <Globe size={14} />
+                    <Globe size={isMobile ? 11 : 13} />
                     <span>EN</span>
-                    {i18n.language === 'en' && <CheckCircle size={14} />}
+                    {i18n.language === 'en' && <CheckCircle size={isMobile ? 10 : 12} />}
                   </button>
 
                   <button
@@ -1181,21 +1425,21 @@ const Sidebar = () => {
                         : 'rgba(255, 255, 255, 0.05)',
                       border: i18n.language === 'tr' ? '1px solid rgba(220, 53, 69, 0.4)' : '1px solid rgba(255, 255, 255, 0.1)',
                       color: i18n.language === 'tr' ? '#dc3545' : 'rgba(255, 255, 255, 0.7)',
-                      padding: '8px 12px',
-                      borderRadius: '8px',
+                      padding: isMobile ? '4px 5px' : '6px 8px',
+                      borderRadius: isMobile ? '6px' : '8px',
                       cursor: 'pointer',
                       transition: 'all 0.2s ease',
-                      fontSize: '0.85rem',
+                      fontSize: isMobile ? '0.72rem' : '0.8rem',
                       fontWeight: i18n.language === 'tr' ? 600 : 500,
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
-                      gap: '6px',
+                      gap: isMobile ? '3px' : '4px',
                     }}
                   >
-                    <Globe size={14} />
+                    <Globe size={isMobile ? 11 : 13} />
                     <span>TR</span>
-                    {i18n.language === 'tr' && <CheckCircle size={14} />}
+                    {i18n.language === 'tr' && <CheckCircle size={isMobile ? 10 : 12} />}
                   </button>
                 </div>
               </div>
@@ -1207,18 +1451,24 @@ const Sidebar = () => {
                   background: 'rgba(220, 53, 69, 0.15)',
                   border: '1px solid rgba(220, 53, 69, 0.3)',
                   color: '#dc3545',
-                  padding: '12px',
-                  borderRadius: '10px',
+                  padding: isMobile ? '7px' : '10px',
+                  borderRadius: isMobile ? '6px' : '8px',
                   cursor: 'pointer',
                   transition: 'all 0.2s ease',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  fontSize: '0.95rem',
+                  fontSize: isMobile ? '0.82rem' : '0.9rem',
                   fontWeight: 600,
                 }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.background = 'rgba(220, 53, 69, 0.25)';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background = 'rgba(220, 53, 69, 0.15)';
+                }}
               >
-                <LogOut size={18} style={{ marginRight: '8px' }} />
+                <LogOut size={isMobile ? 14 : 16} style={{ marginRight: isMobile ? '6px' : '8px' }} />
                 Logout
               </button>
             </div>
@@ -1240,7 +1490,7 @@ const Sidebar = () => {
                   marginBottom: '8px',
                 }}
               >
-                <Globe size={20} />
+                <Globe size={18} />
               </button>
               <button
                 onClick={onLogout}
@@ -1257,7 +1507,7 @@ const Sidebar = () => {
                   justifyContent: 'center',
                 }}
               >
-                <LogOut size={20} />
+                <LogOut size={18} />
               </button>
             </div>
           )}
@@ -1278,7 +1528,7 @@ const Sidebar = () => {
     <div style={{
       marginLeft: window.innerWidth < 768 ? 0 : (sidebarCollapsed ? '85px' : '280px'),
       transition: 'margin-left 0.3s ease',
-      paddingTop: '40px',
+      padding: window.innerWidth < 768 ? '20px 16px' : '40px 32px',
     }}>
       {window.innerWidth < 768 && (
         <div
@@ -1316,6 +1566,41 @@ const Sidebar = () => {
           <div style={{ width: '40px' }} />
         </div>
       )}
+
+      {/* Enhanced Message Display */}
+{message.text && (
+  <div 
+    className={`alert ${message.type === 'success' ? 'alert-success' : 'alert-danger'} alert-dismissible fade show`}
+    role="alert"
+    style={{
+      position: 'sticky',
+      top: window.innerWidth < 768 ? '70px' : '20px',
+      zIndex: 1000,
+      marginBottom: '1rem',
+      borderRadius: '0.75rem',
+      boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)',
+      animation: 'slideIn 0.3s ease-out'
+    }}
+  >
+    <div className="d-flex align-items-center">
+      {message.type === 'success' ? (
+        <CheckCircle size={20} className="me-2 flex-shrink-0" />
+      ) : (
+        <AlertTriangle size={20} className="me-2 flex-shrink-0" />
+      )}
+      <div className="flex-grow-1">
+        <strong>{message.type === 'success' ? 'Success!' : 'Error'}</strong>
+        <div>{message.text}</div>
+      </div>
+      <button 
+        type="button" 
+        className="btn-close" 
+        onClick={() => setMessage({ type: '', text: '' })}
+        aria-label="Close"
+      />
+    </div>
+  </div>
+)}
 
         {/* Overview Tab */}
         {activeTab === 'overview' && (
@@ -1658,32 +1943,62 @@ const Sidebar = () => {
             Request New Appointment
           </h3>
         </div>
-        <div className="card-body p-4">
+        <div className="card-body p-4 card-body-overflow-visible">
+          {/* 🔥 ADD THIS WARNING */}
+          
           <form onSubmit={handleScheduleAppointment}>
-            <div className="row g-4">
+            {!profileComplete && (
+              <div className="alert alert-warning d-flex align-items-start mb-4" 
+                  style={{ borderRadius: '0.75rem', border: 'none', backgroundColor: '#fff3cd' }}>
+                <AlertTriangle size={20} className="me-2 flex-shrink-0 mt-1" style={{ color: '#856404' }} />
+                <div>
+                  <strong style={{ color: '#856404' }}>Profile Incomplete:</strong>
+                  <div style={{ color: '#856404', marginTop: '4px' }}>
+                    You must complete your profile before booking appointments.
+                    <button 
+                      className="btn btn-sm btn-outline-warning ms-2"
+                      onClick={() => setActiveTab('profile')}
+                      style={{ borderRadius: '0.5rem', padding: '0.25rem 0.75rem' }}
+                    >
+                      Complete Profile
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+            <div className="row g-4 row-overflow-visible">
               
               {/* Select Doctor and Urgency Level - Side by Side */}
               <div className="col-md-6">
                 <label className="form-label fw-semibold">
                   Select Doctor (Optional)
                 </label>
-                <select 
-                  className="form-select form-select-lg"
-                  value={appointmentForm.doctor_id}
-                  onChange={(e) => handleAppointmentFormChange('doctor_id', e.target.value)}
-                  style={{
-                    borderRadius: '0.75rem',
-                    border: '2px solid #e9ecef',
-                    padding: '0.875rem 1rem'
-                  }}
-                >
-                  <option value="">Any available doctor</option>
-                  {doctors.map(doctor => (
-                    <option key={doctor.id} value={doctor.id}>
-                      Dr. {doctor.name} - {doctor.specialization}
-                    </option>
-                  ))}
-                </select>
+                <Select
+  value={doctorOptions.find(option => option.value === appointmentForm.doctor_id)}
+  onChange={(option) => handleAppointmentFormChange('doctor_id', option?.value || '')}
+  options={doctorOptions}
+  isDisabled={loading || !profileComplete}
+  placeholder="Any available doctor"
+  isClearable
+  styles={{
+    control: (base) => ({
+      ...base,
+      borderRadius: '0.75rem',
+      border: '2px solid #e9ecef',
+      padding: '0.5rem',
+      minHeight: '50px'
+    }),
+    menu: (base) => ({
+      ...base,
+      maxHeight: window.innerWidth < 768 ? '200px' : '300px',
+      zIndex: 9999
+    }),
+    menuList: (base) => ({
+      ...base,
+      maxHeight: window.innerWidth < 768 ? '200px' : '300px',
+    })
+  }}
+/>
                 <div className="form-text mt-2">
                   Leave blank to be assigned to any available doctor
                 </div>
@@ -1735,68 +2050,76 @@ const Sidebar = () => {
               </div>
 
               {/* Date - with clinic hours validation */}
-              <div className="col-md-6">
-                <label className="form-label fw-semibold">
-                  Date <span className="text-danger">*</span>
-                </label>
-                <input 
-                  type="date"
-                  className={`form-control form-control-lg ${
-                    appointmentForm.date && !isWeekday(appointmentForm.date) ? 'is-invalid' : ''
-                  }`}
-                  value={appointmentForm.date}
-                  onChange={(e) => {
-                    const selectedDate = e.target.value;
-                    
-                    // Check if date is a weekday
-                    if (selectedDate && !isWeekday(selectedDate)) {
-                      showMessage('error', getDateClosureReason(selectedDate) + '. Please select a weekday (Monday-Friday).');
-                      return;
-                    }
-                    
-                    handleAppointmentFormChange('date', selectedDate);
-                  }}
-                  min={getMinDate()}
-                  required
-                  style={{
-                    borderRadius: '0.75rem',
-                    border: '2px solid #e9ecef',
-                    padding: '0.875rem 1rem'
-                  }}
-                />
-                {appointmentForm.date && !isWeekday(appointmentForm.date) && (
-                  <div className="invalid-feedback d-block">
-                    {getDateClosureReason(appointmentForm.date)}. Please select a weekday.
-                  </div>
-                )}
-                <small className="form-text text-muted">
-                  Clinic operates Monday-Friday, 9:00 AM - 5:00 PM
-                </small>
-              </div>
+<div className="col-md-6 col-overflow-visible">
+  <label className="form-label fw-semibold">
+    Date <span className="text-danger">*</span>
+  </label>
+  <div className="date-input-wrapper">
+    <input 
+      type="date"
+      className={`form-control form-control-lg ${
+        appointmentForm.date && !isWeekday(appointmentForm.date) ? 'is-invalid' : ''
+      }`}
+      value={appointmentForm.date}
+      onChange={(e) => {
+        const selectedDate = e.target.value;
+        
+        if (selectedDate && !isWeekday(selectedDate)) {
+          showMessage('error', getDateClosureReason(selectedDate) + '. Please select a weekday (Monday-Friday).');
+          return;
+        }
+        
+        handleAppointmentFormChange('date', selectedDate);
+      }}
+      min={getMinDate()}
+      required
+      style={{
+        borderRadius: '0.75rem',
+        border: '2px solid #e9ecef',
+        padding: window.innerWidth < 768 ? '0.75rem' : '0.875rem 1rem',
+        fontSize: window.innerWidth < 768 ? '0.9rem' : '1rem'
+      }}
+    />
+  </div>
+  {appointmentForm.date && !isWeekday(appointmentForm.date) && (
+    <div className="invalid-feedback d-block">
+      {getDateClosureReason(appointmentForm.date)}. Please select a weekday.
+    </div>
+  )}
+  <small className="form-text text-muted">
+    Clinic operates Monday-Friday, 9:00 AM - 5:00 PM
+  </small>
+</div>
 
               <div className="col-md-6">
                 <label className="form-label fw-semibold">
                   Time <span className="text-danger">*</span>
                 </label>
-                <select 
-                  className="form-select form-select-lg"
-                  value={appointmentForm.time}
-                  onChange={(e) => handleAppointmentFormChange('time', e.target.value)}
-                  required
-                  disabled={!appointmentForm.date}
-                  style={{
-                    borderRadius: '0.75rem',
-                    border: '2px solid #e9ecef',
-                    padding: '0.875rem 1rem'
-                  }}
-                >
-                  <option value="">
-                    {!appointmentForm.date ? 'Select date first' : 'Select a time slot'}
-                  </option>
-                  {availableSlots.map(slot => (
-                    <option key={slot} value={slot}>{slot}</option>
-                  ))}
-                </select>
+                <Select
+  value={timeSlotOptions.find(option => option.value === appointmentForm.time)}
+  onChange={(option) => handleAppointmentFormChange('time', option?.value || '')}
+  options={timeSlotOptions}
+  isDisabled={!appointmentForm.date || loading || !profileComplete}
+  placeholder={!appointmentForm.date ? 'Select date first' : 'Select a time slot'}
+  styles={{
+    control: (base) => ({
+      ...base,
+      borderRadius: '0.75rem',
+      border: '2px solid #e9ecef',
+      padding: '0.5rem',
+      minHeight: '50px'
+    }),
+    menu: (base) => ({
+      ...base,
+      maxHeight: window.innerWidth < 768 ? '200px' : '300px',
+      zIndex: 9999
+    }),
+    menuList: (base) => ({
+      ...base,
+      maxHeight: window.innerWidth < 768 ? '200px' : '300px',
+    })
+  }}
+/>
               </div>
 
               {/* Reason for Appointment - Full Width */}
@@ -1829,7 +2152,7 @@ const Sidebar = () => {
                 <button 
                   type="submit" 
                   className="btn btn-lg w-100"
-                  disabled={loading}
+                  disabled={loading || !profileComplete}
                   style={{ 
                     backgroundColor: loading ? '#6c757d' : universityTheme.primary,
                     border: 'none',
@@ -2155,7 +2478,7 @@ const Sidebar = () => {
                   Personal Information
                 </h5>
               </div>
-              <div className="card-body p-3 p-md-4">
+              <div className="card-body p-3 p-md-4 card-body-overflow-visible">
                 {profileLoading ? (
                   <div className="text-center py-4">
                     <div className="spinner-border text-primary mb-3" role="status">
@@ -2165,7 +2488,7 @@ const Sidebar = () => {
                   </div>
                 ) : (
                   <form onSubmit={saveProfile}>
-                    <div className="row g-3">
+                    <div className="row g-3 row-overflow-visible">
                       <div className="col-12 col-md-6">
                         <label className="form-label fw-semibold">Full Name</label>
                         <input
@@ -2221,74 +2544,96 @@ const Sidebar = () => {
                       
                       <div className="col-12 col-md-6">
                         <label className="form-label fw-semibold">Department</label>
-                        <select
-                          className="form-select"
-                          value={userProfile.department}
-                          onChange={(e) => setUserProfile({ ...userProfile, department: e.target.value })}
-                        >
-                          <option value="">Select Department</option>
-                          <option value="Medicine">Medicine</option>
-                          <option value="Engineering">Engineering</option>
-                          <option value="Business Administration">Business Administration</option>
-                          <option value="Computer Science">Computer Science</option>
-                          <option value="Education">Education</option>
-                          <option value="Arts & Sciences">Arts & Sciences</option>
-                          <option value="Pharmacy">Pharmacy</option>
-                          <option value="Dentistry">Dentistry</option>
-                          <option value="Nursing">Nursing</option>
-                          <option value="Architecture">Architecture</option>
-                        </select>
+                        <Select
+                          value={departmentOptions.find(option => option.value === userProfile.department)}
+                          onChange={(option) => setUserProfile({ ...userProfile, department: option?.value || '' })}
+                          options={departmentOptions}
+                          placeholder="Select Department"
+                          styles={{
+                            control: (base) => ({
+                              ...base,
+                              borderRadius: '0.5rem',
+                              border: '1px solid #dee2e6',
+                              minHeight: '38px'
+                            }),
+                            menu: (base) => ({
+                              ...base,
+                              maxHeight: window.innerWidth < 768 ? '200px' : '300px',
+                              zIndex: 9999
+                            }),
+                            menuList: (base) => ({
+                              ...base,
+                              maxHeight: window.innerWidth < 768 ? '200px' : '300px',
+                            })
+                          }}
+                        />
                       </div>
                       {/* Add after the existing fields like phone, department, bio */}
 
                       {/* Date of Birth */}
-                      <div className="col-12 col-md-6">
-                        <label className="form-label fw-semibold">Date of Birth</label>
-                        <input
-                          type="date"
-                          className="form-control"
-                          value={userProfile.date_of_birth}
-                          onChange={(e) => setUserProfile({ ...userProfile, date_of_birth: e.target.value })}
-                          max={new Date(new Date().setFullYear(new Date().getFullYear() - 18)).toISOString().split('T')[0]}
-                        />
-                        <div className="form-text">Must be at least 18 years old</div>
-                      </div>
+<div className="col-12 col-md-6 col-overflow-visible">
+  <label className="form-label fw-semibold">Date of Birth</label>
+  <div className="date-input-wrapper">
+    <input
+      type="date"
+      className="form-control"
+      value={userProfile.date_of_birth}
+      onChange={(e) => setUserProfile({ ...userProfile, date_of_birth: e.target.value })}
+      max={new Date(new Date().setFullYear(new Date().getFullYear() - 18)).toISOString().split('T')[0]}
+    />
+  </div>
+  <div className="form-text">Must be at least 16 years old</div>
+</div>
 
                       {/* Gender */}
                       <div className="col-12 col-md-6">
                         <label className="form-label fw-semibold">Gender</label>
-                        <select
-                          className="form-select"
-                          value={userProfile.gender}
-                          onChange={(e) => setUserProfile({ ...userProfile, gender: e.target.value })}
-                        >
-                          <option value="">Select gender</option>
-                          <option value="male">Male</option>
-                          <option value="female">Female</option>
-                          <option value="other">Other</option>
-                          <option value="prefer_not_to_say">Prefer not to say</option>
-                        </select>
+                        <Select
+                          value={genderOptions.find(option => option.value === userProfile.gender)}
+                          onChange={(option) => setUserProfile({ ...userProfile, gender: option?.value || '' })}
+                          options={genderOptions}
+                          placeholder="Select gender"
+                          styles={{
+                            control: (base) => ({
+                              ...base,
+                              borderRadius: '0.5rem',
+                              border: '1px solid #dee2e6',
+                              minHeight: '38px'
+                            }),
+                            menu: (base) => ({
+                              ...base,
+                              zIndex: 9999
+                            })
+                          }}
+                        />
                       </div>
 
                       {/* Blood Type */}
                       <div className="col-12 col-md-6">
                         <label className="form-label fw-semibold">Blood Type</label>
-                        <select
-                          className="form-select"
-                          value={userProfile.blood_type}
-                          onChange={(e) => setUserProfile({ ...userProfile, blood_type: e.target.value })}
-                        >
-                          <option value="">Select blood type</option>
-                          <option value="A+">A+</option>
-                          <option value="A-">A-</option>
-                          <option value="B+">B+</option>
-                          <option value="B-">B-</option>
-                          <option value="AB+">AB+</option>
-                          <option value="AB-">AB-</option>
-                          <option value="O+">O+</option>
-                          <option value="O-">O-</option>
-                          <option value="Unknown">Unknown</option>
-                        </select>
+                        <Select
+                          value={bloodTypeOptions.find(option => option.value === userProfile.blood_type)}
+                          onChange={(option) => setUserProfile({ ...userProfile, blood_type: option?.value || '' })}
+                          options={bloodTypeOptions}
+                          placeholder="Select blood type"
+                          styles={{
+                            control: (base) => ({
+                              ...base,
+                              borderRadius: '0.5rem',
+                              border: '1px solid #dee2e6',
+                              minHeight: '38px'
+                            }),
+                            menu: (base) => ({
+                              ...base,
+                              maxHeight: window.innerWidth < 768 ? '200px' : '300px',
+                              zIndex: 9999
+                            }),
+                            menuList: (base) => ({
+                              ...base,
+                              maxHeight: window.innerWidth < 768 ? '200px' : '300px',
+                            })
+                          }}
+                        />
                       </div>
 
                       {/* Medical Information Section Header */}
@@ -2416,20 +2761,24 @@ const Sidebar = () => {
                       {/* Emergency Contact Relationship */}
                       <div className="col-12 col-md-6">
                         <label className="form-label fw-semibold">Relationship</label>
-                        <select
-                          className="form-select"
-                          value={userProfile.emergency_contact_relationship}
-                          onChange={(e) => setUserProfile({ ...userProfile, emergency_contact_relationship: e.target.value })}
-                        >
-                          <option value="">Select relationship</option>
-                          <option value="spouse">Spouse</option>
-                          <option value="parent">Parent</option>
-                          <option value="sibling">Sibling</option>
-                          <option value="child">Child</option>
-                          <option value="friend">Friend</option>
-                          <option value="colleague">Colleague</option>
-                          <option value="other">Other</option>
-                        </select>
+                        <Select
+                          value={relationshipOptions.find(option => option.value === userProfile.emergency_contact_relationship)}
+                          onChange={(option) => setUserProfile({ ...userProfile, emergency_contact_relationship: option?.value || '' })}
+                          options={relationshipOptions}
+                          placeholder="Select relationship"
+                          styles={{
+                            control: (base) => ({
+                              ...base,
+                              borderRadius: '0.5rem',
+                              border: '1px solid #dee2e6',
+                              minHeight: '38px'
+                            }),
+                            menu: (base) => ({
+                              ...base,
+                              zIndex: 9999
+                            })
+                          }}
+                        />
                       </div>
 
                       {/* Emergency Contact Email */}
@@ -2446,22 +2795,33 @@ const Sidebar = () => {
                     </div>
 
                     <div className="mt-4 d-flex gap-2">
-                      <button 
-                        type="submit" 
-                        className="btn btn-primary"
-                        disabled={profileSaving}
-                        style={{ background: universityTheme.secondary, border: 'none' }}
-                      >
-                        {profileSaving ? (
-                          <>
-                            <span className="spinner-border spinner-border-sm me-2" role="status"></span>
-                            Saving...
-                          </>
-                        ) : (
-                          'Save Changes'
-                        )}
-                      </button>
-                    </div>
+  <button 
+    type="submit" 
+    className="btn btn-primary btn-lg"
+    disabled={profileSaving}
+    style={{ 
+      background: universityTheme.secondary, 
+      border: 'none',
+      minWidth: '150px',
+      borderRadius: '0.75rem'
+    }}
+    onClick={saveProfile}
+  >
+    {profileSaving ? (
+      <>
+        <span className="spinner-border spinner-border-sm me-2" role="status"></span>
+        Saving...
+      </>
+    ) : (
+      <>
+        <Save size={18} className="me-2" />
+        Save Profile
+      </>
+    )}
+  </button>
+  
+  
+</div>
                   </form>
                 )}
               </div>

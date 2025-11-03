@@ -1,0 +1,653 @@
+/* Date Input Wrapper Styles */
+.date-input-wrapper {
+  position: relative;
+  z-index: 20;
+}
+
+.date-input-wrapper input[type="date"] {
+  position: relative;
+  z-index: 10;
+}
+
+.date-input-wrapper input[type="date"]::-webkit-calendar-picker-indicator {
+  position: relative;
+  z-index: 11;
+  cursor: pointer;
+}
+
+/* Ensure parent containers don't clip */
+.card-body-overflow-visible {
+  overflow: visible !important;
+}
+
+.row-overflow-visible {
+  overflow: visible !important;
+}
+
+.col-overflow-visible {
+  overflow: visible !important;
+  position: relative;
+  z-index: 1;
+}
+
+/* Phone Input Fixes */
+.react-tel-input {
+  position: relative;
+  z-index: 10;
+}
+
+.react-tel-input .country-list {
+  position: fixed !important;
+  z-index: 9999 !important;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+/* Mobile Table Responsiveness */
+@media (max-width: 768px) {
+  .table-responsive {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  
+  .btn-group-sm {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.25rem;
+  }
+  
+  .btn-group-sm .btn {
+    flex: 1 1 auto;
+    min-width: fit-content;
+  }
+}
+
+/* 
+ * ===================================================================
+ * CLINICAL STAFF DASHBOARD - RESPONSIVE STYLES
+ * Mobile-First Design Matching Academic Staff Dashboard
+ * ===================================================================
+ */
+
+/* ==================== BASE RESPONSIVE STYLES ==================== */
+
+/* Mobile-First Base */
+@media (max-width: 767px) {
+  /* Body and Container */
+  body {
+    font-size: 14px;
+    overflow-x: hidden;
+  }
+
+  .container-fluid {
+    padding-left: 12px !important;
+    padding-right: 12px !important;
+  }
+
+  /* Card Optimizations */
+  .card {
+    margin-bottom: 12px !important;
+    border-radius: 12px !important;
+  }
+
+  .card-body {
+    padding: 12px !important;
+  }
+
+  .card-header {
+    padding: 10px 12px !important;
+    font-size: 15px !important;
+  }
+
+  /* Typography */
+  h1 { font-size: 1.75rem !important; }
+  h2 { font-size: 1.5rem !important; }
+  h3 { font-size: 1.25rem !important; }
+  h4 { font-size: 1.1rem !important; }
+  h5 { font-size: 1rem !important; }
+  h6 { font-size: 0.9rem !important; }
+
+  /* Table Responsiveness */
+  .table-responsive {
+    -webkit-overflow-scrolling: touch;
+    margin-left: -12px;
+    margin-right: -12px;
+    padding-left: 12px;
+    padding-right: 12px;
+  }
+
+  .table {
+    font-size: 12px !important;
+  }
+
+  .table th,
+  .table td {
+    padding: 8px 6px !important;
+    white-space: nowrap;
+  }
+
+  /* Button Groups */
+  .btn-group {
+    display: flex !important;
+    flex-wrap: wrap !important;
+    gap: 4px !important;
+  }
+
+  .btn-group-sm > .btn {
+    padding: 4px 8px !important;
+    font-size: 11px !important;
+  }
+
+  /* Form Controls */
+  .form-control,
+  .form-select {
+    font-size: 14px !important;
+    padding: 8px 12px !important;
+  }
+
+  .form-label {
+    font-size: 13px !important;
+    margin-bottom: 4px !important;
+  }
+
+  /* Modal Optimization */
+  .modal-dialog {
+    margin: 8px !important;
+    max-width: calc(100% - 16px) !important;
+  }
+
+  .modal-body {
+    padding: 12px !important;
+  }
+
+  .modal-header {
+    padding: 12px 16px !important;
+  }
+
+  .modal-title {
+    font-size: 16px !important;
+  }
+
+  /* Badge Sizing */
+  .badge {
+    font-size: 10px !important;
+    padding: 3px 6px !important;
+  }
+
+  /* Row and Column Spacing */
+  .row.g-3 {
+    --bs-gutter-x: 8px !important;
+    --bs-gutter-y: 8px !important;
+  }
+
+  .row.g-4 {
+    --bs-gutter-x: 12px !important;
+    --bs-gutter-y: 12px !important;
+  }
+
+  /* Chart Containers */
+  .chart-container {
+    height: 250px !important;
+    margin-bottom: 12px;
+  }
+
+  /* Alert Optimization */
+  .alert {
+    padding: 10px 12px !important;
+    font-size: 13px !important;
+    margin-bottom: 12px !important;
+  }
+
+  /* Input Groups */
+  .input-group {
+    flex-wrap: nowrap !important;
+  }
+
+  .input-group-text {
+    padding: 8px 10px !important;
+  }
+
+  /* Accordion */
+  .accordion-button {
+    padding: 10px 12px !important;
+    font-size: 13px !important;
+  }
+
+  .accordion-body {
+    padding: 10px 12px !important;
+    font-size: 12px !important;
+  }
+
+  /* Progress Bars */
+  .progress {
+    height: 6px !important;
+  }
+
+  /* Touch Target Optimization */
+  button,
+  a,
+  .btn {
+    min-height: 44px;
+    min-width: 44px;
+  }
+
+  .btn-sm {
+    min-height: 36px;
+    min-width: 36px;
+  }
+
+  /* Stat Cards */
+  .stat-card h4 {
+    font-size: 20px !important;
+  }
+
+  .stat-card p {
+    font-size: 11px !important;
+  }
+
+  /* React Select Mobile Optimization */
+  .select__menu {
+    max-height: 200px !important;
+  }
+
+  .select__control {
+    min-height: 38px !important;
+    font-size: 14px !important;
+  }
+
+  /* Phone Input Mobile */
+  .react-tel-input .form-control {
+    width: 100% !important;
+    font-size: 14px !important;
+    padding: 8px 12px 8px 52px !important;
+  }
+
+  .react-tel-input .flag-dropdown {
+    border-radius: 8px 0 0 8px !important;
+  }
+
+  /* Sidebar Mobile Adjustments */
+  .sidebar-mobile-overlay {
+    display: block;
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: rgba(0, 0, 0, 0.6);
+    z-index: 1040;
+    backdrop-filter: blur(2px);
+  }
+
+  /* Dashboard Stats Cards */
+  .dashboard-stat-card {
+    min-height: 120px;
+    padding: 12px !important;
+  }
+
+  .dashboard-stat-card .stat-icon {
+    width: 40px !important;
+    height: 40px !important;
+  }
+
+  .dashboard-stat-card .stat-value {
+    font-size: 1.5rem !important;
+  }
+
+  .dashboard-stat-card .stat-label {
+    font-size: 0.75rem !important;
+  }
+}
+
+/* ==================== TABLET OPTIMIZATION ==================== */
+@media (min-width: 768px) and (max-width: 991px) {
+  .container-fluid {
+    padding-left: 16px !important;
+    padding-right: 16px !important;
+  }
+
+  .card-body {
+    padding: 16px !important;
+  }
+
+  .table {
+    font-size: 13px !important;
+  }
+
+  h1 { font-size: 2rem !important; }
+  h2 { font-size: 1.75rem !important; }
+  h3 { font-size: 1.5rem !important; }
+  h4 { font-size: 1.25rem !important; }
+  h5 { font-size: 1.1rem !important; }
+}
+
+/* ==================== LANDSCAPE MOBILE ==================== */
+@media (max-width: 767px) and (orientation: landscape) {
+  .chart-container {
+    height: 200px !important;
+  }
+
+  .modal-dialog {
+    max-height: calc(100vh - 40px);
+    overflow-y: auto;
+  }
+
+  .dashboard-stat-card {
+    min-height: 100px;
+  }
+}
+
+/* ==================== iOS SAFARI FIXES ==================== */
+@supports (-webkit-touch-callout: none) {
+  input,
+  select,
+  textarea {
+    font-size: 16px !important; /* Prevents zoom on focus */
+  }
+
+  .form-control:focus,
+  .form-select:focus {
+    font-size: 16px !important;
+  }
+}
+
+/* ==================== ANDROID CHROME FIXES ==================== */
+@media screen and (max-width: 767px) {
+  select:focus,
+  textarea:focus,
+  input:focus {
+    font-size: 16px !important;
+  }
+}
+
+/* ==================== CUSTOM COMPONENT RESPONSIVE STYLES ==================== */
+
+/* Appointments Table - Mobile Cards */
+@media (max-width: 991px) {
+  .appointment-card-mobile {
+    background: #ffffff;
+    border: 1px solid #e9ecef;
+    border-radius: 12px;
+    padding: 12px;
+    margin-bottom: 12px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  }
+
+  .appointment-card-mobile-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 8px;
+  }
+
+  .appointment-card-mobile-title {
+    font-size: 0.95rem;
+    font-weight: 600;
+    margin-bottom: 4px;
+  }
+
+  .appointment-card-mobile-subtitle {
+    font-size: 0.8rem;
+    color: #6c757d;
+  }
+
+  .appointment-card-mobile-actions {
+    display: flex;
+    gap: 4px;
+    flex-wrap: wrap;
+    margin-top: 8px;
+  }
+}
+
+/* Patient Cards - Mobile Layout */
+@media (max-width: 991px) {
+  .patient-card-mobile {
+    background: #ffffff;
+    border: 1px solid #e9ecef;
+    border-radius: 12px;
+    padding: 12px;
+    margin-bottom: 12px;
+  }
+
+  .patient-info-row-mobile {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 0;
+    border-bottom: 1px solid #f1f3f5;
+  }
+
+  .patient-info-row-mobile:last-child {
+    border-bottom: none;
+  }
+
+  .patient-info-label-mobile {
+    font-size: 0.75rem;
+    color: #6c757d;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+
+  .patient-info-value-mobile {
+    font-size: 0.875rem;
+    font-weight: 500;
+  }
+}
+
+/* Chart Responsive Sizing */
+@media (max-width: 767px) {
+  .chart-wrapper-mobile {
+    height: 250px;
+    margin-bottom: 16px;
+  }
+}
+
+@media (min-width: 768px) and (max-width: 991px) {
+  .chart-wrapper-tablet {
+    height: 300px;
+    margin-bottom: 20px;
+  }
+}
+
+@media (min-width: 992px) {
+  .chart-wrapper-desktop {
+    height: 350px;
+    margin-bottom: 24px;
+  }
+}
+
+/* Profile Page Responsive */
+@media (max-width: 767px) {
+  .profile-avatar-container {
+    text-align: center;
+    margin-bottom: 20px;
+  }
+
+  .profile-avatar {
+    width: 100px !important;
+    height: 100px !important;
+  }
+
+  .profile-form-section {
+    margin-bottom: 16px;
+  }
+
+  .profile-section-title {
+    font-size: 1rem !important;
+    margin-bottom: 12px !important;
+  }
+}
+
+/* Medication Schedule - Mobile Cards */
+@media (max-width: 991px) {
+  .medication-card-mobile {
+    background: #ffffff;
+    border-left: 4px solid #0d6efd;
+    border-radius: 8px;
+    padding: 12px;
+    margin-bottom: 12px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  }
+
+  .medication-name-mobile {
+    font-size: 0.95rem;
+    font-weight: 600;
+    margin-bottom: 4px;
+  }
+
+  .medication-details-mobile {
+    font-size: 0.8rem;
+    color: #6c757d;
+  }
+}
+
+/* Doctor Cards - Responsive Grid */
+@media (max-width: 575px) {
+  .doctor-card-container {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+}
+
+@media (min-width: 576px) and (max-width: 767px) {
+  .doctor-card-container {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 12px;
+  }
+}
+
+@media (min-width: 768px) {
+  .doctor-card-container {
+    grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+    gap: 16px;
+  }
+}
+
+/* ==================== UTILITY CLASSES ==================== */
+
+/* Responsive Text Sizes */
+.text-responsive-xs { font-size: clamp(0.7rem, 2vw, 0.875rem) !important; }
+.text-responsive-sm { font-size: clamp(0.8rem, 2.5vw, 1rem) !important; }
+.text-responsive-md { font-size: clamp(0.9rem, 3vw, 1.125rem) !important; }
+.text-responsive-lg { font-size: clamp(1rem, 3.5vw, 1.25rem) !important; }
+.text-responsive-xl { font-size: clamp(1.2rem, 4vw, 1.5rem) !important; }
+
+/* Responsive Spacing */
+.p-responsive { padding: clamp(0.75rem, 3vw, 1.5rem) !important; }
+.px-responsive { padding-left: clamp(0.75rem, 3vw, 1.5rem) !important; padding-right: clamp(0.75rem, 3vw, 1.5rem) !important; }
+.py-responsive { padding-top: clamp(0.75rem, 3vw, 1.5rem) !important; padding-bottom: clamp(0.75rem, 3vw, 1.5rem) !important; }
+
+.m-responsive { margin: clamp(0.75rem, 3vw, 1.5rem) !important; }
+.mx-responsive { margin-left: clamp(0.75rem, 3vw, 1.5rem) !important; margin-right: clamp(0.75rem, 3vw, 1.5rem) !important; }
+.my-responsive { margin-top: clamp(0.75rem, 3vw, 1.5rem) !important; margin-bottom: clamp(0.75rem, 3vw, 1.5rem) !important; }
+
+/* Responsive Gap */
+.gap-responsive { gap: clamp(0.5rem, 2vw, 1rem) !important; }
+
+/* Show/Hide Helpers */
+.mobile-only {
+  display: block !important;
+}
+
+.desktop-only {
+  display: none !important;
+}
+
+@media (min-width: 992px) {
+  .mobile-only {
+    display: none !important;
+  }
+
+  .desktop-only {
+    display: block !important;
+  }
+}
+
+/* ==================== PERFORMANCE OPTIMIZATIONS ==================== */
+
+/* Reduce animations on mobile for better performance */
+@media (max-width: 767px) {
+  * {
+    -webkit-tap-highlight-color: rgba(0, 0, 0, 0.1);
+  }
+
+  .transition-reduce {
+    transition-duration: 0.1s !important;
+  }
+
+  /* Simplify box shadows on mobile */
+  .card,
+  .btn,
+  .modal-content {
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1) !important;
+  }
+}
+
+/* ==================== ACCESSIBILITY ==================== */
+
+/* Ensure readable text on all devices */
+@media (max-width: 767px) {
+  body {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  /* Larger touch targets for better accessibility */
+  .btn,
+  .form-check-input,
+  .form-control,
+  .form-select {
+    min-height: 44px;
+  }
+
+  .form-check-input {
+    min-width: 20px;
+    min-height: 20px;
+  }
+}
+
+/* ==================== PRINT STYLES ==================== */
+
+@media print {
+  .sidebar,
+  .btn,
+  .alert,
+  .modal,
+  .dropdown,
+  .navbar {
+    display: none !important;
+  }
+
+  .card {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  body {
+    font-size: 12pt;
+    line-height: 1.5;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    page-break-after: avoid;
+  }
+}
+
+/* ==================== DARK MODE SUPPORT (Optional) ==================== */
+
+@media (prefers-color-scheme: dark) {
+  /* Add dark mode styles if needed */
+  .card {
+    background-color: #1a1d29;
+    color: #ffffff;
+  }
+
+  .table {
+    color: #ffffff;
+  }
+
+  .text-muted {
+    color: rgba(255, 255, 255, 0.6) !important;
+  }
+}

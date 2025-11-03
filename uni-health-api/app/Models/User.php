@@ -9,6 +9,7 @@ use Laravel\Sanctum\HasApiTokens;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Contracts\Auth\CanResetPassword;
+use App\Notifications\ResetPasswordNotification; // ✅ ADD THIS LINE
 
 class User extends Authenticatable
 {
@@ -44,7 +45,7 @@ class User extends Authenticatable
         'has_known_allergies',
         'allergies_uncertain',
         'addictions',
-        'preferred_language', // ✅ ADD THIS LINE
+        'preferred_language',
         'medical_card_id',
         'years_of_experience',
         'certifications',
@@ -84,13 +85,13 @@ class User extends Authenticatable
     protected $casts = [
         'email_verified_at' => 'datetime',
         'password' => 'hashed',
-        'date_of_birth' => 'date:Y-m-d', //'date',
+        'date_of_birth' => 'date:Y-m-d',
         'last_login' => 'datetime',
         'permissions' => 'array',
-        'available_days' => 'array', // ✅ Add this
+        'available_days' => 'array',
         'has_known_allergies' => 'boolean',
         'allergies_uncertain' => 'boolean',
-        'is_available' => 'boolean', // ✅ Add this
+        'is_available' => 'boolean',
     ];
 
     /**
@@ -187,6 +188,17 @@ class User extends Authenticatable
         return $this->hasOne(StaffSchedule::class);
     }
 
+    /**
+     * Send the password reset notification.
+     * 
+     * @param  string  $token
+     * @return void
+     */
+    public function sendPasswordResetNotification($token)
+    {
+        $this->notify(new ResetPasswordNotification($token));
+    }
+
     /* ================== METHODS ================== */
 
     public function hasRole($role)
@@ -259,7 +271,6 @@ class User extends Authenticatable
         return $this->forceDelete();
     }
 
-    // Add these methods to your User model
     public function archivedByDoctors()
     {
         return $this->belongsToMany(User::class, 'doctor_archived_patients', 'patient_id', 'doctor_id')
@@ -273,7 +284,6 @@ class User extends Authenticatable
                     ->withPivot('archive_reason', 'created_at', 'updated_at')
                     ->withTimestamps();
     }
-    
 
     /* ================== ATTRIBUTES ================== */
 
@@ -378,13 +388,12 @@ class User extends Authenticatable
         ]);
     }
 
-    // Add accessor to handle both department formats
     public function getDepartmentNameAttribute()
     {
         if ($this->department_id && $this->department) {
             return $this->department->name;
         }
-        return $this->department; // fallback to string department
+        return $this->department;
     }
 
     /* ================== SCOPES ================== */
@@ -491,19 +500,18 @@ class User extends Authenticatable
                 'view_system_logs',
                 'manage_settings',
             ],
-
-            self::ROLE_SUPERADMIN => [ // ✅ ADD THIS SECTION
-            'full_access',
-            'manage_users',
-            'manage_roles',
-            'manage_departments',
-            'manage_holidays',
-            'manage_system',
-            'view_system_logs',
-            'manage_settings',
-            'create_admins',
-            'delete_users',
-        ],
+            self::ROLE_SUPERADMIN => [
+                'full_access',
+                'manage_users',
+                'manage_roles',
+                'manage_departments',
+                'manage_holidays',
+                'manage_system',
+                'view_system_logs',
+                'manage_settings',
+                'create_admins',
+                'delete_users',
+            ],
         ];
 
         return $permissions[$this->role] ?? [];

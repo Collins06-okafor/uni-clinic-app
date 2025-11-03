@@ -11,6 +11,7 @@ import NotificationSystem from '../../components/NotificationSystem';
 import LanguageSwitcher from '../../components/LanguageSwitcher';
 import websocketService from '../../services/websocket';
 import apiService from '../../services/api';
+import Select from 'react-select';
 // CORRECT - Use the viewing component
 import { ClinicHoursCard, AppointmentTipsCard, EmergencyContactsCard } from '../../components/ClinicInfoSidebar';
 // Configuration
@@ -1161,15 +1162,15 @@ const formatTime = (timeString: string): string => {
       date = new Date(timeString);
     } else {
       const [hours, minutes] = timeString.split(':');
-      date = new Date();
-      date.setHours(parseInt(hours), parseInt(minutes), 0);
+      // Use UTC to avoid timezone issues
+      date = new Date(Date.UTC(2000, 0, 1, parseInt(hours), parseInt(minutes), 0));
     }
     
     return date.toLocaleTimeString('en-US', {
       hour: 'numeric',
       minute: '2-digit',
-      second: '2-digit',
-      hour12: true
+      hour12: true,
+      timeZone: 'UTC' // Force UTC interpretation
     });
   } catch (error) {
     return timeString;
@@ -1425,32 +1426,19 @@ const AlternativeDatesModal = () => (
 // ==================== SIDEBAR COMPONENT ====================
 const Sidebar = () => {
   const menuItems = [
-    { 
-      id: 'overview', 
-      icon: BarChart3, 
-      label: 'Dashboard' 
-    },
-    { 
-      id: 'request', 
-      icon: Calendar, 
-      label: 'Book Appointment' 
-    },
-    { 
-      id: 'history', 
-      icon: History, 
-      label: 'My Appointments' 
-    },
-    { 
-      id: 'medical-history', 
-      icon: FileText, 
-      label: 'Medical Records' 
-    },
+    { id: 'overview', icon: BarChart3, label: 'Dashboard' },
+    { id: 'request', icon: Calendar, label: 'Book Appointment' },
+    { id: 'history', icon: History, label: 'My Appointments' },
+    { id: 'medical-history', icon: FileText, label: 'Medical Records' },
   ];
+
+  // Check if mobile
+  const isMobile = window.innerWidth < 768;
 
   return (
     <>
-      {/* Mobile Overlay - Click anywhere to close sidebar */}
-      {sidebarOpen && window.innerWidth < 768 && (
+      {/* Mobile Overlay */}
+      {sidebarOpen && isMobile && (
         <div
           style={{
             position: 'fixed',
@@ -1461,7 +1449,6 @@ const Sidebar = () => {
             backgroundColor: 'rgba(0, 0, 0, 0.6)',
             zIndex: 1040,
             backdropFilter: 'blur(2px)',
-            animation: 'fadeIn 0.2s ease',
           }}
           onClick={() => setSidebarOpen(false)}
         />
@@ -1472,9 +1459,9 @@ const Sidebar = () => {
         style={{
           position: 'fixed',
           top: 0,
-          left: window.innerWidth < 768 ? (sidebarOpen ? 0 : '-300px') : 0,
+          left: isMobile ? (sidebarOpen ? 0 : '-300px') : 0,
           bottom: 0,
-          width: sidebarCollapsed && window.innerWidth >= 768 ? '85px' : '280px',
+          width: sidebarCollapsed && !isMobile ? '85px' : '280px',
           background: '#1a1d29',
           boxShadow: '4px 0 24px rgba(0, 0, 0, 0.12)',
           transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
@@ -1484,30 +1471,31 @@ const Sidebar = () => {
           overflow: 'hidden',
         }}
       >
-        {/* Header Section */}
+        {/* ===== HEADER ===== */}
         <div
           style={{
-            padding: sidebarCollapsed && window.innerWidth >= 768 ? '24px 16px' : '24px',
+            padding: sidebarCollapsed && !isMobile ? '10px 10px' : isMobile ? '10px 14px' : '14px 16px',
             borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
             background: 'linear-gradient(135deg, #1e2230 0%, #1a1d29 100%)',
-            minHeight: '80px',
+            minHeight: isMobile ? '55px' : '65px',
+            flexShrink: 0,
           }}
         >
-          {!(sidebarCollapsed && window.innerWidth >= 768) ? (
+          {!(sidebarCollapsed && !isMobile) ? (
             <div style={{ display: 'flex', alignItems: 'center', flex: 1 }}>
               <div
                 style={{
-                  width: '48px',
-                  height: '48px',
-                  borderRadius: '12px',
+                  width: isMobile ? '35px' : '42px',
+                  height: isMobile ? '35px' : '42px',
+                  borderRadius: isMobile ? '7px' : '10px',
                   background: 'linear-gradient(135deg, #dc3545 0%, #c82333 100%)',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  marginRight: '14px',
+                  marginRight: isMobile ? '9px' : '12px',
                   boxShadow: '0 4px 12px rgba(220, 53, 69, 0.3)',
                   overflow: 'hidden',
                 }}
@@ -1516,8 +1504,8 @@ const Sidebar = () => {
                   src="/logo6.png"
                   alt="FIU Logo"
                   style={{
-                    width: '32px',
-                    height: '32px',
+                    width: isMobile ? '24px' : '28px',
+                    height: isMobile ? '24px' : '28px',
                     objectFit: 'cover',
                   }}
                 />
@@ -1527,9 +1515,10 @@ const Sidebar = () => {
                   style={{
                     color: '#ffffff',
                     margin: 0,
-                    fontSize: '1.05rem',
+                    fontSize: isMobile ? '0.9rem' : '1rem',
                     fontWeight: 700,
                     letterSpacing: '-0.02em',
+                    lineHeight: 1.2,
                   }}
                 >
                   FIU Medical
@@ -1537,7 +1526,7 @@ const Sidebar = () => {
                 <small
                   style={{
                     color: 'rgba(255, 255, 255, 0.6)',
-                    fontSize: '0.8rem',
+                    fontSize: isMobile ? '0.68rem' : '0.75rem',
                     fontWeight: 500,
                   }}
                 >
@@ -1548,9 +1537,9 @@ const Sidebar = () => {
           ) : (
             <div
               style={{
-                width: '48px',
-                height: '48px',
-                borderRadius: '12px',
+                width: '42px',
+                height: '42px',
+                borderRadius: '10px',
                 background: 'linear-gradient(135deg, #dc3545 0%, #c82333 100%)',
                 display: 'flex',
                 alignItems: 'center',
@@ -1564,8 +1553,8 @@ const Sidebar = () => {
                 src="/logo6.png"
                 alt="FIU Logo"
                 style={{
-                  width: '32px',
-                  height: '32px',
+                  width: '28px',
+                  height: '28px',
                   objectFit: 'cover',
                 }}
               />
@@ -1573,34 +1562,32 @@ const Sidebar = () => {
           )}
 
           {/* Collapse Toggle - Desktop Only */}
-          {window.innerWidth >= 768 && (
+          {!isMobile && (
             <button
               onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
               style={{
                 background: 'linear-gradient(135deg, rgba(220, 53, 69, 0.15) 0%, rgba(200, 35, 51, 0.15) 100%)',
                 border: '1px solid rgba(220, 53, 69, 0.3)',
-                borderRadius: '10px',
-                width: '36px',
-                height: '36px',
+                borderRadius: '8px',
+                width: '32px',
+                height: '32px',
                 color: '#dc3545',
                 cursor: 'pointer',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
                 transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-                fontSize: '0.9rem',
+                fontSize: '0.85rem',
                 fontWeight: 700,
                 boxShadow: '0 2px 8px rgba(220, 53, 69, 0.2)',
               }}
               onMouseEnter={(e) => {
                 e.currentTarget.style.background = 'linear-gradient(135deg, rgba(220, 53, 69, 0.25) 0%, rgba(200, 35, 51, 0.25) 100%)';
                 e.currentTarget.style.transform = 'scale(1.05)';
-                e.currentTarget.style.boxShadow = '0 4px 12px rgba(220, 53, 69, 0.3)';
               }}
               onMouseLeave={(e) => {
                 e.currentTarget.style.background = 'linear-gradient(135deg, rgba(220, 53, 69, 0.15) 0%, rgba(200, 35, 51, 0.15) 100%)';
                 e.currentTarget.style.transform = 'scale(1)';
-                e.currentTarget.style.boxShadow = '0 2px 8px rgba(220, 53, 69, 0.2)';
               }}
             >
               {sidebarCollapsed ? '»' : '«'}
@@ -1608,26 +1595,30 @@ const Sidebar = () => {
           )}
         </div>
 
-        {/* Navigation Menu */}
+        {/* ===== NAVIGATION ===== */}
         <nav
           style={{
-            flex: 1,
-            overflowY: 'auto',
+            // DESKTOP: flex:1 with overflow auto (allows scrolling if needed)
+            // MOBILE: flexShrink:0 with no overflow (compact, no scroll)
+            flex: isMobile ? 'none' : 1,
+            flexShrink: isMobile ? 0 : 1,
+            overflowY: isMobile ? 'visible' : 'auto',
             overflowX: 'hidden',
-            padding: sidebarCollapsed && window.innerWidth >= 768 ? '16px 8px' : '20px 16px',
+            padding: sidebarCollapsed && !isMobile ? '12px 8px' : isMobile ? '6px 10px' : '16px 12px',
+            minHeight: isMobile ? 'auto' : 0,
           }}
         >
           {/* Menu Section Label */}
-          {!(sidebarCollapsed && window.innerWidth >= 768) && (
+          {!(sidebarCollapsed && !isMobile) && (
             <div
               style={{
                 color: 'rgba(255, 255, 255, 0.5)',
-                fontSize: '0.75rem',
+                fontSize: isMobile ? '0.62rem' : '0.7rem',
                 fontWeight: 600,
                 textTransform: 'uppercase',
                 letterSpacing: '0.08em',
-                marginBottom: '12px',
-                paddingLeft: '12px',
+                marginBottom: isMobile ? '3px' : '8px',
+                paddingLeft: isMobile ? '8px' : '12px',
               }}
             >
               Main Menu
@@ -1644,26 +1635,28 @@ const Sidebar = () => {
                 key={item.id}
                 onClick={() => {
                   setActiveTab(item.id as TabType);
-                  if (window.innerWidth < 768) setSidebarOpen(false);
+                  if (isMobile) setSidebarOpen(false);
                 }}
                 style={{
                   width: '100%',
                   display: 'flex',
                   alignItems: 'center',
-                  justifyContent:
-                    sidebarCollapsed && window.innerWidth >= 768 ? 'center' : 'space-between',
-                  padding:
-                    sidebarCollapsed && window.innerWidth >= 768 ? '14px' : '14px 16px',
-                  marginBottom: '6px',
+                  justifyContent: sidebarCollapsed && !isMobile ? 'center' : 'space-between',
+                  padding: sidebarCollapsed && !isMobile 
+                    ? '14px' 
+                    : isMobile 
+                    ? '7px 10px' 
+                    : '10px 14px',
+                  marginBottom: isMobile ? '2px' : '4px',
                   background: isActive
                     ? 'linear-gradient(135deg, rgba(220, 53, 69, 0.15) 0%, rgba(200, 35, 51, 0.15) 100%)'
                     : 'transparent',
                   border: isActive ? '1px solid rgba(220, 53, 69, 0.3)' : '1px solid transparent',
-                  borderRadius: '10px',
+                  borderRadius: isMobile ? '6px' : '10px',
                   color: isActive ? '#dc3545' : 'rgba(255, 255, 255, 0.75)',
                   cursor: 'pointer',
                   transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
-                  fontSize: '0.95rem',
+                  fontSize: isMobile ? '0.82rem' : '0.9rem',
                   fontWeight: isActive ? 600 : 500,
                   position: 'relative',
                   overflow: 'hidden',
@@ -1684,9 +1677,9 @@ const Sidebar = () => {
                 }}
               >
                 <div style={{ display: 'flex', alignItems: 'center' }}>
-                  <Icon size={20} style={{ minWidth: '20px' }} />
-                  {!(sidebarCollapsed && window.innerWidth >= 768) && (
-                    <span style={{ marginLeft: '14px' }}>{item.label}</span>
+                  <Icon size={isMobile ? 15 : 18} style={{ minWidth: isMobile ? '15px' : '18px' }} />
+                  {!(sidebarCollapsed && !isMobile) && (
+                    <span style={{ marginLeft: isMobile ? '9px' : '14px' }}>{item.label}</span>
                   )}
                 </div>
 
@@ -1698,7 +1691,7 @@ const Sidebar = () => {
                       left: 0,
                       top: '50%',
                       transform: 'translateY(-50%)',
-                      width: '4px',
+                      width: isMobile ? '3px' : '4px',
                       height: '60%',
                       background: 'linear-gradient(180deg, #dc3545 0%, #c82333 100%)',
                       borderRadius: '0 4px 4px 0',
@@ -1714,7 +1707,7 @@ const Sidebar = () => {
             style={{
               height: '1px',
               background: 'rgba(255, 255, 255, 0.08)',
-              margin: '20px 0',
+              margin: isMobile ? '6px 0' : '12px 0',
             }}
           />
 
@@ -1722,26 +1715,28 @@ const Sidebar = () => {
           <button
             onClick={() => {
               setActiveTab('profile');
-              if (window.innerWidth < 768) setSidebarOpen(false);
+              if (isMobile) setSidebarOpen(false);
             }}
             style={{
               width: '100%',
               display: 'flex',
               alignItems: 'center',
-              justifyContent:
-                sidebarCollapsed && window.innerWidth >= 768 ? 'center' : 'flex-start',
-              padding:
-                sidebarCollapsed && window.innerWidth >= 768 ? '14px' : '14px 16px',
-              marginBottom: '6px',
+              justifyContent: sidebarCollapsed && !isMobile ? 'center' : 'flex-start',
+              padding: sidebarCollapsed && !isMobile 
+                ? '14px' 
+                : isMobile 
+                ? '7px 10px' 
+                : '10px 14px',
+              marginBottom: isMobile ? '0' : '4px',
               background: activeTab === 'profile'
                 ? 'linear-gradient(135deg, rgba(220, 53, 69, 0.15) 0%, rgba(200, 35, 51, 0.15) 100%)'
                 : 'transparent',
               border: activeTab === 'profile' ? '1px solid rgba(220, 53, 69, 0.3)' : '1px solid transparent',
-              borderRadius: '10px',
+              borderRadius: isMobile ? '6px' : '10px',
               color: activeTab === 'profile' ? '#dc3545' : 'rgba(255, 255, 255, 0.75)',
               cursor: 'pointer',
               transition: 'all 0.2s ease',
-              fontSize: '0.95rem',
+              fontSize: isMobile ? '0.82rem' : '0.9rem',
               fontWeight: activeTab === 'profile' ? 600 : 500,
             }}
             onMouseEnter={(e) => {
@@ -1757,46 +1752,50 @@ const Sidebar = () => {
               }
             }}
           >
-            <User size={20} />
-            {!(sidebarCollapsed && window.innerWidth >= 768) && (
-              <span style={{ marginLeft: '14px' }}>Profile</span>
+            <User size={isMobile ? 15 : 18} />
+            {!(sidebarCollapsed && !isMobile) && (
+              <span style={{ marginLeft: isMobile ? '9px' : '14px' }}>Profile</span>
             )}
           </button>
         </nav>
 
-        {/* User Profile Section - Bottom */}
+        {/* ===== SPACER (Desktop only) ===== */}
+        {!isMobile && <div style={{ flex: 1, minHeight: 0 }} />}
+
+        {/* ===== FOOTER ===== */}
         <div
           style={{
-            padding: sidebarCollapsed && window.innerWidth >= 768 ? '16px 12px' : '20px',
+            padding: sidebarCollapsed && !isMobile ? '16px 12px' : isMobile ? '8px 12px' : '16px',
             borderTop: '1px solid rgba(255, 255, 255, 0.08)',
             background: 'linear-gradient(180deg, transparent 0%, rgba(0, 0, 0, 0.2) 100%)',
+            flexShrink: 0,
           }}
         >
-          {!(sidebarCollapsed && window.innerWidth >= 768) ? (
+          {!(sidebarCollapsed && !isMobile) ? (
             <div>
               {/* User Info Display */}
               <div
                 style={{
                   background: 'rgba(255, 255, 255, 0.06)',
                   border: '1px solid rgba(255, 255, 255, 0.1)',
-                  padding: '14px 16px',
-                  borderRadius: '12px',
-                  marginBottom: '12px',
+                  padding: isMobile ? '7px 9px' : '10px 12px',
+                  borderRadius: isMobile ? '8px' : '10px',
+                  marginBottom: isMobile ? '5px' : '8px',
                   display: 'flex',
                   alignItems: 'center',
                 }}
               >
                 <div
                   style={{
-                    width: '40px',
-                    height: '40px',
-                    borderRadius: '10px',
+                    width: isMobile ? '30px' : '36px',
+                    height: isMobile ? '30px' : '36px',
+                    borderRadius: isMobile ? '6px' : '8px',
                     background: 'linear-gradient(135deg, #dc3545 0%, #c82333 100%)',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
-                    marginRight: '12px',
-                    fontSize: '1.1rem',
+                    marginRight: isMobile ? '7px' : '10px',
+                    fontSize: isMobile ? '0.85rem' : '1rem',
                     fontWeight: 700,
                     boxShadow: '0 4px 12px rgba(220, 53, 69, 0.3)',
                     color: 'white',
@@ -1807,12 +1806,13 @@ const Sidebar = () => {
                 <div style={{ flex: 1, overflow: 'hidden' }}>
                   <div
                     style={{
-                      fontSize: '0.95rem',
+                      fontSize: isMobile ? '0.82rem' : '0.9rem',
                       fontWeight: 600,
                       color: 'white',
                       whiteSpace: 'nowrap',
                       overflow: 'hidden',
                       textOverflow: 'ellipsis',
+                      lineHeight: 1.2,
                     }}
                   >
                     {user?.name || 'Student'}
@@ -1820,7 +1820,7 @@ const Sidebar = () => {
                   <small
                     style={{
                       color: 'rgba(255, 255, 255, 0.6)',
-                      fontSize: '0.75rem',
+                      fontSize: isMobile ? '0.63rem' : '0.7rem',
                       fontWeight: 500,
                     }}
                   >
@@ -1829,29 +1829,23 @@ const Sidebar = () => {
                 </div>
               </div>
 
-              {/* ============== LANGUAGE SWITCHER SECTION ============== */}
-              <div
-                style={{
-                  marginBottom: '12px',
-                }}
-              >
-                {/* Language Label */}
+              {/* Language Switcher */}
+              <div style={{ marginBottom: isMobile ? '5px' : '8px' }}>
                 <div
                   style={{
                     color: 'rgba(255, 255, 255, 0.5)',
-                    fontSize: '0.7rem',
+                    fontSize: isMobile ? '0.58rem' : '0.65rem',
                     fontWeight: 600,
                     textTransform: 'uppercase',
                     letterSpacing: '0.08em',
-                    marginBottom: '8px',
+                    marginBottom: isMobile ? '3px' : '5px',
                     paddingLeft: '4px',
                   }}
                 >
                   Language
                 </div>
 
-                {/* Language Buttons */}
-                <div style={{ display: 'flex', gap: '8px' }}>
+                <div style={{ display: 'flex', gap: isMobile ? '4px' : '6px' }}>
                   <button
                     onClick={() => i18n.changeLanguage('en')}
                     style={{
@@ -1863,35 +1857,21 @@ const Sidebar = () => {
                         ? '1px solid rgba(220, 53, 69, 0.4)'
                         : '1px solid rgba(255, 255, 255, 0.1)',
                       color: i18n.language === 'en' ? '#dc3545' : 'rgba(255, 255, 255, 0.7)',
-                      padding: '8px 12px',
-                      borderRadius: '8px',
+                      padding: isMobile ? '4px 5px' : '6px 8px',
+                      borderRadius: isMobile ? '6px' : '8px',
                       cursor: 'pointer',
                       transition: 'all 0.2s ease',
-                      fontSize: '0.85rem',
+                      fontSize: isMobile ? '0.72rem' : '0.8rem',
                       fontWeight: i18n.language === 'en' ? 600 : 500,
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
-                      gap: '6px',
-                    }}
-                    onMouseEnter={(e) => {
-                      if (i18n.language !== 'en') {
-                        e.currentTarget.style.background = 'rgba(255, 255, 255, 0.08)';
-                        e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.2)';
-                      }
-                    }}
-                    onMouseLeave={(e) => {
-                      if (i18n.language !== 'en') {
-                        e.currentTarget.style.background = 'rgba(255, 255, 255, 0.05)';
-                        e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.1)';
-                      }
+                      gap: isMobile ? '3px' : '4px',
                     }}
                   >
-                    <Globe size={14} />
+                    <Globe size={isMobile ? 11 : 13} />
                     <span>EN</span>
-                    {i18n.language === 'en' && (
-                      <CheckCircle size={14} style={{ marginLeft: 'auto' }} />
-                    )}
+                    {i18n.language === 'en' && <CheckCircle size={isMobile ? 10 : 12} />}
                   </button>
 
                   <button
@@ -1905,39 +1885,24 @@ const Sidebar = () => {
                         ? '1px solid rgba(220, 53, 69, 0.4)'
                         : '1px solid rgba(255, 255, 255, 0.1)',
                       color: i18n.language === 'tr' ? '#dc3545' : 'rgba(255, 255, 255, 0.7)',
-                      padding: '8px 12px',
-                      borderRadius: '8px',
+                      padding: isMobile ? '4px 5px' : '6px 8px',
+                      borderRadius: isMobile ? '6px' : '8px',
                       cursor: 'pointer',
                       transition: 'all 0.2s ease',
-                      fontSize: '0.85rem',
+                      fontSize: isMobile ? '0.72rem' : '0.8rem',
                       fontWeight: i18n.language === 'tr' ? 600 : 500,
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
-                      gap: '6px',
-                    }}
-                    onMouseEnter={(e) => {
-                      if (i18n.language !== 'tr') {
-                        e.currentTarget.style.background = 'rgba(255, 255, 255, 0.08)';
-                        e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.2)';
-                      }
-                    }}
-                    onMouseLeave={(e) => {
-                      if (i18n.language !== 'tr') {
-                        e.currentTarget.style.background = 'rgba(255, 255, 255, 0.05)';
-                        e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.1)';
-                      }
+                      gap: isMobile ? '3px' : '4px',
                     }}
                   >
-                    <Globe size={14} />
+                    <Globe size={isMobile ? 11 : 13} />
                     <span>TR</span>
-                    {i18n.language === 'tr' && (
-                      <CheckCircle size={14} style={{ marginLeft: 'auto' }} />
-                    )}
+                    {i18n.language === 'tr' && <CheckCircle size={isMobile ? 10 : 12} />}
                   </button>
                 </div>
               </div>
-              {/* ============== END LANGUAGE SWITCHER ============== */}
 
               {/* Logout Button */}
               <button
@@ -1947,14 +1912,14 @@ const Sidebar = () => {
                   background: 'rgba(220, 53, 69, 0.15)',
                   border: '1px solid rgba(220, 53, 69, 0.3)',
                   color: '#dc3545',
-                  padding: '12px',
-                  borderRadius: '10px',
+                  padding: isMobile ? '7px' : '10px',
+                  borderRadius: isMobile ? '6px' : '8px',
                   cursor: 'pointer',
                   transition: 'all 0.2s ease',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  fontSize: '0.95rem',
+                  fontSize: isMobile ? '0.82rem' : '0.9rem',
                   fontWeight: 600,
                 }}
                 onMouseEnter={(e) => {
@@ -1964,14 +1929,13 @@ const Sidebar = () => {
                   e.currentTarget.style.background = 'rgba(220, 53, 69, 0.15)';
                 }}
               >
-                <LogOut size={18} style={{ marginRight: '8px' }} />
+                <LogOut size={isMobile ? 14 : 16} style={{ marginRight: isMobile ? '6px' : '8px' }} />
                 Logout
               </button>
             </div>
           ) : (
             // Collapsed state - Just icons
             <div>
-              {/* Language Icon Button - Collapsed */}
               <button
                 onClick={() => i18n.changeLanguage(i18n.language === 'en' ? 'tr' : 'en')}
                 title={`Switch to ${i18n.language === 'en' ? 'Turkish' : 'English'}`}
@@ -1989,19 +1953,10 @@ const Sidebar = () => {
                   justifyContent: 'center',
                   marginBottom: '8px',
                 }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.background = 'rgba(255, 255, 255, 0.1)';
-                  e.currentTarget.style.color = '#ffffff';
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.background = 'rgba(255, 255, 255, 0.06)';
-                  e.currentTarget.style.color = 'rgba(255, 255, 255, 0.75)';
-                }}
               >
-                <Globe size={20} />
+                <Globe size={18} />
               </button>
 
-              {/* Logout Icon Button - Collapsed */}
               <button
                 onClick={onLogout}
                 title="Logout"
@@ -2018,14 +1973,8 @@ const Sidebar = () => {
                   alignItems: 'center',
                   justifyContent: 'center',
                 }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.background = 'rgba(220, 53, 69, 0.25)';
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.background = 'rgba(220, 53, 69, 0.15)';
-                }}
               >
-                <LogOut size={20} />
+                <LogOut size={18} />
               </button>
             </div>
           )}
@@ -2601,22 +2550,53 @@ const Sidebar = () => {
                     </div>
 
                     <div className="col-md-6">
-                      <label className="form-label fw-semibold">Emergency Contact Relationship <span className="text-danger">*</span></label>
-                      <select
-                        className="form-select form-select-custom form-select-lg"
-                        value={userProfile.emergency_contact_relationship || ''}  // ✅ Add || '' fallback
-                        onChange={(e) => setUserProfile({...userProfile, emergency_contact_relationship: e.target.value})}
-                        required
-                      >
-                        <option value="">Select relationship</option>
-                        <option value="parent">Parent</option>
-                        <option value="guardian">Guardian</option>
-                        <option value="spouse">Spouse</option>
-                        <option value="sibling">Sibling</option>
-                        <option value="friend">Friend</option>
-                        <option value="other">Other</option>
-                      </select>
-                    </div>
+                    <label className="form-label fw-semibold">Emergency Contact Relationship <span className="text-danger">*</span></label>
+                    <Select
+                      value={[
+                        { value: '', label: 'Select relationship' },
+                        { value: 'parent', label: 'Parent' },
+                        { value: 'guardian', label: 'Guardian' },
+                        { value: 'spouse', label: 'Spouse' },
+                        { value: 'sibling', label: 'Sibling' },
+                        { value: 'friend', label: 'Friend' },
+                        { value: 'other', label: 'Other' }
+                      ].find(option => option.value === (userProfile.emergency_contact_relationship || ''))}
+                      onChange={(option) => setUserProfile({...userProfile, emergency_contact_relationship: option?.value || ''})}
+                      options={[
+                        { value: '', label: 'Select relationship' },
+                        { value: 'parent', label: 'Parent' },
+                        { value: 'guardian', label: 'Guardian' },
+                        { value: 'spouse', label: 'Spouse' },
+                        { value: 'sibling', label: 'Sibling' },
+                        { value: 'friend', label: 'Friend' },
+                        { value: 'other', label: 'Other' }
+                      ]}
+                      placeholder="Select relationship"
+                      menuPortalTarget={document.body}
+                      menuPosition="fixed"
+                      styles={{
+                        control: (base) => ({
+                          ...base,
+                          borderRadius: '0.5rem',
+                          border: '2px solid #e9ecef',
+                          minHeight: '50px'
+                        }),
+                        menu: (base) => ({
+                          ...base,
+                          maxHeight: window.innerWidth < 768 ? '200px' : '300px',
+                          zIndex: 9999
+                        }),
+                        menuList: (base) => ({
+                          ...base,
+                          maxHeight: window.innerWidth < 768 ? '200px' : '300px',
+                        }),
+                        menuPortal: (base) => ({ 
+                          ...base, 
+                          zIndex: 9999 
+                        })
+                      }}
+                    />
+                  </div>
 
                   <div className="col-md-6">
                     <label className="form-label fw-semibold">Emergency Contact Email <span className="text-danger">*</span></label>
@@ -2631,54 +2611,110 @@ const Sidebar = () => {
                   </div>
 
                   <div className="col-md-6">
-                    <label className="form-label fw-semibold">Blood Type <span className="text-danger">*</span></label>
-                    <select
-                      className="form-select form-select-custom form-select-lg"
-                      value={userProfile.blood_type || ''}  // ✅ Add || '' fallback
-                      onChange={(e) => setUserProfile({...userProfile, blood_type: e.target.value})}
-                      required
-                    >
-                      <option value="">Select blood type</option>
-                      <option value="A+">A+</option>
-                      <option value="A-">A-</option>
-                      <option value="B+">B+</option>
-                      <option value="B-">B-</option>
-                      <option value="AB+">AB+</option>
-                      <option value="AB-">AB-</option>
-                      <option value="O+">O+</option>
-                      <option value="O-">O-</option>
-                      <option value="Unknown">Unknown</option>
-                    </select>
-                  </div>
+                  <label className="form-label fw-semibold">Blood Type <span className="text-danger">*</span></label>
+                  <Select
+                    value={[
+                      { value: '', label: 'Select blood type' },
+                      { value: 'A+', label: 'A+' },
+                      { value: 'A-', label: 'A-' },
+                      { value: 'B+', label: 'B+' },
+                      { value: 'B-', label: 'B-' },
+                      { value: 'AB+', label: 'AB+' },
+                      { value: 'AB-', label: 'AB-' },
+                      { value: 'O+', label: 'O+' },
+                      { value: 'O-', label: 'O-' },
+                      { value: 'Unknown', label: 'Unknown' }
+                    ].find(option => option.value === (userProfile.blood_type || ''))}
+                    onChange={(option) => setUserProfile({...userProfile, blood_type: option?.value || ''})}
+                    options={[
+                      { value: '', label: 'Select blood type' },
+                      { value: 'A+', label: 'A+' },
+                      { value: 'A-', label: 'A-' },
+                      { value: 'B+', label: 'B+' },
+                      { value: 'B-', label: 'B-' },
+                      { value: 'AB+', label: 'AB+' },
+                      { value: 'AB-', label: 'AB-' },
+                      { value: 'O+', label: 'O+' },
+                      { value: 'O-', label: 'O-' },
+                      { value: 'Unknown', label: 'Unknown' }
+                    ]}
+                    placeholder="Select blood type"
+                    menuPortalTarget={document.body}
+                    menuPosition="fixed"
+                    styles={{
+                      control: (base) => ({
+                        ...base,
+                        borderRadius: '0.5rem',
+                        border: '2px solid #e9ecef',
+                        minHeight: '50px'
+                      }),
+                      menu: (base) => ({
+                        ...base,
+                        maxHeight: window.innerWidth < 768 ? '200px' : '300px',
+                        zIndex: 9999
+                      }),
+                      menuList: (base) => ({
+                        ...base,
+                        maxHeight: window.innerWidth < 768 ? '200px' : '300px',
+                      }),
+                      menuPortal: (base) => ({ 
+                        ...base, 
+                        zIndex: 9999 
+                      })
+                    }}
+                  />
+                </div>
 
                   <div className="col-md-6">
-                    <label className="form-label fw-semibold">Gender <span className="text-danger">*</span></label>
-                    <select
-                      className="form-select form-select-custom form-select-lg"
-                      value={userProfile.gender || ''}  // ✅ Add || '' fallback
-                      onChange={(e) => setUserProfile({...userProfile, gender: e.target.value})}
-                      required
-                    >
-                      <option value="">Select gender</option>
-                      <option value="male">Male</option>
-                      <option value="female">Female</option>
-                      <option value="other">Other</option>
-                      <option value="prefer_not_to_say">Prefer not to say</option>
-                    </select>
-                  </div>
+                  <label className="form-label fw-semibold">Gender <span className="text-danger">*</span></label>
+                  <Select
+                    value={[
+                      { value: '', label: 'Select gender' },
+                      { value: 'male', label: 'Male' },
+                      { value: 'female', label: 'Female' }
+                    ].find(option => option.value === (userProfile.gender || ''))}
+                    onChange={(option) => setUserProfile({...userProfile, gender: option?.value || ''})}
+                    options={[
+                      { value: '', label: 'Select gender' },
+                      { value: 'male', label: 'Male' },
+                      { value: 'female', label: 'Female' }
+                    ]}
+                    placeholder="Select gender"
+                    menuPortalTarget={document.body}
+                    menuPosition="fixed"
+                    styles={{
+                      control: (base) => ({
+                        ...base,
+                        borderRadius: '0.5rem',
+                        border: '2px solid #e9ecef',
+                        minHeight: '50px'
+                      }),
+                      menu: (base) => ({
+                        ...base,
+                        zIndex: 9999
+                      }),
+                      menuPortal: (base) => ({ 
+                        ...base, 
+                        zIndex: 9999 
+                      })
+                    }}
+                  />
+                </div>
 
-                    <div className="col-md-6">
-                      <label className="form-label fw-semibold">Date of Birth <span className="text-danger">*</span></label>
-                      <input
-                        type="date"
-                        className={`form-control form-control-custom form-control-lg ${
-                          userProfile.date_of_birth && !validateAge(userProfile.date_of_birth) ? 'is-invalid' : ''
-                        }`}
-                        value={userProfile.date_of_birth}
-                        onChange={(e) => handleDateOfBirthChange(e.target.value)}
-                        max={getMaxBirthDate()}
-                        required
-                      />
+                    <div className="col-md-6 col-overflow-visible">
+                     <label className="form-label fw-semibold">Date of Birth <span className="text-danger">*</span></label>
+                      <div className="date-input-wrapper">
+                        <input
+                          type="date"
+                          className={`form-control form-control-custom form-control-lg ${
+                            userProfile.date_of_birth && !validateAge(userProfile.date_of_birth) ? 'is-invalid' : ''
+                          }`}
+                          value={userProfile.date_of_birth}
+                          onChange={(e) => handleDateOfBirthChange(e.target.value)}
+                          max={getMaxBirthDate()}
+                          required
+                        />
+                      </div>
                       {userProfile.date_of_birth && !validateAge(userProfile.date_of_birth) && (
                         <div className="invalid-feedback d-block">
                           Students must be at least 16 years old to register.
@@ -2819,7 +2855,7 @@ const Sidebar = () => {
             Request New Appointment
           </h3>
         </div>
-        <div className="card-body p-4">
+        <div className="card-body p-4 card-body-overflow-visible">
           {/* Pending Appointment Warning */}
           {hasPendingAppointments() && (
             <div className="alert alert-warning-custom mb-4">
@@ -2851,23 +2887,55 @@ const Sidebar = () => {
             </div>
           )}
 
-          <div className="row g-4">
+          <div className="row g-4 row-overflow-visible">
+            {/* Select Doctor (Optional) */}
             {/* Select Doctor (Optional) */}
             <div className="col-md-6">
               <label className="form-label fw-semibold">Select Doctor (Optional)</label>
-              <select
-                className="form-select form-select-custom form-select-lg"
-                value={appointmentForm.doctor_id || ''}
-                onChange={(e) => setAppointmentForm({...appointmentForm, doctor_id: e.target.value})}
-                disabled={loading || !profileComplete}
-              >
-                <option value="">Any available doctor</option>
-                {doctors.map((doctor) => (
-                  <option key={doctor.id} value={doctor.id}>
-                    Dr. {doctor.name} - {doctor.specialization}
-                  </option>
-                ))}
-              </select>
+              <Select
+                value={[
+                  { value: '', label: 'Any available doctor' },
+                  ...doctors.map((doctor) => ({
+                    value: String(doctor.id),
+                    label: `Dr. ${doctor.name} - ${doctor.specialization}`
+                  }))
+                ].find(option => option.value === (appointmentForm.doctor_id || ''))}
+                onChange={(option) => setAppointmentForm({...appointmentForm, doctor_id: option?.value || ''})}
+                options={[
+                  { value: '', label: 'Any available doctor' },
+                  ...doctors.map((doctor) => ({
+                    value: String(doctor.id),
+                    label: `Dr. ${doctor.name} - ${doctor.specialization}`
+                  }))
+                ]}
+                isDisabled={loading || !profileComplete}
+                isClearable
+                placeholder="Any available doctor"
+                menuPortalTarget={document.body}
+                menuPosition="fixed"
+                styles={{
+                  control: (base) => ({
+                    ...base,
+                    borderRadius: '0.5rem',
+                    border: '2px solid #e9ecef',
+                    padding: '0.5rem',
+                    minHeight: '50px'
+                  }),
+                  menu: (base) => ({
+                    ...base,
+                    maxHeight: window.innerWidth < 768 ? '200px' : '300px',
+                    zIndex: 9999
+                  }),
+                  menuList: (base) => ({
+                    ...base,
+                    maxHeight: window.innerWidth < 768 ? '200px' : '300px',
+                  }),
+                  menuPortal: (base) => ({ 
+                    ...base, 
+                    zIndex: 9999 
+                  })
+                }}
+              />
               <div className="form-text">Leave blank to be assigned to any available doctor</div>
             </div>
 
@@ -2899,8 +2967,9 @@ const Sidebar = () => {
             </div>
 
             {/* Date - with clinic hours validation */}
-            <div className="col-md-6">
+            <div className="col-md-6 col-overflow-visible">
               <label className="form-label fw-semibold">Date <span className="text-danger">*</span></label>
+              <div className="date-input-wrapper">
               <input
                 type="date"
                 className={`form-control form-control-custom form-control-lg ${
@@ -2942,6 +3011,7 @@ const Sidebar = () => {
                 disabled={loading || !profileComplete}
                 required
               />
+              </div>
               {appointmentForm.date && !isWeekday(appointmentForm.date) && (
                 <div className="invalid-feedback d-block">
                   {getDateClosureReason(appointmentForm.date)}. Please select a weekday.
@@ -2955,18 +3025,37 @@ const Sidebar = () => {
             {/* Time */}
             <div className="col-md-6">
               <label className="form-label fw-semibold">Time <span className="text-danger">*</span></label>
-              <select
-                className="form-select form-select-custom form-select-lg"
-                value={appointmentForm.time}
-                onChange={(e) => setAppointmentForm({...appointmentForm, time: e.target.value})}
-                disabled={loading || !appointmentForm.date || !profileComplete}
-                required
-              >
-                <option value="">Select a time slot</option>
-                {timeSlots.map((time) => (
-                  <option key={time} value={time}>{time}</option>
-                ))}
-              </select>
+              <Select
+                value={timeSlots.map(time => ({ value: time, label: time })).find(option => option.value === appointmentForm.time)}
+                onChange={(option) => setAppointmentForm({...appointmentForm, time: option?.value || ''})}
+                options={timeSlots.map(time => ({ value: time, label: time }))}
+                isDisabled={loading || !appointmentForm.date || !profileComplete}
+                placeholder={!appointmentForm.date ? 'Select date first' : 'Select a time slot'}
+                menuPortalTarget={document.body}
+                menuPosition="fixed"
+                styles={{
+                  control: (base) => ({
+                    ...base,
+                    borderRadius: '0.5rem',
+                    border: '2px solid #e9ecef',
+                    padding: '0.5rem',
+                    minHeight: '50px'
+                  }),
+                  menu: (base) => ({
+                    ...base,
+                    maxHeight: window.innerWidth < 768 ? '200px' : '300px',
+                    zIndex: 9999
+                  }),
+                  menuList: (base) => ({
+                    ...base,
+                    maxHeight: window.innerWidth < 768 ? '200px' : '300px',
+                  }),
+                  menuPortal: (base) => ({ 
+                    ...base, 
+                    zIndex: 9999 
+                  })
+                }}
+              />
             </div>
 
             {/* Reason */}
@@ -3600,20 +3689,38 @@ const Sidebar = () => {
               </div>
               
               <div className="col-12">
-                <label className="form-label fw-semibold">New Time <span className="text-danger">*</span></label>
-                <select
-                  className="form-select form-select-custom"
-                  value={rescheduleForm.time}
-                  onChange={(e) => setRescheduleForm({...rescheduleForm, time: e.target.value})}
-                  disabled={!rescheduleForm.date}
-                  required
-                >
-                  <option value="">Select a time slot</option>
-                  {timeSlots.map((time) => (
-                    <option key={time} value={time}>{time}</option>
-                  ))}
-                </select>
-              </div>
+              <label className="form-label fw-semibold">New Time <span className="text-danger">*</span></label>
+              <Select
+                value={timeSlots.map(time => ({ value: time, label: time })).find(option => option.value === rescheduleForm.time)}
+                onChange={(option) => setRescheduleForm({...rescheduleForm, time: option?.value || ''})}
+                options={timeSlots.map(time => ({ value: time, label: time }))}
+                isDisabled={!rescheduleForm.date}
+                placeholder="Select a time slot"
+                menuPortalTarget={document.body}
+                menuPosition="fixed"
+                styles={{
+                  control: (base) => ({
+                    ...base,
+                    borderRadius: '0.5rem',
+                    border: '2px solid #e9ecef',
+                    minHeight: '45px'
+                  }),
+                  menu: (base) => ({
+                    ...base,
+                    maxHeight: window.innerWidth < 768 ? '200px' : '300px',
+                    zIndex: 9999
+                  }),
+                  menuList: (base) => ({
+                    ...base,
+                    maxHeight: window.innerWidth < 768 ? '200px' : '300px',
+                  }),
+                  menuPortal: (base) => ({ 
+                    ...base, 
+                    zIndex: 9999 
+                  })
+                }}
+              />
+            </div>
             </div>
           </div>
           
@@ -3666,8 +3773,16 @@ const Sidebar = () => {
                 <>
                   <Edit size={16} className="me-2" />
                   Reschedule Appointment
-
-                  {/* Cancel Confirmation Modal */}
+                </>
+              )}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </>
+)}
+{/* Cancel Confirmation Modal */}
                   {showCancelModal && (
                     <>
                       {/* Modal Backdrop */}
@@ -3823,15 +3938,6 @@ const Sidebar = () => {
                       </div>
                     </>
                   )}
-                </>
-              )}
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
-  </>
-)}
     </div>
     </div>
   </div>

@@ -1,0 +1,29 @@
+.date-input-wrapper {
+  position: relative;
+  z-index: 20;
+}
+
+.date-input-wrapper input[type="date"] {
+  position: relative;
+  z-index: 10;
+}
+
+.date-input-wrapper input[type="date"]::-webkit-calendar-picker-indicator {
+  position: relative;
+  z-index: 11;
+  cursor: pointer;
+}
+
+.card-body-overflow-visible {
+  overflow: visible !important;
+}
+
+.row-overflow-visible {
+  overflow: visible !important;
+}
+
+.col-overflow-visible {
+  overflow: visible !important;
+  position: relative;
+  z-index: 1;
+}

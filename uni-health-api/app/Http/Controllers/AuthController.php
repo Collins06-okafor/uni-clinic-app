@@ -12,6 +12,8 @@ use Illuminate\Validation\ValidationException;
 use App\Mail\PatientRegistrationConfirmation;
 use App\Services\NotificationService;
 use Illuminate\Support\Facades\Validator; 
+use Illuminate\Support\Str;
+use Illuminate\Auth\Events\PasswordReset;
 
 class AuthController extends Controller
 {
@@ -254,73 +256,106 @@ public function login(Request $request)
      * Send password reset link
      */
     public function forgotPassword(Request $request)
-        {
+    {
+        try {
+            // Validate the email
             $validator = Validator::make($request->all(), [
-                'email' => 'required|email|exists:users,email'
+                'email' => 'required|email|exists:users,email',
             ]);
 
             if ($validator->fails()) {
                 return response()->json([
-                    'message' => 'Validation failed',
+                    'message' => 'The provided email is not registered.',
                     'errors' => $validator->errors()
-                ], 400);
+                ], 422);
             }
 
+            // Send password reset link
             $status = Password::sendResetLink(
                 $request->only('email')
             );
 
             if ($status === Password::RESET_LINK_SENT) {
                 return response()->json([
-                    'message' => 'Password reset link sent to your email'
+                    'message' => 'Password reset link sent to your email.'
                 ], 200);
             }
 
+            // If sending failed
             return response()->json([
                 'message' => 'Unable to send reset link. Please try again.'
             ], 400);
+
+        } catch (\Exception $e) {
+            \Log::error('Forgot Password Error: ' . $e->getMessage());
+            \Log::error('Stack trace: ' . $e->getTraceAsString());
+            
+            return response()->json([
+                'message' => 'An error occurred while processing your request.',
+                'error' => config('app.debug') ? $e->getMessage() : 'Server error'
+            ], 500);
         }
+    }
     /**
      * Reset password
      */
-    public function resetPassword(Request $request)
+     public function resetPassword(Request $request)
     {
-        $validator = Validator::make($request->all(), [
-            'token' => 'required',
-            'email' => 'required|email',
-            'password' => 'required|min:8|confirmed',
-        ]);
+        try {
+            // Validate the request
+            $validator = Validator::make($request->all(), [
+                'token' => 'required',
+                'email' => 'required|email|exists:users,email',
+                'password' => 'required|min:8|confirmed',
+            ]);
 
-        if ($validator->fails()) {
-            return response()->json([
-                'message' => 'Validation failed',
-                'errors' => $validator->errors()
-            ], 400);
-        }
-
-        $status = Password::reset(
-            $request->only('email', 'password', 'password_confirmation', 'token'),
-            function ($user, $password) {
-                $user->forceFill([
-                    'password' => Hash::make($password)
-                ])->setRememberToken(Str::random(60));
-
-                $user->save();
-
-                event(new PasswordReset($user));
+            if ($validator->fails()) {
+                return response()->json([
+                    'message' => 'Validation failed',
+                    'errors' => $validator->errors()
+                ], 422);
             }
-        );
 
-        if ($status === Password::PASSWORD_RESET) {
+            // Reset the password
+            $status = Password::reset(
+                $request->only('email', 'password', 'password_confirmation', 'token'),
+                function (User $user, string $password) {
+                    $user->forceFill([
+                        'password' => Hash::make($password)
+                    ])->setRememberToken(Str::random(60));
+
+                    $user->save();
+
+                    event(new PasswordReset($user));
+                }
+            );
+
+            if ($status === Password::PASSWORD_RESET) {
+                return response()->json([
+                    'message' => 'Password has been reset successfully.'
+                ], 200);
+            }
+
+            // Handle different error statuses
+            $errorMessage = match($status) {
+                Password::INVALID_TOKEN => 'The reset token is invalid or has expired.',
+                Password::INVALID_USER => 'We could not find a user with that email address.',
+                default => 'Unable to reset password. Please try again.'
+            };
+
             return response()->json([
-                'message' => 'Password reset successfully'
-            ], 200);
-        }
+                'message' => $errorMessage
+            ], 400);
 
-        return response()->json([
-            'message' => 'Failed to reset password. The token may be invalid or expired.',
-            'status' => $status
-        ], 400);
+        } catch (\Exception $e) {
+            \Log::error('Reset Password Error: ' . $e->getMessage());
+            \Log::error('Stack trace: ' . $e->getTraceAsString());
+            
+            return response()->json([
+                'message' => 'An error occurred while resetting your password.',
+                'error' => config('app.debug') ? $e->getMessage() : 'Server error'
+            ], 500);
+        }
     }
 
 /**

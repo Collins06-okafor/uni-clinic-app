@@ -3137,17 +3137,20 @@ const AppointmentsTab = () => (
 // Professional Sidebar Component for Doctor Dashboard
 const Sidebar = () => {
   const menuItems = [
-    { id: 'dashboard', icon: BarChart3, label: t('nav.overview', 'Overview') },
+    { id: 'dashboard', icon: BarChart3, label: t('nav.overview', 'Dashboard') },
     { id: 'appointments', icon: Calendar, label: t('nav.appointments', 'Appointments') },
     { id: 'patients', icon: Users, label: t('nav.patients', 'Patients') },
     { id: 'prescriptions', icon: Pill, label: t('nav.prescriptions', 'Prescriptions') },
     { id: 'profile', icon: User, label: t('nav.profile', 'Profile') },
   ];
 
+  // Check if mobile
+  const isMobile = window.innerWidth < 768;
+
   return (
     <>
       {/* Mobile Overlay */}
-      {sidebarOpen && window.innerWidth < 768 && (
+      {sidebarOpen && isMobile && (
         <div
           style={{
             position: 'fixed',
@@ -3163,14 +3166,14 @@ const Sidebar = () => {
         />
       )}
 
-      {/* Sidebar */}
+      {/* Sidebar Container */}
       <div
         style={{
           position: 'fixed',
           top: 0,
-          left: window.innerWidth < 768 ? (sidebarOpen ? 0 : '-300px') : 0,
+          left: isMobile ? (sidebarOpen ? 0 : '-300px') : 0,
           bottom: 0,
-          width: sidebarCollapsed && window.innerWidth >= 768 ? '85px' : '280px',
+          width: sidebarCollapsed && !isMobile ? '85px' : '280px',
           background: '#1a1d29',
           boxShadow: '4px 0 24px rgba(0, 0, 0, 0.12)',
           transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
@@ -3180,30 +3183,31 @@ const Sidebar = () => {
           overflow: 'hidden',
         }}
       >
-        {/* Header */}
+        {/* ===== HEADER ===== */}
         <div
           style={{
-            padding: sidebarCollapsed && window.innerWidth >= 768 ? '24px 16px' : '24px',
+            padding: sidebarCollapsed && !isMobile ? '10px 10px' : isMobile ? '10px 14px' : '14px 16px',
             borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
             background: 'linear-gradient(135deg, #1e2230 0%, #1a1d29 100%)',
-            minHeight: '80px',
+            minHeight: isMobile ? '55px' : '65px',
+            flexShrink: 0,
           }}
         >
-          {!(sidebarCollapsed && window.innerWidth >= 768) ? (
+          {!(sidebarCollapsed && !isMobile) ? (
             <div style={{ display: 'flex', alignItems: 'center', flex: 1 }}>
               <div
                 style={{
-                  width: '48px',
-                  height: '48px',
-                  borderRadius: '12px',
+                  width: isMobile ? '35px' : '42px',
+                  height: isMobile ? '35px' : '42px',
+                  borderRadius: isMobile ? '7px' : '10px',
                   background: 'linear-gradient(135deg, #dc3545 0%, #c82333 100%)',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  marginRight: '14px',
+                  marginRight: isMobile ? '9px' : '12px',
                   boxShadow: '0 4px 12px rgba(220, 53, 69, 0.3)',
                   overflow: 'hidden',
                 }}
@@ -3212,17 +3216,32 @@ const Sidebar = () => {
                   src="/logo6.png"
                   alt="FIU Logo"
                   style={{
-                    width: '32px',
-                    height: '32px',
+                    width: isMobile ? '24px' : '28px',
+                    height: isMobile ? '24px' : '28px',
                     objectFit: 'cover',
                   }}
                 />
               </div>
               <div>
-                <h6 style={{ color: '#ffffff', margin: 0, fontSize: '1.05rem', fontWeight: 700 }}>
+                <h6
+                  style={{
+                    color: '#ffffff',
+                    margin: 0,
+                    fontSize: isMobile ? '0.9rem' : '1rem',
+                    fontWeight: 700,
+                    letterSpacing: '-0.02em',
+                    lineHeight: 1.2,
+                  }}
+                >
                   FIU Medical
                 </h6>
-                <small style={{ color: 'rgba(255, 255, 255, 0.6)', fontSize: '0.8rem', fontWeight: 500 }}>
+                <small
+                  style={{
+                    color: 'rgba(255, 255, 255, 0.6)',
+                    fontSize: isMobile ? '0.68rem' : '0.75rem',
+                    fontWeight: 500,
+                  }}
+                >
                   Doctor Portal
                 </small>
               </div>
@@ -3230,49 +3249,57 @@ const Sidebar = () => {
           ) : (
             <div
               style={{
-                width: '48px',
-                height: '48px',
-                borderRadius: '12px',
+                width: '42px',
+                height: '42px',
+                borderRadius: '10px',
                 background: 'linear-gradient(135deg, #dc3545 0%, #c82333 100%)',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
                 boxShadow: '0 4px 12px rgba(220, 53, 69, 0.3)',
                 margin: '0 auto',
+                overflow: 'hidden',
               }}
             >
-              <img src="/logo6.png" alt="FIU Logo" style={{ width: '32px', height: '32px', objectFit: 'cover' }} />
+              <img
+                src="/logo6.png"
+                alt="FIU Logo"
+                style={{
+                  width: '28px',
+                  height: '28px',
+                  objectFit: 'cover',
+                }}
+              />
             </div>
           )}
 
-          {window.innerWidth >= 768 && (
+          {/* Collapse Toggle - Desktop Only */}
+          {!isMobile && (
             <button
               onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
               style={{
                 background: 'linear-gradient(135deg, rgba(220, 53, 69, 0.15) 0%, rgba(200, 35, 51, 0.15) 100%)',
                 border: '1px solid rgba(220, 53, 69, 0.3)',
-                borderRadius: '10px',
-                width: '36px',
-                height: '36px',
+                borderRadius: '8px',
+                width: '32px',
+                height: '32px',
                 color: '#dc3545',
                 cursor: 'pointer',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
                 transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-                fontSize: '0.9rem',
+                fontSize: '0.85rem',
                 fontWeight: 700,
                 boxShadow: '0 2px 8px rgba(220, 53, 69, 0.2)',
               }}
               onMouseEnter={(e) => {
                 e.currentTarget.style.background = 'linear-gradient(135deg, rgba(220, 53, 69, 0.25) 0%, rgba(200, 35, 51, 0.25) 100%)';
                 e.currentTarget.style.transform = 'scale(1.05)';
-                e.currentTarget.style.boxShadow = '0 4px 12px rgba(220, 53, 69, 0.3)';
               }}
               onMouseLeave={(e) => {
                 e.currentTarget.style.background = 'linear-gradient(135deg, rgba(220, 53, 69, 0.15) 0%, rgba(200, 35, 51, 0.15) 100%)';
                 e.currentTarget.style.transform = 'scale(1)';
-                e.currentTarget.style.boxShadow = '0 2px 8px rgba(220, 53, 69, 0.2)';
               }}
             >
               {sidebarCollapsed ? '»' : '«'}
@@ -3280,14 +3307,37 @@ const Sidebar = () => {
           )}
         </div>
 
-        {/* Menu */}
-        <nav style={{ flex: 1, overflowY: 'auto', padding: sidebarCollapsed && window.innerWidth >= 768 ? '16px 8px' : '20px 16px' }}>
-          {!(sidebarCollapsed && window.innerWidth >= 768) && (
-            <div style={{ color: 'rgba(255, 255, 255, 0.5)', fontSize: '0.75rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '12px', paddingLeft: '12px' }}>
+        {/* ===== NAVIGATION ===== */}
+        <nav
+          style={{
+            // DESKTOP: flex:1 with overflow auto (allows scrolling if needed)
+            // MOBILE: flexShrink:0 with no overflow (compact, no scroll)
+            flex: isMobile ? 'none' : 1,
+            flexShrink: isMobile ? 0 : 1,
+            overflowY: isMobile ? 'visible' : 'auto',
+            overflowX: 'hidden',
+            padding: sidebarCollapsed && !isMobile ? '12px 8px' : isMobile ? '6px 10px' : '16px 12px',
+            minHeight: isMobile ? 'auto' : 0,
+          }}
+        >
+          {/* Menu Section Label */}
+          {!(sidebarCollapsed && !isMobile) && (
+            <div
+              style={{
+                color: 'rgba(255, 255, 255, 0.5)',
+                fontSize: isMobile ? '0.62rem' : '0.7rem',
+                fontWeight: 600,
+                textTransform: 'uppercase',
+                letterSpacing: '0.08em',
+                marginBottom: isMobile ? '3px' : '8px',
+                paddingLeft: isMobile ? '8px' : '12px',
+              }}
+            >
               Main Menu
             </div>
           )}
 
+          {/* Menu Items */}
           {menuItems.map((item) => {
             const Icon = item.icon;
             const isActive = activeTab === item.id;
@@ -3297,24 +3347,31 @@ const Sidebar = () => {
                 key={item.id}
                 onClick={() => {
                   setActiveTab(item.id);
-                  if (window.innerWidth < 768) setSidebarOpen(false);
+                  if (isMobile) setSidebarOpen(false);
                 }}
                 style={{
                   width: '100%',
                   display: 'flex',
                   alignItems: 'center',
-                  justifyContent: sidebarCollapsed && window.innerWidth >= 768 ? 'center' : 'space-between',
-                  padding: sidebarCollapsed && window.innerWidth >= 768 ? '14px' : '14px 16px',
-                  marginBottom: '6px',
-                  background: isActive ? 'linear-gradient(135deg, rgba(220, 53, 69, 0.15) 0%, rgba(200, 35, 51, 0.15) 100%)' : 'transparent',
+                  justifyContent: sidebarCollapsed && !isMobile ? 'center' : 'flex-start',
+                  padding: sidebarCollapsed && !isMobile 
+                    ? '14px' 
+                    : isMobile 
+                    ? '7px 10px' 
+                    : '10px 14px',
+                  marginBottom: isMobile ? '2px' : '4px',
+                  background: isActive
+                    ? 'linear-gradient(135deg, rgba(220, 53, 69, 0.15) 0%, rgba(200, 35, 51, 0.15) 100%)'
+                    : 'transparent',
                   border: isActive ? '1px solid rgba(220, 53, 69, 0.3)' : '1px solid transparent',
-                  borderRadius: '10px',
+                  borderRadius: isMobile ? '6px' : '10px',
                   color: isActive ? '#dc3545' : 'rgba(255, 255, 255, 0.75)',
                   cursor: 'pointer',
                   transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
-                  fontSize: '0.95rem',
+                  fontSize: isMobile ? '0.82rem' : '0.9rem',
                   fontWeight: isActive ? 600 : 500,
                   position: 'relative',
+                  overflow: 'hidden',
                 }}
                 onMouseEnter={(e) => {
                   if (!isActive) {
@@ -3332,11 +3389,13 @@ const Sidebar = () => {
                 }}
               >
                 <div style={{ display: 'flex', alignItems: 'center' }}>
-                  <Icon size={20} />
-                  {!(sidebarCollapsed && window.innerWidth >= 768) && (
-                    <span style={{ marginLeft: '14px' }}>{item.label}</span>
+                  <Icon size={isMobile ? 15 : 18} style={{ minWidth: isMobile ? '15px' : '18px' }} />
+                  {!(sidebarCollapsed && !isMobile) && (
+                    <span style={{ marginLeft: isMobile ? '9px' : '14px' }}>{item.label}</span>
                   )}
                 </div>
+
+                {/* Active Indicator */}
                 {isActive && (
                   <div
                     style={{
@@ -3344,7 +3403,7 @@ const Sidebar = () => {
                       left: 0,
                       top: '50%',
                       transform: 'translateY(-50%)',
-                      width: '4px',
+                      width: isMobile ? '3px' : '4px',
                       height: '60%',
                       background: 'linear-gradient(180deg, #dc3545 0%, #c82333 100%)',
                       borderRadius: '0 4px 4px 0',
@@ -3356,95 +3415,224 @@ const Sidebar = () => {
           })}
         </nav>
 
-        {/* User Profile */}
+        {/* ===== SPACER (Desktop only) ===== */}
+        {!isMobile && <div style={{ flex: 1, minHeight: 0 }} />}
+
+        {/* ===== FOOTER ===== */}
         <div
           style={{
-            padding: sidebarCollapsed && window.innerWidth >= 768 ? '16px 12px' : '20px',
+            padding: sidebarCollapsed && !isMobile ? '16px 12px' : isMobile ? '8px 12px' : '16px',
             borderTop: '1px solid rgba(255, 255, 255, 0.08)',
             background: 'linear-gradient(180deg, transparent 0%, rgba(0, 0, 0, 0.2) 100%)',
+            flexShrink: 0,
           }}
         >
-          {!(sidebarCollapsed && window.innerWidth >= 768) ? (
-            <div className="dropdown dropup w-100">
-              <button
-                className="btn w-100 text-start"
-                data-bs-toggle="dropdown"
+          {!(sidebarCollapsed && !isMobile) ? (
+            <div>
+              {/* User Info Display */}
+              <div
                 style={{
                   background: 'rgba(255, 255, 255, 0.06)',
                   border: '1px solid rgba(255, 255, 255, 0.1)',
-                  color: 'white',
-                  padding: '14px 16px',
-                  borderRadius: '12px',
+                  padding: isMobile ? '7px 9px' : '10px 12px',
+                  borderRadius: isMobile ? '8px' : '10px',
+                  marginBottom: isMobile ? '5px' : '8px',
                   display: 'flex',
                   alignItems: 'center',
                 }}
               >
                 <div
                   style={{
-                    width: '40px',
-                    height: '40px',
-                    borderRadius: '10px',
+                    width: isMobile ? '30px' : '36px',
+                    height: isMobile ? '30px' : '36px',
+                    borderRadius: isMobile ? '6px' : '8px',
                     background: 'linear-gradient(135deg, #dc3545 0%, #c82333 100%)',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
-                    marginRight: '12px',
-                    fontSize: '1.1rem',
+                    marginRight: isMobile ? '7px' : '10px',
+                    fontSize: isMobile ? '0.85rem' : '1rem',
                     fontWeight: 700,
+                    boxShadow: '0 4px 12px rgba(220, 53, 69, 0.3)',
+                    color: 'white',
                   }}
                 >
                   {user?.name?.charAt(0).toUpperCase() || 'D'}
                 </div>
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: '0.95rem', fontWeight: 600 }}>
+                <div style={{ flex: 1, overflow: 'hidden' }}>
+                  <div
+                    style={{
+                      fontSize: isMobile ? '0.82rem' : '0.9rem',
+                      fontWeight: 600,
+                      color: 'white',
+                      whiteSpace: 'nowrap',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      lineHeight: 1.2,
+                    }}
+                  >
                     {user?.name || 'Doctor'}
                   </div>
-                  <small style={{ opacity: 0.7, fontSize: '0.75rem' }}>
-                    {doctorProfile?.specialization || 'Medical Doctor'}
+                  <small
+                    style={{
+                      color: 'rgba(255, 255, 255, 0.6)',
+                      fontSize: isMobile ? '0.63rem' : '0.7rem',
+                      fontWeight: 500,
+                    }}
+                  >
+                    {doctorProfile?.specialization || 'Doctor Portal'}
                   </small>
                 </div>
-                <Settings size={18} style={{ opacity: 0.6 }} />
-              </button>
+              </div>
 
-              <ul className="dropdown-menu dropdown-menu-end">
-                <li><h6 className="dropdown-header">Language</h6></li>
-                <li>
-                  <button className="dropdown-item" onClick={() => i18n.changeLanguage('en')}>
-                    <Globe size={16} className="me-2" />
-                    🇺🇸 English
+              {/* Language Switcher */}
+              <div style={{ marginBottom: isMobile ? '5px' : '8px' }}>
+                <div
+                  style={{
+                    color: 'rgba(255, 255, 255, 0.5)',
+                    fontSize: isMobile ? '0.58rem' : '0.65rem',
+                    fontWeight: 600,
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.08em',
+                    marginBottom: isMobile ? '3px' : '5px',
+                    paddingLeft: '4px',
+                  }}
+                >
+                  Language
+                </div>
+
+                <div style={{ display: 'flex', gap: isMobile ? '4px' : '6px' }}>
+                  <button
+                    onClick={() => i18n.changeLanguage('en')}
+                    style={{
+                      flex: 1,
+                      background: i18n.language === 'en'
+                        ? 'linear-gradient(135deg, rgba(220, 53, 69, 0.2) 0%, rgba(200, 35, 51, 0.2) 100%)'
+                        : 'rgba(255, 255, 255, 0.05)',
+                      border: i18n.language === 'en'
+                        ? '1px solid rgba(220, 53, 69, 0.4)'
+                        : '1px solid rgba(255, 255, 255, 0.1)',
+                      color: i18n.language === 'en' ? '#dc3545' : 'rgba(255, 255, 255, 0.7)',
+                      padding: isMobile ? '4px 5px' : '6px 8px',
+                      borderRadius: isMobile ? '6px' : '8px',
+                      cursor: 'pointer',
+                      transition: 'all 0.2s ease',
+                      fontSize: isMobile ? '0.72rem' : '0.8rem',
+                      fontWeight: i18n.language === 'en' ? 600 : 500,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: isMobile ? '3px' : '4px',
+                    }}
+                  >
+                    <Globe size={isMobile ? 11 : 13} />
+                    <span>EN</span>
+                    {i18n.language === 'en' && <CheckCircle size={isMobile ? 10 : 12} />}
                   </button>
-                </li>
-                <li>
-                  <button className="dropdown-item" onClick={() => i18n.changeLanguage('tr')}>
-                    <Globe size={16} className="me-2" />
-                    🇹🇷 Türkçe
+
+                  <button
+                    onClick={() => i18n.changeLanguage('tr')}
+                    style={{
+                      flex: 1,
+                      background: i18n.language === 'tr'
+                        ? 'linear-gradient(135deg, rgba(220, 53, 69, 0.2) 0%, rgba(200, 35, 51, 0.2) 100%)'
+                        : 'rgba(255, 255, 255, 0.05)',
+                      border: i18n.language === 'tr'
+                        ? '1px solid rgba(220, 53, 69, 0.4)'
+                        : '1px solid rgba(255, 255, 255, 0.1)',
+                      color: i18n.language === 'tr' ? '#dc3545' : 'rgba(255, 255, 255, 0.7)',
+                      padding: isMobile ? '4px 5px' : '6px 8px',
+                      borderRadius: isMobile ? '6px' : '8px',
+                      cursor: 'pointer',
+                      transition: 'all 0.2s ease',
+                      fontSize: isMobile ? '0.72rem' : '0.8rem',
+                      fontWeight: i18n.language === 'tr' ? 600 : 500,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: isMobile ? '3px' : '4px',
+                    }}
+                  >
+                    <Globe size={isMobile ? 11 : 13} />
+                    <span>TR</span>
+                    {i18n.language === 'tr' && <CheckCircle size={isMobile ? 10 : 12} />}
                   </button>
-                </li>
-                <li><hr className="dropdown-divider" /></li>
-                <li>
-                  <button className="dropdown-item text-danger" onClick={onLogout}>
-                    <LogOut size={16} className="me-2" />
-                    Logout
-                  </button>
-                </li>
-              </ul>
+                </div>
+              </div>
+
+              {/* Logout Button */}
+              <button
+                onClick={onLogout}
+                style={{
+                  width: '100%',
+                  background: 'rgba(220, 53, 69, 0.15)',
+                  border: '1px solid rgba(220, 53, 69, 0.3)',
+                  color: '#dc3545',
+                  padding: isMobile ? '7px' : '10px',
+                  borderRadius: isMobile ? '6px' : '8px',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s ease',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontSize: isMobile ? '0.82rem' : '0.9rem',
+                  fontWeight: 600,
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.background = 'rgba(220, 53, 69, 0.25)';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background = 'rgba(220, 53, 69, 0.15)';
+                }}
+              >
+                <LogOut size={isMobile ? 14 : 16} style={{ marginRight: isMobile ? '6px' : '8px' }} />
+                Logout
+              </button>
             </div>
           ) : (
-            <button
-              onClick={onLogout}
-              title="Logout"
-              style={{
-                width: '100%',
-                background: 'rgba(220, 53, 69, 0.15)',
-                border: '1px solid rgba(220, 53, 69, 0.3)',
-                color: '#dc3545',
-                padding: '12px',
-                borderRadius: '10px',
-                cursor: 'pointer',
-              }}
-            >
-              <LogOut size={20} />
-            </button>
+            // Collapsed state - Just icons
+            <div>
+              <button
+                onClick={() => i18n.changeLanguage(i18n.language === 'en' ? 'tr' : 'en')}
+                title={`Switch to ${i18n.language === 'en' ? 'Turkish' : 'English'}`}
+                style={{
+                  width: '100%',
+                  background: 'rgba(255, 255, 255, 0.06)',
+                  border: '1px solid rgba(255, 255, 255, 0.1)',
+                  color: 'rgba(255, 255, 255, 0.75)',
+                  padding: '12px',
+                  borderRadius: '10px',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s ease',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  marginBottom: '8px',
+                }}
+              >
+                <Globe size={18} />
+              </button>
+
+              <button
+                onClick={onLogout}
+                title="Logout"
+                style={{
+                  width: '100%',
+                  background: 'rgba(220, 53, 69, 0.15)',
+                  border: '1px solid rgba(220, 53, 69, 0.3)',
+                  color: '#dc3545',
+                  padding: '12px',
+                  borderRadius: '10px',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s ease',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+              >
+                <LogOut size={18} />
+              </button>
+            </div>
           )}
         </div>
       </div>
