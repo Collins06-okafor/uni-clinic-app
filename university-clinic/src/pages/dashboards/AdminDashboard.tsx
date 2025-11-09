@@ -9,6 +9,7 @@ import i18n from '../../services/i18n';
 import PhoneInput from "react-phone-input-2";
 import "react-phone-input-2/lib/style.css";
 import AdminDashboardKPIs from '../../components/AdminDashboardKPIs';
+import Select from 'react-select';
 
 
 // API configuration
@@ -288,6 +289,38 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
       addNotification((error as Error).message || 'Failed to update user status', 'error');
     }
   };
+
+  // Custom styles for react-select
+const customSelectStyles = {
+  control: (provided: any, state: any) => ({
+    ...provided,
+    borderRadius: '0.375rem',
+    borderColor: state.isFocused ? '#dc3545' : '#dee2e6',
+    boxShadow: state.isFocused ? '0 0 0 0.25rem rgba(220, 53, 69, 0.25)' : 'none',
+    '&:hover': {
+      borderColor: '#dc3545',
+    },
+    minHeight: '38px',
+  }),
+  option: (provided: any, state: any) => ({
+    ...provided,
+    backgroundColor: state.isSelected ? '#dc3545' : state.isFocused ? '#fee2e2' : 'white',
+    color: state.isSelected ? 'white' : '#212529',
+    '&:hover': {
+      backgroundColor: state.isSelected ? '#dc3545' : '#fee2e2',
+    },
+  }),
+  menu: (provided: any) => ({
+    ...provided,
+    zIndex: 9999,
+    borderRadius: '0.375rem',
+    boxShadow: '0 0.5rem 1rem rgba(0, 0, 0, 0.15)',
+  }),
+  menuPortal: (provided: any) => ({
+    ...provided,
+    zIndex: 9999,
+  }),
+};
 
   // ---- Settings ----
   const fetchSettings = async () => {
@@ -580,7 +613,7 @@ const Sidebar = () => {
                   FIU Admin
                 </h6>
                 <small style={{ color: 'rgba(255, 255, 255, 0.6)', fontSize: '0.8rem', fontWeight: 500 }}>
-                  Admin Portal
+                  {t('admin.admin_portal', 'Admin Portal')}
                 </small>
               </div>
             </div>
@@ -641,7 +674,7 @@ const Sidebar = () => {
         <nav style={{ flex: 1, overflowY: 'auto', padding: sidebarCollapsed && window.innerWidth >= 768 ? '16px 8px' : '20px 16px' }}>
           {!(sidebarCollapsed && window.innerWidth >= 768) && (
             <div style={{ color: 'rgba(255, 255, 255, 0.5)', fontSize: '0.75rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '12px', paddingLeft: '12px' }}>
-              Main Menu
+              {t('admin.main_menu', 'Main Menu')}
             </div>
           )}
 
@@ -1636,230 +1669,241 @@ const renderDashboard = () => {
   );
 };
 
-const renderProfile = () => (
-  <div className="container py-4">
-    <div className="row g-4">
-      {/* Personal Information */}
-      <div className="col-lg-8">
-        <div className="rounded-4 shadow-sm bg-white">
-          <div className="px-4 py-3 rounded-top-4" style={{ background: '#ef4444', color: 'white' }}>
-            <strong><UserCog size={18} className="me-2" /> {t('admin.personal_information')}</strong>
-          </div>
-          <div className="p-4">
-            {profileLoading ? (
-              <div className="text-muted">{t('admin.loading_profile')}</div>
-            ) : (
-              <form onSubmit={saveProfile}>
-                <div className="row g-3">
-                  <div className="col-md-6">
-                    <label className="form-label">{t('admin.full_name')}</label>
-                    <input
-                      type="text"
-                      className="form-control"
-                      value={profile.name}
-                      onChange={(e) => setProfile({ ...profile, name: e.target.value })}
-                      required
-                      placeholder={t('admin.enter_name')}
-                    />
-                  </div>
-                  <div className="col-md-6">
-                    <label className="form-label">{t('admin.email_address')}</label>
-                    <input
-                      type="email"
-                      className="form-control"
-                      value={profile.email}
-                      disabled
-                    />
-                  </div>
-                  <div className="col-md-6">
-                    <label className="form-label">{t('admin.phone_number')}</label>
-                    <PhoneInput
-                      country={'tr'}
-                      value={profile.phone}
-                      onChange={(phone) => setProfile({ ...profile, phone })}
-                      placeholder={t('admin.enter_phone')}
-                      inputProps={{
-                        className: 'form-control',
-                        required: false
-                      }}
-                      containerClass="mb-3"
-                    />
-                  </div>
-                  <div className="col-md-6">
-                    <label className="form-label">{t('admin.department')}</label>
-                    <select
-                      className="form-select"
-                      value={profile.department}
-                      onChange={(e) => setProfile({ ...profile, department: e.target.value })}
-                    >
-                      <option value="">{t('admin.select_department')}</option>
-                      <option value="Administration">{t('admin.administration')}</option>
-                      <option value="Medicine">{t('admin.medicine')}</option>
-                      <option value="Nursing">{t('admin.nursing')}</option>
-                      <option value="Pharmacy">{t('admin.pharmacy')}</option>
-                      <option value="Dentistry">{t('admin.dentistry')}</option>
-                      <option value="Engineering">{t('admin.engineering')}</option>
-                      <option value="Sciences">{t('admin.sciences')}</option>
-                    </select>
-                  </div>
-                  {/*<div className="col-12">
-                    <label className="form-label">{t('admin.bio')}</label>
-                    <textarea
-                      className="form-control"
-                      rows={4}
-                      value={profile.bio}
-                      onChange={(e) => setProfile({ ...profile, bio: e.target.value })}
-                      placeholder={t('admin.tell_about_yourself')}
-                    />
-                  </div>*/}
-                </div>
+const renderProfile = () => {
+  // Department options for React Select
+  const departmentOptions = [
+    { value: '', label: t('admin.select_department') },
+    { value: 'Administration', label: t('admin.administration') },
+    { value: 'Medicine', label: t('admin.medicine') },
+    { value: 'Nursing', label: t('admin.nursing') },
+    { value: 'Pharmacy', label: t('admin.pharmacy') },
+    { value: 'Dentistry', label: t('admin.dentistry') },
+    { value: 'Engineering', label: t('admin.engineering') },
+    { value: 'Sciences', label: t('admin.sciences') },
+  ];
 
-                <div className="mt-3 text-end">
-                  <button type="submit" className="btn btn-success" disabled={profileSaving}>
-                    {profileSaving ? t('admin.saving') : t('admin.save_changes')}
-                  </button>
-                </div>
-              </form>
-            )}
+  return (
+    <div className="container py-4">
+      <div className="row g-4">
+        {/* Personal Information */}
+        <div className="col-lg-8">
+          <div className="rounded-4 shadow-sm bg-white">
+            <div className="px-4 py-3 rounded-top-4" style={{ background: '#ef4444', color: 'white' }}>
+              <strong><UserCog size={18} className="me-2" /> {t('admin.personal_information')}</strong>
+            </div>
+            <div className="p-4">
+              {profileLoading ? (
+                <div className="text-muted">{t('admin.loading_profile')}</div>
+              ) : (
+                <form onSubmit={saveProfile}>
+                  <div className="row g-3">
+                    <div className="col-md-6">
+                      <label className="form-label">{t('admin.full_name')}</label>
+                      <input
+                        type="text"
+                        className="form-control"
+                        value={profile.name}
+                        onChange={(e) => setProfile({ ...profile, name: e.target.value })}
+                        required
+                        placeholder={t('admin.enter_name')}
+                      />
+                    </div>
+                    <div className="col-md-6">
+                      <label className="form-label">{t('admin.email_address')}</label>
+                      <input
+                        type="email"
+                        className="form-control"
+                        value={profile.email}
+                        disabled
+                      />
+                    </div>
+                    <div className="col-md-6">
+                      <label className="form-label">{t('admin.phone_number')}</label>
+                      <PhoneInput
+                        country={'tr'}
+                        value={profile.phone}
+                        onChange={(phone) => setProfile({ ...profile, phone })}
+                        placeholder={t('admin.enter_phone')}
+                        inputProps={{
+                          className: 'form-control',
+                          required: false
+                        }}
+                        containerClass="mb-3"
+                      />
+                    </div>
+                    <div className="col-md-6">
+                      <label className="form-label">{t('admin.department')}</label>
+                      <Select
+                        options={departmentOptions}
+                        value={departmentOptions.find(opt => opt.value === profile.department)}
+                        onChange={(option) => setProfile({ ...profile, department: option?.value || '' })}
+                        styles={customSelectStyles}
+                        menuPortalTarget={document.body}
+                        placeholder={t('admin.select_department')}
+                      />
+                    </div>
+                    {/*<div className="col-12">
+                      <label className="form-label">{t('admin.bio')}</label>
+                      <textarea
+                        className="form-control"
+                        rows={4}
+                        value={profile.bio}
+                        onChange={(e) => setProfile({ ...profile, bio: e.target.value })}
+                        placeholder={t('admin.tell_about_yourself')}
+                      />
+                    </div>*/}
+                  </div>
+
+                  <div className="mt-3 text-end">
+                    <button type="submit" className="btn btn-success" disabled={profileSaving}>
+                      {profileSaving ? t('admin.saving') : t('admin.save_changes')}
+                    </button>
+                  </div>
+                </form>
+              )}
+            </div>
           </div>
         </div>
-      </div>
 
-      {/* Profile Picture */}
-<div className="col-lg-4">
-  <div className="rounded-4 shadow-sm bg-white">
-    <div className="px-4 py-3 rounded-top-4 d-flex align-items-center" style={{ background: '#fee2e2' }}>
-      <ImageIcon size={18} className="me-2 text-danger" />
-      <strong className="text-danger">{t('admin.profile_picture')}</strong>
-    </div>
-    <div className="p-4 text-center">
-      <ProfileAvatar size={96} className="mx-auto mb-3" />
-      <input
-        ref={fileInputRef}
-        type="file"
-        accept="image/jpeg,image/jpg,image/png,image/gif,image/webp"
-        style={{ display: 'none' }}
-        onChange={(e) => handlePhotoUpload(e.target.files?.[0] || null)}
-      />
-      <button className="btn btn-outline-danger w-100 mb-2" onClick={() => fileInputRef.current?.click()}>
-        <Upload size={16} className="me-1" /> {t('admin.upload_new_photo')}
-      </button>
-      <button className="btn btn-outline-secondary w-100 mb-3" disabled={!profileAvatar} onClick={handlePhotoRemove}>
-        <Trash2 size={16} className="me-1" /> {t('admin.remove_photo')}
-      </button>
-      
-      {/* Photo Guidelines Dropdown */}
-      <div className="accordion" id="adminPhotoGuidelines">
-        <div className="accordion-item" style={{ border: 'none', background: 'transparent' }}>
-          <h2 className="accordion-header" id="adminPhotoGuidelinesHeading">
-            <button 
-              className="accordion-button collapsed"
-              type="button" 
-              data-bs-toggle="collapse" 
-              data-bs-target="#adminPhotoGuidelinesCollapse" 
-              aria-expanded="false" 
-              aria-controls="adminPhotoGuidelinesCollapse"
-              style={{
-                background: 'transparent',
-                border: '1px solid #dee2e6',
-                borderRadius: '8px',
-                padding: '8px 16px',
-                fontSize: '0.875rem',
-                color: '#6c757d',
-                boxShadow: 'none'
-              }}
-              onFocus={(e) => {
-                e.currentTarget.style.boxShadow = '0 0 0 0.25rem rgba(220, 53, 69, 0.25)';
-                e.currentTarget.style.borderColor = '#dc3545';
-              }}
-              onBlur={(e) => {
-                e.currentTarget.style.boxShadow = 'none';
-                e.currentTarget.style.borderColor = '#dee2e6';
-              }}
-            >
-              <ImageIcon size={16} className="me-2" />
-              Photo Upload Guidelines
-            </button>
-          </h2>
-          <div 
-            id="adminPhotoGuidelinesCollapse" 
-            className="accordion-collapse collapse" 
-            aria-labelledby="adminPhotoGuidelinesHeading" 
-            data-bs-parent="#adminPhotoGuidelines"
-          >
-            <div className="accordion-body" style={{ padding: '16px 0' }}>
-              <div 
-                className="photo-requirements text-start"
-                style={{
-                  background: '#f8f9fa',
-                  border: '1px solid #e9ecef',
-                  borderRadius: '8px',
-                  padding: '16px'
-                }}
-              >
-                <div className="row g-2">
-                  <div className="col-12">
-                    <div className="d-flex align-items-start">
-                      <CheckCircle size={16} className="text-success me-2 mt-1 flex-shrink-0" />
-                      <div>
-                        <strong className="text-dark">File Types:</strong>
-                        <br />
-                        <small className="text-muted">JPEG, PNG, GIF, or WebP formats</small>
-                      </div>
-                    </div>
-                  </div>
-                  
-                  <div className="col-12">
-                    <div className="d-flex align-items-start">
-                      <CheckCircle size={16} className="text-success me-2 mt-1 flex-shrink-0" />
-                      <div>
-                        <strong className="text-dark">File Size:</strong>
-                        <br />
-                        <small className="text-muted">Maximum 5MB per file</small>
-                      </div>
-                    </div>
-                  </div>
-                  
-                  <div className="col-12">
-                    <div className="d-flex align-items-start">
-                      <CheckCircle size={16} className="text-success me-2 mt-1 flex-shrink-0" />
-                      <div>
-                        <strong className="text-dark">Dimensions:</strong>
-                        <br />
-                        <small className="text-muted">Square format (1:1 ratio) recommended</small>
-                      </div>
-                    </div>
-                  </div>
-                  
-                  <div className="col-12">
-                    <div className="d-flex align-items-start">
-                      <CheckCircle size={16} className="text-success me-2 mt-1 flex-shrink-0" />
-                      <div>
-                        <strong className="text-dark">Professional Quality:</strong>
-                        <br />
-                        <small className="text-muted">Clear, well-lit, high-resolution image</small>
-                      </div>
-                    </div>
-                  </div>
-                  
-                  <div className="col-12">
-                    <div className="d-flex align-items-start">
-                      <CheckCircle size={16} className="text-success me-2 mt-1 flex-shrink-0" />
-                      <div>
-                        <strong className="text-dark">Administrative Standards:</strong>
-                        <br />
-                        <small className="text-muted">Professional appearance suitable for administrative role</small>
-                      </div>
-                    </div>
-                  </div>
-                  
-                  <div className="col-12">
-                    <div className="d-flex align-items-start">
-                      <CheckCircle size={16} className="text-success me-2 mt-1 flex-shrink-0" />
-                      <div>
-                        <strong className="text-dark">System Usage:</strong>
-                        <br />
-                        <small className="text-muted">Appropriate for staff directory and system interface</small>
+        {/* Profile Picture */}
+        <div className="col-lg-4">
+          <div className="rounded-4 shadow-sm bg-white">
+            <div className="px-4 py-3 rounded-top-4 d-flex align-items-center" style={{ background: '#fee2e2' }}>
+              <ImageIcon size={18} className="me-2 text-danger" />
+              <strong className="text-danger">{t('admin.profile_picture')}</strong>
+            </div>
+            <div className="p-4 text-center">
+              <ProfileAvatar size={96} className="mx-auto mb-3" />
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/jpeg,image/jpg,image/png,image/gif,image/webp"
+                style={{ display: 'none' }}
+                onChange={(e) => handlePhotoUpload(e.target.files?.[0] || null)}
+              />
+              <button className="btn btn-outline-danger w-100 mb-2" onClick={() => fileInputRef.current?.click()}>
+                <Upload size={16} className="me-1" /> {t('admin.upload_new_photo')}
+              </button>
+              <button className="btn btn-outline-secondary w-100 mb-3" disabled={!profileAvatar} onClick={handlePhotoRemove}>
+                <Trash2 size={16} className="me-1" /> {t('admin.remove_photo')}
+              </button>
+              
+              {/* Photo Guidelines Dropdown */}
+              <div className="accordion" id="adminPhotoGuidelines">
+                <div className="accordion-item" style={{ border: 'none', background: 'transparent' }}>
+                  <h2 className="accordion-header" id="adminPhotoGuidelinesHeading">
+                    <button 
+                      className="accordion-button collapsed"
+                      type="button" 
+                      data-bs-toggle="collapse" 
+                      data-bs-target="#adminPhotoGuidelinesCollapse" 
+                      aria-expanded="false" 
+                      aria-controls="adminPhotoGuidelinesCollapse"
+                      style={{
+                        background: 'transparent',
+                        border: '1px solid #dee2e6',
+                        borderRadius: '8px',
+                        padding: '8px 16px',
+                        fontSize: '0.875rem',
+                        color: '#6c757d',
+                        boxShadow: 'none'
+                      }}
+                      onFocus={(e) => {
+                        e.currentTarget.style.boxShadow = '0 0 0 0.25rem rgba(220, 53, 69, 0.25)';
+                        e.currentTarget.style.borderColor = '#dc3545';
+                      }}
+                      onBlur={(e) => {
+                        e.currentTarget.style.boxShadow = 'none';
+                        e.currentTarget.style.borderColor = '#dee2e6';
+                      }}
+                    >
+                      <ImageIcon size={16} className="me-2" />
+                      Photo Upload Guidelines
+                    </button>
+                  </h2>
+                  <div 
+                    id="adminPhotoGuidelinesCollapse" 
+                    className="accordion-collapse collapse" 
+                    aria-labelledby="adminPhotoGuidelinesHeading" 
+                    data-bs-parent="#adminPhotoGuidelines"
+                  >
+                    <div className="accordion-body" style={{ padding: '16px 0' }}>
+                      <div 
+                        className="photo-requirements text-start"
+                        style={{
+                          background: '#f8f9fa',
+                          border: '1px solid #e9ecef',
+                          borderRadius: '8px',
+                          padding: '16px'
+                        }}
+                      >
+                        <div className="row g-2">
+                          <div className="col-12">
+                            <div className="d-flex align-items-start">
+                              <CheckCircle size={16} className="text-success me-2 mt-1 flex-shrink-0" />
+                              <div>
+                                <strong className="text-dark">{t('admin.file_types')}:</strong>
+                                <br />
+                                <small className="text-muted">JPEG, PNG, GIF, or WebP formats</small>
+                              </div>
+                            </div>
+                          </div>
+                          
+                          <div className="col-12">
+                            <div className="d-flex align-items-start">
+                              <CheckCircle size={16} className="text-success me-2 mt-1 flex-shrink-0" />
+                              <div>
+                                <strong className="text-dark">{t('admin.file_size')}:</strong>
+                                <br />
+                                <small className="text-muted">Maximum 5MB per file</small>
+                              </div>
+                            </div>
+                          </div>
+                          
+                          <div className="col-12">
+                            <div className="d-flex align-items-start">
+                              <CheckCircle size={16} className="text-success me-2 mt-1 flex-shrink-0" />
+                              <div>
+                                <strong className="text-dark">{t('admin.dimensions')}:</strong>
+                                <br />
+                                <small className="text-muted">Square format (1:1 ratio) recommended</small>
+                              </div>
+                            </div>
+                          </div>
+                          
+                          <div className="col-12">
+                            <div className="d-flex align-items-start">
+                              <CheckCircle size={16} className="text-success me-2 mt-1 flex-shrink-0" />
+                              <div>
+                                <strong className="text-dark">{t('admin.professional_quality')}:</strong>
+                                <br />
+                                <small className="text-muted">Clear, well-lit, high-resolution image</small>
+                              </div>
+                            </div>
+                          </div>
+                          
+                          <div className="col-12">
+                            <div className="d-flex align-items-start">
+                              <CheckCircle size={16} className="text-success me-2 mt-1 flex-shrink-0" />
+                              <div>
+                                <strong className="text-dark">{t('admin.administrative_standards')}:</strong>
+                                <br />
+                                <small className="text-muted">Professional appearance suitable for administrative role</small>
+                              </div>
+                            </div>
+                          </div>
+                          
+                          <div className="col-12">
+                            <div className="d-flex align-items-start">
+                              <CheckCircle size={16} className="text-success me-2 mt-1 flex-shrink-0" />
+                              <div>
+                                <strong className="text-dark">{t('admin.system_usage')}:</strong>
+                                <br />
+                                <small className="text-muted">Appropriate for staff directory and system interface</small>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -1870,124 +1914,148 @@ const renderProfile = () => (
         </div>
       </div>
     </div>
-  </div>
-</div>
-    </div>
-  </div>
-);
+  );
+};
 
-const renderUsers = () => (
-  <div className="container-fluid px-4 py-4">
-    {/* Filters */}
-    <div className="d-flex gap-2 align-items-center mb-3">
-      <input
-        className="form-control"
-        placeholder={t('admin.search_users')}
-        value={searchTerm}
-        onChange={(e) => setSearchTerm(e.target.value)}
-        style={{ maxWidth: 280 }}
-      />
-      <select className="form-select" style={{ maxWidth: 180 }} value={selectedRole} onChange={(e) => setSelectedRole(e.target.value)}>
-        <option value="all">{t('admin.all_roles')}</option>
-        <option value="student">{t('admin.student')}</option>
-        <option value="doctor">{t('admin.doctor')}</option>
-        <option value="nurse">{t('admin.nurse')}</option>
-        <option value="admin">{t('admin.admin')}</option>
-      </select>
-      <select className="form-select" style={{ maxWidth: 180 }} value={selectedStatus} onChange={(e) => setSelectedStatus(e.target.value)}>
-        <option value="all">{t('admin.all_status')}</option>
-        <option value="active">{t('admin.active')}</option>
-        <option value="suspended">{t('admin.suspended')}</option>
-        <option value="pending">{t('admin.pending')}</option>
-      </select>
-    </div>
+const renderUsers = () => {
+  // Role options for react-select
+  const roleOptions = [
+    { value: 'all', label: t('admin.all_roles') },
+    { value: 'student', label: t('admin.student') },
+    { value: 'doctor', label: t('admin.doctor') },
+    { value: 'nurse', label: t('admin.nurse') },
+    { value: 'admin', label: t('admin.admin') },
+  ];
+  
+  // Status options for react-select
+  const statusOptions = [
+    { value: 'all', label: t('admin.all_status') },
+    { value: 'active', label: t('admin.active') },
+    { value: 'suspended', label: t('admin.suspended') },
+    { value: 'pending', label: t('admin.pending') },
+  ];
 
-    {/* Table */}
-    <div className="table-responsive bg-white rounded-4 shadow-sm">
-      <table className="table table-hover mb-0">
-        <thead>
-          <tr>
-            <th>{t('admin.user')}</th>
-            <th>{t('admin.email')}</th>
-            <th>{t('admin.role')}</th>
-            <th>{t('admin.status')}</th>
-            <th>{t('admin.actions')}</th>
-          </tr>
-        </thead>
-        <tbody>
-          {loading ? (
-            <tr><td colSpan={5} className="text-center py-4">{t('admin.loading')}</td></tr>
-          ) : users.length === 0 ? (
-            <tr><td colSpan={5} className="text-center py-4">{t('admin.no_users_found')}</td></tr>
-          ) : users.map(u => (
-            <tr key={u.id}>
-              <td className="d-flex align-items-center gap-2">
-                {u.avatar_url ? (
-                  <img 
-                    src={u.avatar_url} 
-                    alt="" 
-                    onError={(e)=>{e.currentTarget.style.display='none';}} 
-                    className="rounded-circle" 
-                    style={{ width: 32, height: 32, objectFit: 'cover' }} 
-                  />
-                ) : (
-                  <div
-                    className="rounded-circle d-flex align-items-center justify-content-center"
-                    style={{ width: 32, height: 32, backgroundColor: '#fef2f2', color: '#e53e3e' }}
-                  >
-                    <User size={16} />
-                  </div>
-                )}
-                {u.name}
-              </td>
-              <td>{u.email}</td>
-              <td>
-                <span className={`badge ${u.role === 'admin' ? 'bg-primary' : u.role === 'doctor' ? 'bg-success' : u.role === 'student' ? 'bg-info' : 'bg-secondary'}`}>
-                  {u.role === 'student' ? t('admin.student') : 
-                   u.role === 'doctor' ? t('admin.doctor') :
-                   u.role === 'admin' ? t('admin.admin') :
-                   u.role === 'nurse' ? t('admin.nurse') : u.role}
-                </span>
-              </td>
-              <td>
-                <span className={`badge ${u.status === 'active' ? 'bg-success' : u.status === 'suspended' ? 'bg-danger' : 'bg-warning text-dark'}`}>
-                  {u.status === 'active' ? t('admin.active') :
-                   u.status === 'suspended' ? t('admin.suspended') :
-                   u.status === 'pending' ? t('admin.pending') : u.status}
-                </span>
-              </td>
-              <td className="d-flex gap-2">
-                <button className="btn btn-sm btn-outline-secondary" onClick={() => updateUserStatus(u.id, u.status === 'active' ? 'suspended' : 'active')}>
-                  {u.status === 'active' ? t('admin.suspend') : t('admin.activate')}
-                </button>
-                <button className="btn btn-sm btn-outline-danger" onClick={() => deleteUser(u.id, 'admin_action')}>
-                  {t('admin.delete')}
-                </button>
-              </td>
+  return (
+    <div className="container-fluid px-4 py-4">
+      {/* Filters */}
+      <div className="row g-2 mb-3">
+        <div className="col-lg-4 col-md-6">
+          <input
+            className="form-control"
+            placeholder={t('admin.search_users')}
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+          />
+        </div>
+        <div className="col-lg-4 col-md-6">
+          <Select
+            options={roleOptions}
+            value={roleOptions.find(opt => opt.value === selectedRole)}
+            onChange={(option) => setSelectedRole(option?.value || 'all')}
+            styles={customSelectStyles}
+            menuPortalTarget={document.body}
+            placeholder={t('admin.select_role')}
+          />
+        </div>
+        <div className="col-lg-4 col-md-6">
+          <Select
+            options={statusOptions}
+            value={statusOptions.find(opt => opt.value === selectedStatus)}
+            onChange={(option) => setSelectedStatus(option?.value || 'all')}
+            styles={customSelectStyles}
+            menuPortalTarget={document.body}
+            placeholder={t('admin.select_status')}
+          />
+        </div>
+      </div>
+
+      {/* Table */}
+      <div className="table-responsive bg-white rounded-4 shadow-sm">
+        <table className="table table-hover mb-0">
+          <thead>
+            <tr>
+              <th>{t('admin.user')}</th>
+              <th>{t('admin.email')}</th>
+              <th>{t('admin.role')}</th>
+              <th>{t('admin.status')}</th>
+              <th>{t('admin.actions')}</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
+          </thead>
+          <tbody>
+            {loading ? (
+              <tr><td colSpan={5} className="text-center py-4">{t('admin.loading')}</td></tr>
+            ) : users.length === 0 ? (
+              <tr><td colSpan={5} className="text-center py-4">{t('admin.no_users_found')}</td></tr>
+            ) : users.map(u => (
+              <tr key={u.id}>
+                <td className="d-flex align-items-center gap-2">
+                  {u.avatar_url ? (
+                    <img 
+                      src={u.avatar_url} 
+                      alt="" 
+                      onError={(e)=>{e.currentTarget.style.display='none';}} 
+                      className="rounded-circle" 
+                      style={{ width: 32, height: 32, objectFit: 'cover' }} 
+                    />
+                  ) : (
+                    <div
+                      className="rounded-circle d-flex align-items-center justify-content-center"
+                      style={{ width: 32, height: 32, backgroundColor: '#fef2f2', color: '#e53e3e' }}
+                    >
+                      <User size={16} />
+                    </div>
+                  )}
+                  {u.name}
+                </td>
+                <td>{u.email}</td>
+                <td>
+                  <span className={`badge ${u.role === 'admin' ? 'bg-primary' : u.role === 'doctor' ? 'bg-success' : u.role === 'student' ? 'bg-info' : 'bg-secondary'}`}>
+                    {u.role === 'student' ? t('admin.student') : 
+                     u.role === 'doctor' ? t('admin.doctor') :
+                     u.role === 'admin' ? t('admin.admin') :
+                     u.role === 'nurse' ? t('admin.nurse') : u.role}
+                  </span>
+                </td>
+                <td>
+                  <span className={`badge ${u.status === 'active' ? 'bg-success' : u.status === 'suspended' ? 'bg-danger' : 'bg-warning text-dark'}`}>
+                    {u.status === 'active' ? t('admin.active') :
+                     u.status === 'suspended' ? t('admin.suspended') :
+                     u.status === 'pending' ? t('admin.pending') : u.status}
+                  </span>
+                </td>
+                <td className="d-flex gap-2">
+                  <button className="btn btn-sm btn-outline-secondary" onClick={() => updateUserStatus(u.id, u.status === 'active' ? 'suspended' : 'active')}>
+                    {u.status === 'active' ? t('admin.suspend') : t('admin.activate')}
+                  </button>
+                  <button className="btn btn-sm btn-outline-danger" onClick={() => deleteUser(u.id, 'admin_action')}>
+                    {t('admin.delete')}
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
 
-    {/* Pagination */}
-    <div className="d-flex justify-content-between align-items-center mt-3">
-      <div>{t('admin.total', { count: totalUsers })}</div>
-      <div className="btn-group">
-        <button className="btn btn-outline-secondary" disabled={currentPage <= 1} onClick={() => fetchUsers(currentPage - 1)}>
-          {t('admin.prev')}
-        </button>
-        <span className="btn btn-outline-secondary disabled">{currentPage} / {totalPages}</span>
-        <button className="btn btn-outline-secondary" disabled={currentPage >= totalPages} onClick={() => fetchUsers(currentPage + 1)}>
-          {t('admin.next')}
-        </button>
+      {/* Pagination */}
+      <div className="d-flex justify-content-between align-items-center mt-3">
+        <div>{t('admin.total', { count: totalUsers })}</div>
+        <div className="btn-group">
+          <button className="btn btn-outline-secondary" disabled={currentPage <= 1} onClick={() => fetchUsers(currentPage - 1)}>
+            {t('admin.prev')}
+          </button>
+          <span className="btn btn-outline-secondary disabled">{currentPage} / {totalPages}</span>
+          <button className="btn btn-outline-secondary" disabled={currentPage >= totalPages} onClick={() => fetchUsers(currentPage + 1)}>
+            {t('admin.next')}
+          </button>
+        </div>
       </div>
     </div>
-  </div>
-);
+  );
+};
 
   const renderConfig = () => {
-  // Define timezone options
+  // Define timezone options for react-select
   const timezoneOptions = [
     { value: 'UTC-12', label: 'UTC-12 (Baker Island)' },
     { value: 'UTC-11', label: 'UTC-11 (American Samoa)' },
@@ -2016,7 +2084,7 @@ const renderUsers = () => (
     { value: 'UTC+12', label: 'UTC+12 (New Zealand)' }
   ];
 
-  // Define language options
+  // Define language options for react-select
   const languageOptions = [
     { value: 'en', label: 'English' },
     { value: 'tr', label: 'Türkçe (Turkish)' },
@@ -2030,6 +2098,13 @@ const renderUsers = () => (
     { value: 'zh', label: '中文 (Chinese)' },
     { value: 'ja', label: '日本語 (Japanese)' },
     { value: 'ko', label: '한국어 (Korean)' }
+  ];
+
+  // Encryption options for react-select
+  const encryptionOptions = [
+    { value: '', label: t('admin.none') },
+    { value: 'tls', label: 'TLS' },
+    { value: 'ssl', label: 'SSL' },
   ];
 
   // Check if settings have changes compared to original
@@ -2114,17 +2189,14 @@ const renderUsers = () => (
                   </div>
                   <div className="col-md-6">
                     <label className="form-label">{t('admin.default_language')}</label>
-                    <select
-                      className="form-select"
-                      value={g(settingsDraft, 'general.default_language', 'en')}
-                      onChange={onField('general.default_language')}
-                    >
-                      {languageOptions.map(option => (
-                        <option key={option.value} value={option.value}>
-                          {option.label}
-                        </option>
-                      ))}
-                    </select>
+                    <Select
+  options={languageOptions}
+  value={languageOptions.find(opt => opt.value === g(settingsDraft, 'general.default_language', 'en'))}
+  onChange={(option) => setSettingsDraft((prev) => setPath(prev, 'general.default_language', option?.value || 'en'))}
+  styles={customSelectStyles}
+  menuPortalTarget={document.body}
+  placeholder={t('admin.select_language')}
+/>
                   </div>
                   <div className="col-12">
                     <label className="form-label">{t('admin.site_description')}</label>
@@ -2138,17 +2210,14 @@ const renderUsers = () => (
                   </div>
                   <div className="col-md-4">
                     <label className="form-label">{t('admin.timezone')}</label>
-                    <select
-                      className="form-select"
-                      value={g(settingsDraft, 'general.timezone', 'UTC+3')}
-                      onChange={onField('general.timezone')}
-                    >
-                      {timezoneOptions.map(option => (
-                        <option key={option.value} value={option.value}>
-                          {option.label}
-                        </option>
-                      ))}
-                    </select>
+                    <Select
+  options={timezoneOptions}
+  value={timezoneOptions.find(opt => opt.value === g(settingsDraft, 'general.timezone', 'UTC+3'))}
+  onChange={(option) => setSettingsDraft((prev) => setPath(prev, 'general.timezone', option?.value || 'UTC+3'))}
+  styles={customSelectStyles}
+  menuPortalTarget={document.body}
+  placeholder={t('admin.select_timezone')}
+/>
                   </div>
                   <div className="col-md-8 d-flex align-items-center gap-4">
                     <div className="form-check">
@@ -2303,15 +2372,14 @@ const renderUsers = () => (
                   </div>
                   <div className="col-md-3">
                     <label className="form-label">{t('admin.encryption')}</label>
-                    <select
-                      className="form-select"
-                      value={g(settingsDraft, 'email.smtp_encryption', 'tls')}
-                      onChange={onField('email.smtp_encryption')}
-                    >
-                      <option value="">{t('admin.none')}</option>
-                      <option value="tls">TLS</option>
-                      <option value="ssl">SSL</option>
-                    </select>
+                    <Select
+  options={encryptionOptions}
+  value={encryptionOptions.find(opt => opt.value === g(settingsDraft, 'email.smtp_encryption', 'tls'))}
+  onChange={(option) => setSettingsDraft((prev) => setPath(prev, 'email.smtp_encryption', option?.value || ''))}
+  styles={customSelectStyles}
+  menuPortalTarget={document.body}
+  placeholder={t('admin.select_encryption')}
+/>
                   </div>
                   <div className="col-md-6">
                     <label className="form-label">{t('admin.from_address')}</label>

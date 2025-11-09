@@ -527,12 +527,12 @@ useEffect(() => {
   const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif'];
   
   if (file.size > maxSize) {
-  showMessage('error', 'File size must be less than 5MB. Please choose a smaller image.');
+  showMessage('error', t('academic.file_too_large'));
   return;
 }
 
 if (!allowedTypes.includes(file.type)) {
-  showMessage('error', 'Invalid file type. Please upload a JPEG, PNG, GIF, or WebP image.');
+  showMessage('error', t('academic.invalid_file_type'));
   return;
 }
   
@@ -556,7 +556,7 @@ if (!allowedTypes.includes(file.type)) {
       showMessage('success', 'Profile photo updated successfully!');
     } else {
       const errorData = await response.json().catch(() => ({}));
-      showMessage('error', errorData.message || 'Failed to upload photo');
+      showMessage('error', errorData.message || t('academic.photo_upload_failed'));
     }
   } catch (error) {
     console.error('Error uploading photo:', error);
@@ -568,7 +568,7 @@ if (!allowedTypes.includes(file.type)) {
 };
 
   const handlePhotoRemove = async (): Promise<void> => {
-  if (!window.confirm('Are you sure you want to remove your profile photo?')) return;
+  if (!window.confirm(t('academic.confirm_remove_photo'))) return;
   
   setProfileSaving(true);
   try {
@@ -585,7 +585,7 @@ if (!allowedTypes.includes(file.type)) {
       showMessage('success', 'Profile photo removed successfully!');
     } else {
       const errorData = await response.json().catch(() => ({}));
-      showMessage('error', errorData.message || 'Failed to remove photo');
+      showMessage('error', errorData.message || t('academic.photo_remove_failed'));
     }
   } catch (error) {
     console.error('Error removing photo:', error);
@@ -782,13 +782,12 @@ if (!allowedTypes.includes(file.type)) {
   e.preventDefault();
   
   if (!appointmentForm.date || !appointmentForm.time || !appointmentForm.reason) {
-    showMessage('error', 'Please fill in all required fields (date, time, and reason).');
+    showMessage('error', t('academic.fill_required_fields'));
     return;
   }
 
-  // Validate date is a weekday
   if (!isWeekday(appointmentForm.date)) {
-    showMessage('error', getDateClosureReason(appointmentForm.date) + '. Please select a weekday (Monday-Friday).');
+    showMessage('error', getDateClosureReason(appointmentForm.date) + '. ' + t('academic.select_weekday'));
     return;
   }
 
@@ -821,7 +820,7 @@ if (!allowedTypes.includes(file.type)) {
       setAvailableSlots([]);
       
       // Show success message
-      showMessage('success', data.message || 'Appointment scheduled successfully!');
+      showMessage('success', data.message || t('academic.appointment_scheduled'));
       
       // Refresh appointments if on that tab
       if (activeTab === 'appointments') {
@@ -836,7 +835,7 @@ if (!allowedTypes.includes(file.type)) {
       // Auto-hide success message after 5 seconds
       setTimeout(() => setMessage({ type: '', text: '' }), 5000);
     } else {
-      showMessage('error', data.message || 'Failed to schedule appointment');
+      showMessage('error', data.message || t('academic.appointment_schedule_failed'));
       setTimeout(() => setMessage({ type: '', text: '' }), 5000);
     }
   } catch (error) {
@@ -927,13 +926,13 @@ const formatTime = (timeString: string): string => {
   };
 
   const getDateClosureReason = (dateString: string): string => {
-    const date = new Date(dateString);
-    const day = date.getDay();
-    
-    if (day === 0) return 'Clinic is closed on Sundays';
-    if (day === 6) return 'Clinic is closed on Saturdays';
-    return 'Clinic is not operating on this date';
-  };
+  const date = new Date(dateString);
+  const day = date.getDay();
+  
+  if (day === 0) return t('academic.clinic_closed_sundays');
+  if (day === 6) return t('academic.clinic_closed_saturdays');
+  return t('academic.clinic_not_operating');
+};
 
   const handleCancelAppointment = async (appointmentId: string): Promise<void> => {
   setLoading(true);
@@ -1055,10 +1054,10 @@ const getCancelDisabledReason = (status: string): string => {
   // ==================== SIDEBAR COMPONENT ====================
 const Sidebar = () => {
   const menuItems = [
-    { id: 'overview', icon: BarChart3, label: 'Dashboard' },
-    { id: 'schedule', icon: Calendar, label: 'Book Appointment' },
-    { id: 'appointments', icon: History, label: 'My Appointments' },
-    { id: 'medical-history', icon: FileText, label: 'Medical Records' },
+    { id: 'overview', icon: BarChart3, label: t('academic.dashboard') },
+    { id: 'schedule', icon: Calendar, label: t('academic.book_appointment') },
+    { id: 'appointments', icon: History, label: t('academic.my_appointments') },
+    { id: 'medical-history', icon: FileText, label: t('academic.medical_records') },
   ];
 
   const isMobile = window.innerWidth < 768;
@@ -1132,7 +1131,7 @@ const Sidebar = () => {
                   FIU Medical
                 </h6>
                 <small style={{ color: 'rgba(255, 255, 255, 0.6)', fontSize: isMobile ? '0.68rem' : '0.75rem' }}>
-                  Academic Staff Portal
+                  {t('academic.academic_staff_portal')}
                 </small>
               </div>
             </div>
@@ -1182,7 +1181,7 @@ const Sidebar = () => {
           style={{
             flex: isMobile ? 'none' : 1,
             flexShrink: isMobile ? 0 : 1,
-            overflowY: isMobile ? 'visible' : 'auto',
+            overflowY: 'visible',
             overflowX: 'hidden',
             padding: sidebarCollapsed && !isMobile ? '12px 8px' : isMobile ? '6px 10px' : '16px 12px',
             minHeight: isMobile ? 'auto' : 0,
@@ -1309,7 +1308,7 @@ const Sidebar = () => {
           >
             <User size={isMobile ? 15 : 18} />
             {!(sidebarCollapsed && !isMobile) && (
-              <span style={{ marginLeft: isMobile ? '9px' : '14px' }}>Profile</span>
+              <span style={{ marginLeft: isMobile ? '9px' : '14px' }}>{t('nav.profile')}</span>
             )}
           </button>
         </nav>
@@ -1367,10 +1366,10 @@ const Sidebar = () => {
                       lineHeight: 1.2,
                     }}
                   >
-                    {user?.name || 'Staff'}
+                    {user?.name || t('academic.academic_staff')}
                   </div>
                   <small style={{ color: 'rgba(255, 255, 255, 0.6)', fontSize: isMobile ? '0.63rem' : '0.7rem' }}>
-                    Academic Staff
+                    {t('academic.academic_staff')}
                   </small>
                 </div>
               </div>
@@ -1387,7 +1386,7 @@ const Sidebar = () => {
                     paddingLeft: '4px',
                   }}
                 >
-                  Language
+                 {t('academic.language')}
                 </div>
                 <div style={{ display: 'flex', gap: isMobile ? '4px' : '6px' }}>
                   <button
@@ -1469,7 +1468,7 @@ const Sidebar = () => {
                 }}
               >
                 <LogOut size={isMobile ? 14 : 16} style={{ marginRight: isMobile ? '6px' : '8px' }} />
-                Logout
+                {t('academic.logout')}
               </button>
             </div>
           ) : (
@@ -1604,98 +1603,96 @@ const Sidebar = () => {
 
         {/* Overview Tab */}
         {activeTab === 'overview' && (
-          <div className="row g-4">
-            {/* Welcome Card */}
-            <div className="col-12">
-              <div className="card shadow-sm border-0" style={{ borderRadius: '1rem', background: universityTheme.gradient }}>
-                <div className="card-body p-4 text-white">
-                  <div className="row align-items-center">
-                    <div className="col-md-8">
-                      <h3 className="mb-2">Welcome back, {user.name}!</h3>
-                      <div className="d-flex align-items-center mb-1">
-                        <Mail size={16} className="me-2 opacity-75" />
-                        <span className="opacity-90">{user.email}</span>
+        <div className="row g-4">
+          {/* Welcome Card */}
+          <div className="col-12">
+            <div className="card shadow-sm border-0" style={{ borderRadius: '1rem', background: universityTheme.gradient }}>
+              <div className="card-body p-4 text-white">
+                <div className="row align-items-center">
+                  <div className="col-md-8">
+                    <h3 className="mb-2">{t('academic.welcome_back', { name: user.name })}</h3>
+                    <div className="d-flex align-items-center mb-1">
+                      <Mail size={16} className="me-2 opacity-75" />
+                      <span className="opacity-90">{user.email}</span>
+                    </div>
+                    <div className="d-flex align-items-center mb-1">
+                      <Users size={16} className="me-2 opacity-75" />
+                      <span className="opacity-75">{t('academic.staff_no', { staffNo: user.staff_no })}</span>
+                    </div>
+                    {user.phone && (
+                      <div className="d-flex align-items-center">
+                        <Phone size={16} className="me-2 opacity-75" />
+                        <span className="opacity-75">{user.phone}</span>
                       </div>
-                      <div className="d-flex align-items-center mb-1">
-                        <Users size={16} className="me-2 opacity-75" />
-                        <span className="opacity-75">Staff No: {user.staff_no}</span>
-                      </div>
-                      {user.phone && (
-                        <div className="d-flex align-items-center">
-                          <Phone size={16} className="me-2 opacity-75" />
-                          <span className="opacity-75">{user.phone}</span>
-                        </div>
-                      )}
-                    </div> {/*
-                    <div className="col-md-4 text-end">
-                      <div className="d-flex justify-content-end">
-                        {userProfile.avatar_url ? (
-                          <AvatarDisplay 
-                            src={userProfile.avatar_url} 
-                            size={120}
-                            className="border border-white border-3"
-                            fallbackColor="#fff"
-                          />
-                        ) : (
-                          <div 
-                            className="rounded-circle d-flex align-items-center justify-content-center border border-white border-3"
-                            style={{
-                              width: '120px',
-                              height: '120px',
-                              backgroundColor: 'rgba(255, 255, 255, 0.2)',
-                              color: 'white'
-                            }}
-                          >
-                            <User size={60} className="opacity-75" />
-                          </div>
-                        )}
-                      </div>
-                    </div> */}
+                    )}
                   </div>
                 </div>
               </div>
             </div>
-
-            {/* Statistics Cards - Better mobile layout */}
-    {[
-      { icon: Calendar, value: stats.total, label: 'Total Appointments', subLabel: 'Overall count', color: universityTheme.primary },
-      { icon: CheckCircle, value: stats.completed, label: 'Completed', subLabel: 'Finished visits', color: universityTheme.secondary },
-      { icon: Clock, value: stats.pending, label: 'Pending', subLabel: 'Awaiting confirmation', color: '#ffc107' },
-      { icon: TrendingUp, value: stats.upcoming, label: 'Upcoming', subLabel: 'Scheduled ahead', color: '#17a2b8' }
-    ].map((stat, index) => (
-      <div key={index} className="col-6 col-lg-3">
-        <div className="card border-0 shadow-sm h-100" style={{ borderRadius: '1rem' }}>
-          <div className="card-body p-3 p-md-4 text-center">
-            <div 
-              className="d-inline-flex align-items-center justify-content-center mb-3"
-              style={{
-                width: 'clamp(50px, 12vw, 60px)',
-                height: 'clamp(50px, 12vw, 60px)'
-              }}
-            >
-              <stat.icon size={24} style={{ color: stat.color }} />
-            </div>
-            <h4 
-              className="fw-bold mb-1" 
-              style={{ 
-                color: stat.color,
-                fontSize: 'clamp(1.2rem, 5vw, 1.5rem)'
-              }}
-            >
-              {stat.value}
-            </h4>
-            <p className="text-muted mb-0 small">{stat.label}</p>
-            <small className="text-muted d-none d-md-block">{stat.subLabel}</small>
           </div>
-        </div>
-      </div>
-    ))}
+
+            {/* Statistics Cards */}
+            {[
+              { 
+                icon: Calendar, 
+                value: stats.total, 
+                label: t('academic.total_appointments'), 
+                subLabel: t('academic.overall_count'), 
+                color: universityTheme.primary 
+              },
+              { 
+                icon: CheckCircle, 
+                value: stats.completed, 
+                label: t('academic.completed'), 
+                subLabel: t('academic.finished_visits'), 
+                color: universityTheme.secondary 
+              },
+              { 
+                icon: Clock, 
+                value: stats.pending, 
+                label: t('academic.pending'), 
+                subLabel: t('academic.awaiting_confirmation'), 
+                color: '#ffc107' 
+              },
+              { 
+                icon: TrendingUp, 
+                value: stats.upcoming, 
+                label: t('academic.upcoming'), 
+                subLabel: t('academic.scheduled_ahead'), 
+                color: '#17a2b8' 
+              }
+            ].map((stat, index) => (
+              <div key={index} className="col-6 col-lg-3">
+                <div className="card border-0 shadow-sm h-100" style={{ borderRadius: '1rem' }}>
+                  <div className="card-body p-3 p-md-4 text-center">
+                    <div className="d-inline-flex align-items-center justify-content-center mb-3"
+                      style={{
+                        width: 'clamp(50px, 12vw, 60px)',
+                        height: 'clamp(50px, 12vw, 60px)'
+                      }}
+                    >
+                      <stat.icon size={24} style={{ color: stat.color }} />
+                    </div>
+                    <h4 className="fw-bold mb-1" 
+                      style={{ 
+                        color: stat.color,
+                        fontSize: 'clamp(1.2rem, 5vw, 1.5rem)'
+                      }}
+                    >
+                      {stat.value}
+                    </h4>
+                    <p className="text-muted mb-0 small">{stat.label}</p>
+                    <small className="text-muted d-none d-md-block">{stat.subLabel}</small>
+                  </div>
+                </div>
+              </div>
+            ))}
 
             {/* Quick Actions */}
             <div className="col-12">
               <div className="card shadow-sm border-0" style={{ borderRadius: '1rem' }}>
                 <div className="card-header bg-white border-0 pb-0">
-                  <h5 className="fw-bold mb-0">Quick Actions</h5>
+                  <h5 className="fw-bold mb-0">{t('academic.quick_actions')}</h5>
                 </div>
                 <div className="card-body p-4">
                   <div className="row g-3">
@@ -1724,8 +1721,8 @@ const Sidebar = () => {
                         }}
                       >
                         <Calendar size={24} className="mb-2" />
-                        <div className="fw-semibold">Schedule Appointment</div>
-                        <small className="opacity-75">Book a new medical appointment</small>
+                        <div className="fw-semibold">{t('academic.schedule_appointment')}</div>
+                        <small className="opacity-75">{t('academic.book_new_appointment')}</small>
                       </button>
                     </div>
                     
@@ -1756,8 +1753,8 @@ const Sidebar = () => {
                         }}
                       >
                         <FileText size={24} className="mb-2" />
-                        <div className="fw-semibold">My Appointments</div>
-                        <small className="text-muted">View and manage appointments</small>
+                        <div className="fw-semibold">{t('academic.my_appointments')}</div>
+                        <small className="text-muted">{t('academic.view_manage_appointments')}</small>
                       </button>
                     </div>
                     
@@ -1788,8 +1785,8 @@ const Sidebar = () => {
                         }}
                       >
                         <History size={24} className="mb-2" />
-                        <div className="fw-semibold">Medical Records</div>
-                        <small className="text-muted">Access your health information</small>
+                        <div className="fw-semibold">{t('academic.medical_records')}</div>
+                        <small className="text-muted">{t('academic.access_health_info')}</small>
                       </button>
                     </div>
                   </div>
@@ -1804,13 +1801,13 @@ const Sidebar = () => {
     <div className="card shadow-sm border-0" style={{ borderRadius: '1rem' }}>
       <div className="card-header bg-white border-0 pb-0">
         <div className="d-flex flex-column flex-sm-row justify-content-between align-items-start align-items-sm-center gap-2">
-          <h5 className="fw-bold mb-0">Recent Appointments</h5>
+          <h5 className="fw-bold mb-0">{t('academic.recent_appointments')}</h5>
           <button 
             className="btn btn-sm btn-outline-primary align-self-start align-self-sm-auto"
             onClick={() => handleTabChange('appointments')}
             style={{ borderRadius: '0.5rem' }}
           >
-            View All
+            {t('academic.view_all')}
           </button>
         </div>
       </div>
@@ -1940,7 +1937,7 @@ const Sidebar = () => {
         }}>
           <h3 className="mb-0 fw-bold text-white d-flex align-items-center">
             <Calendar size={24} className="me-2" />
-            Request New Appointment
+            {t('academic.request_new_appointment')}
           </h3>
         </div>
         <div className="card-body p-4 card-body-overflow-visible">
@@ -1954,13 +1951,13 @@ const Sidebar = () => {
                 <div>
                   <strong style={{ color: '#856404' }}>Profile Incomplete:</strong>
                   <div style={{ color: '#856404', marginTop: '4px' }}>
-                    You must complete your profile before booking appointments.
+                    {t('academic.must_complete_profile')}
                     <button 
                       className="btn btn-sm btn-outline-warning ms-2"
                       onClick={() => setActiveTab('profile')}
                       style={{ borderRadius: '0.5rem', padding: '0.25rem 0.75rem' }}
                     >
-                      Complete Profile
+                      {t('academic.complete_profile')}
                     </button>
                   </div>
                 </div>
@@ -1971,14 +1968,14 @@ const Sidebar = () => {
               {/* Select Doctor and Urgency Level - Side by Side */}
               <div className="col-md-6">
                 <label className="form-label fw-semibold">
-                  Select Doctor (Optional)
+                  {t('academic.select_doctor')}
                 </label>
                 <Select
   value={doctorOptions.find(option => option.value === appointmentForm.doctor_id)}
   onChange={(option) => handleAppointmentFormChange('doctor_id', option?.value || '')}
   options={doctorOptions}
   isDisabled={loading || !profileComplete}
-  placeholder="Any available doctor"
+  placeholder={t('academic.any_available_doctor')}
   isClearable
   styles={{
     control: (base) => ({
@@ -2000,13 +1997,13 @@ const Sidebar = () => {
   }}
 />
                 <div className="form-text mt-2">
-                  Leave blank to be assigned to any available doctor
+                  {t('academic.leave_blank_any_doctor')}
                 </div>
               </div>
 
               <div className="col-md-6">
                 <label className="form-label fw-semibold">
-                  Urgency Level <span className="text-danger">*</span>
+                  {t('academic.urgency_level')} <span className="text-danger">*</span>
                 </label>
                 <div className="d-flex gap-2">
                   {urgencyLevels.map((level) => (
@@ -2052,7 +2049,7 @@ const Sidebar = () => {
               {/* Date - with clinic hours validation */}
 <div className="col-md-6 col-overflow-visible">
   <label className="form-label fw-semibold">
-    Date <span className="text-danger">*</span>
+    {t('academic.date')} <span className="text-danger">*</span>
   </label>
   <div className="date-input-wrapper">
     <input 
@@ -2065,7 +2062,7 @@ const Sidebar = () => {
         const selectedDate = e.target.value;
         
         if (selectedDate && !isWeekday(selectedDate)) {
-          showMessage('error', getDateClosureReason(selectedDate) + '. Please select a weekday (Monday-Friday).');
+          showMessage('error', getDateClosureReason(selectedDate) + t('academic.select_weekday'));
           return;
         }
         
@@ -2083,24 +2080,24 @@ const Sidebar = () => {
   </div>
   {appointmentForm.date && !isWeekday(appointmentForm.date) && (
     <div className="invalid-feedback d-block">
-      {getDateClosureReason(appointmentForm.date)}. Please select a weekday.
+      {getDateClosureReason(appointmentForm.date)}. {t('academic.select_weekday')}
     </div>
   )}
   <small className="form-text text-muted">
-    Clinic operates Monday-Friday, 9:00 AM - 5:00 PM
+    {t('academic.clinic_operates')}
   </small>
 </div>
 
               <div className="col-md-6">
                 <label className="form-label fw-semibold">
-                  Time <span className="text-danger">*</span>
+                  {t('academic.time')} <span className="text-danger">*</span>
                 </label>
                 <Select
   value={timeSlotOptions.find(option => option.value === appointmentForm.time)}
   onChange={(option) => handleAppointmentFormChange('time', option?.value || '')}
   options={timeSlotOptions}
   isDisabled={!appointmentForm.date || loading || !profileComplete}
-  placeholder={!appointmentForm.date ? 'Select date first' : 'Select a time slot'}
+  placeholder={!appointmentForm.date ? 'Select date first' : t('academic.select_time_slot')}
   styles={{
     control: (base) => ({
       ...base,
@@ -2125,7 +2122,7 @@ const Sidebar = () => {
               {/* Reason for Appointment - Full Width */}
               <div className="col-12">
                 <label className="form-label fw-semibold">
-                  Reason for Appointment <span className="text-danger">*</span>
+                  {t('academic.reason_for_appointment')} <span className="text-danger">*</span>
                 </label>
                 <textarea 
                   className="form-control"
@@ -2143,7 +2140,7 @@ const Sidebar = () => {
                   }}
                 />
                 <div className="form-text">
-                  {appointmentForm.reason ? appointmentForm.reason.length : 0}/500 characters
+                  {appointmentForm.reason ? appointmentForm.reason.length : 0}/500 {t('academic.characters')}
                 </div>
               </div>
 
@@ -2180,12 +2177,12 @@ const Sidebar = () => {
                   {loading ? (
                     <>
                       <span className="spinner-border spinner-border-sm me-2" role="status"></span>
-                      Scheduling...
+                      {t('academic.scheduling')}
                     </>
                   ) : (
                     <>
                       <Calendar size={20} className="me-2" />
-                      Schedule Appointment
+                      {t('academic.schedule_appointment')}
                     </>
                   )}
                 </button>
@@ -2196,7 +2193,7 @@ const Sidebar = () => {
           {/* Doctor Cards - Keep existing */}
           {doctors.length > 0 && (
             <div className="mt-5">
-              <h5 className="mb-3 fw-semibold">Available Doctors</h5>
+              <h5 className="mb-3 fw-semibold">{t('academic.available_doctors')}</h5>
               <div className="row g-3">
                 {doctors.map((doctor) => (
                   <div key={doctor.id} className="col-md-6">
@@ -2237,7 +2234,7 @@ const Sidebar = () => {
               <div className="d-flex flex-column flex-lg-row justify-content-between align-items-start align-items-lg-center gap-3">
                 <h3 className="mb-0 fw-bold text-white">
                   <History size={24} className="me-2" />
-                  Appointment History
+                  {t('academic.appointment_history')}
                 </h3>
                 <button 
                   className="btn btn-sm text-white"
@@ -2245,7 +2242,7 @@ const Sidebar = () => {
                   style={{ borderRadius: '0.5rem', border: '1px solid white' }}
                 >
                   <Calendar size={16} className="me-1" />
-                  New Appointment
+                  {t('academic.new_appointment')}
                 </button>
               </div>
             </div>
@@ -2253,22 +2250,22 @@ const Sidebar = () => {
               {loading ? (
                 <div className="text-center py-5">
                   <div className="spinner-border" style={{ color: universityTheme.primary }} role="status">
-                    <span className="visually-hidden">Loading...</span>
+                    <span className="visually-hidden">{t('common.loading')}</span>
                   </div>
-                  <p className="mt-3">Loading appointments...</p>
+                  <p className="mt-3">{t('academic.loading_appointments')}</p>
                 </div>
               ) : appointments.length === 0 ? (
                 <div className="text-center py-5">
                   <FileText size={48} className="text-muted mb-3" />
-                  <h5 className="fw-semibold">No appointments found</h5>
-                  <p className="text-muted">You haven't scheduled any appointments yet.</p>
+                  <h5 className="fw-semibold">{t('academic.no_appointments')}</h5>
+                  <p className="text-muted">{t('academic.first_appointment_message')}</p>
                   <button 
                     className="btn btn-primary mt-3"
                     onClick={() => setActiveTab('schedule')}
                     style={{ borderRadius: '0.5rem', backgroundColor: universityTheme.primary }}
                   >
                     <Calendar size={18} className="me-2" />
-                    Schedule Appointment
+                    {t('academic.schedule_appointment')}
                   </button>
                 </div>
               ) : (
@@ -2311,7 +2308,7 @@ const Sidebar = () => {
                                   onClick={() => openRescheduleModal(appointment)}
                                 >
                                   <Edit size={14} className="me-1" />
-                                  Reschedule
+                                  {t('academic.reschedule')}
                                 </button>
                               ) : (
                                 <button 
@@ -2320,7 +2317,7 @@ const Sidebar = () => {
                                   title={getRescheduleDisabledReason(appointment.status)}
                                 >
                                   <Edit size={14} className="me-1" />
-                                  Reschedule
+                                 {t('academic.reschedule')}
                                 </button>
                               )}
 
@@ -2333,7 +2330,7 @@ const Sidebar = () => {
                                   }}
                                 >
                                   <X size={14} className="me-1" />
-                                  Cancel
+                                  {t('academic.cancel')}
                                 </button>
                               ) : (
                                 <button 
@@ -2342,7 +2339,7 @@ const Sidebar = () => {
                                   title={getCancelDisabledReason(appointment.status)}
                                 >
                                   <X size={14} className="me-1" />
-                                  Cancel
+                                  {t('academic.cancel')}
                                 </button>
                               )}
                             </div>
@@ -2358,13 +2355,13 @@ const Sidebar = () => {
                       <table className="table table-hover align-middle">
                         <thead>
                           <tr>
-                            <th scope="col">Doctor</th>
-                            <th scope="col">Specialization</th>
-                            <th scope="col">Date</th>
-                            <th scope="col">Time</th>
-                            <th scope="col">Reason</th>
-                            <th scope="col">Status</th>
-                            <th scope="col">Actions</th>
+                            <th scope="col">{t('academic.doctor')}</th>
+                            <th scope="col">{t('academic.specialization')}</th>
+                            <th scope="col">{t('academic.date')}</th>
+                            <th scope="col">{t('academic.time')}</th>
+                            <th scope="col">{t('academic.reason')}</th>
+                            <th scope="col">{t('academic.status')}</th>
+                            <th scope="col">{t('academic.actions')}</th>
                           </tr>
                         </thead>
                         <tbody>
@@ -2414,7 +2411,7 @@ const Sidebar = () => {
                                         color: universityTheme.primary,
                                         backgroundColor: 'transparent'
                                       }}
-                                      title="Reschedule appointment"
+                                      title={t('academic.reschedule')}
                                     >
                                       <Edit size={16} />
                                     </button>
@@ -2437,7 +2434,7 @@ const Sidebar = () => {
                                         setShowCancelModal(true);
                                       }}
                                       style={{ borderRadius: '0.5rem' }}
-                                      title="Cancel appointment"
+                                      title={t('academic.cancel')}
                                     >
                                       <X size={16} />
                                     </button>
@@ -2475,22 +2472,22 @@ const Sidebar = () => {
               <div className="card-header border-0" style={{ background: universityTheme.gradient, borderRadius: '1rem 1rem 0 0' }}>
                 <h5 className="card-title mb-0 text-white d-flex align-items-center">
                   <UserCog size={20} className="me-2" />
-                  Personal Information
+                  {t('academic.personal_information')}
                 </h5>
               </div>
               <div className="card-body p-3 p-md-4 card-body-overflow-visible">
                 {profileLoading ? (
                   <div className="text-center py-4">
                     <div className="spinner-border text-primary mb-3" role="status">
-                      <span className="visually-hidden">Loading...</span>
+                      <span className="visually-hidden">{t('common.loading')}</span>
                     </div>
-                    <p className="text-muted">Loading profile...</p>
+                    <p className="text-muted">{t('academic.loading_profile')}</p>
                   </div>
                 ) : (
                   <form onSubmit={saveProfile}>
                     <div className="row g-3 row-overflow-visible">
                       <div className="col-12 col-md-6">
-                        <label className="form-label fw-semibold">Full Name</label>
+                        <label className="form-label fw-semibold">{t('academic.full_name')}</label>
                         <input
                           type="text"
                           className="form-control"
@@ -2501,7 +2498,7 @@ const Sidebar = () => {
                         />
                       </div>
                       <div className="col-12 col-md-6">
-                        <label className="form-label fw-semibold">Email Address</label>
+                        <label className="form-label fw-semibold">{t('academic.email_address')}</label>
                         <input
                           type="email"
                           className="form-control"
@@ -2509,10 +2506,10 @@ const Sidebar = () => {
                           disabled
                           style={{ backgroundColor: '#f8f9fa' }}
                         />
-                        <div className="form-text">Email cannot be changed</div>
+                        <div className="form-text">{t('academic.email_cannot_change')}</div>
                       </div>
                       <div className="col-12 col-md-6">
-                        <label className="form-label fw-semibold">Staff Number</label>
+                        <label className="form-label fw-semibold">{t('academic.staff_number')}</label>
                         <input
                           type="text"
                           className="form-control"
@@ -2520,12 +2517,12 @@ const Sidebar = () => {
                           disabled
                           style={{ backgroundColor: '#f8f9fa' }}
                         />
-                        <div className="form-text">Staff number cannot be changed</div>
+                        <div className="form-text">{t('academic.staff_no_cannot_change')}</div>
                       </div>
                       
                       {/* Phone Number with responsive PhoneInput */}
                       <div className="col-12 col-md-6">
-                        <label className="form-label fw-semibold">Phone Number</label>
+                        <label className="form-label fw-semibold">{t('academic.phone_number')}</label>
                         <PhoneInput
                           country={'tr'}
                           value={userProfile.phone}
@@ -2543,7 +2540,7 @@ const Sidebar = () => {
                       </div>
                       
                       <div className="col-12 col-md-6">
-                        <label className="form-label fw-semibold">Department</label>
+                        <label className="form-label fw-semibold">{t('academic.department')}</label>
                         <Select
                           value={departmentOptions.find(option => option.value === userProfile.department)}
                           onChange={(option) => setUserProfile({ ...userProfile, department: option?.value || '' })}
@@ -2572,7 +2569,7 @@ const Sidebar = () => {
 
                       {/* Date of Birth */}
 <div className="col-12 col-md-6 col-overflow-visible">
-  <label className="form-label fw-semibold">Date of Birth</label>
+  <label className="form-label fw-semibold">{t('academic.date_of_birth')}</label>
   <div className="date-input-wrapper">
     <input
       type="date"
@@ -2582,17 +2579,21 @@ const Sidebar = () => {
       max={new Date(new Date().setFullYear(new Date().getFullYear() - 18)).toISOString().split('T')[0]}
     />
   </div>
-  <div className="form-text">Must be at least 16 years old</div>
+  <div className="form-text">{t('academic.must_be_18')}</div>
 </div>
 
                       {/* Gender */}
                       <div className="col-12 col-md-6">
-                        <label className="form-label fw-semibold">Gender</label>
+                        <label className="form-label fw-semibold">{t('academic.gender')}</label>
                         <Select
                           value={genderOptions.find(option => option.value === userProfile.gender)}
                           onChange={(option) => setUserProfile({ ...userProfile, gender: option?.value || '' })}
-                          options={genderOptions}
-                          placeholder="Select gender"
+                          options={[
+                            { value: '', label: t('academic.select_gender') },
+                            { value: 'male', label: t('academic.male') },
+                            { value: 'female', label: t('academic.female') }
+                          ]}
+                          placeholder={t('academic.select_gender')}
                           styles={{
                             control: (base) => ({
                               ...base,
@@ -2610,12 +2611,12 @@ const Sidebar = () => {
 
                       {/* Blood Type */}
                       <div className="col-12 col-md-6">
-                        <label className="form-label fw-semibold">Blood Type</label>
+                        <label className="form-label fw-semibold">{t('academic.blood_type')}</label>
                         <Select
                           value={bloodTypeOptions.find(option => option.value === userProfile.blood_type)}
                           onChange={(option) => setUserProfile({ ...userProfile, blood_type: option?.value || '' })}
                           options={bloodTypeOptions}
-                          placeholder="Select blood type"
+                          placeholder={t('academic.select_blood_type')}
                           styles={{
                             control: (base) => ({
                               ...base,
@@ -2640,14 +2641,14 @@ const Sidebar = () => {
                       <div className="col-12 mt-3">
                         <h6 className="fw-bold text-primary">
                           <Stethoscope size={18} className="me-2" />
-                          Medical Information
+                          {t('academic.medical_information')}
                         </h6>
                         <hr />
                       </div>
 
                       {/* Allergies */}
                       <div className="col-12">
-                        <label className="form-label fw-semibold">Allergies</label>
+                        <label className="form-label fw-semibold">{t('academic.allergies')}</label>
                         <div className="mb-2">
                           <div className="form-check">
                             <input 
@@ -2663,7 +2664,7 @@ const Sidebar = () => {
                               })}
                             />
                             <label className="form-check-label" htmlFor="hasKnownAllergies">
-                              I have known allergies
+                              {t('academic.has_known_allergies')}
                             </label>
                           </div>
                           <div className="form-check">
@@ -2680,7 +2681,7 @@ const Sidebar = () => {
                               })}
                             />
                             <label className="form-check-label" htmlFor="allergiesUncertain">
-                              I'm not sure if I have allergies
+                              {t('academic.not_sure_allergies')}
                             </label>
                           </div>
                         </div>
@@ -2690,66 +2691,68 @@ const Sidebar = () => {
                             rows={2}
                             value={userProfile.allergies}
                             onChange={(e) => setUserProfile({ ...userProfile, allergies: e.target.value })}
-                            placeholder="List all known allergies (e.g., penicillin, nuts, etc.)"
+                            placeholder={t('academic.list_allergies')}
                           />
                         )}
                       </div>
 
                       {/* Addictions */}
                       <div className="col-12 col-md-6">
-                        <label className="form-label fw-semibold">Addictions (if any)</label>
+                        <label className="form-label fw-semibold">{t('academic.addictions')}</label>
                         <input
                           type="text"
                           className="form-control"
                           value={userProfile.addictions}
                           onChange={(e) => setUserProfile({ ...userProfile, addictions: e.target.value })}
-                          placeholder="e.g., smoking, alcohol, etc."
+                          placeholder={t('academic.addictions_placeholder')}
                         />
                       </div>
 
                       {/* Medical History */}
                       <div className="col-12">
-                        <label className="form-label fw-semibold">Medical History</label>
+                        <label className="form-label fw-semibold">{t('academic.medical_history')}</label>
                         <textarea
                           className="form-control"
                           rows={3}
                           value={userProfile.medical_history}
                           onChange={(e) => setUserProfile({ ...userProfile, medical_history: e.target.value })}
-                          placeholder="Any past medical conditions, surgeries, or chronic illnesses"
+                          placeholder={t('academic.medical_history_placeholder')}
                           maxLength={1000}
                         />
-                        <div className="form-text">{userProfile.medical_history ? userProfile.medical_history.length : 0}/1000 characters</div>
+                        <div className="form-text">
+                          {userProfile.medical_history ? userProfile.medical_history.length : 0}/1000 {t('academic.characters')}
+                        </div>
                       </div>
 
                       {/* Emergency Contact Section Header */}
                       <div className="col-12 mt-3">
                         <h6 className="fw-bold text-danger">
                           <Phone size={18} className="me-2" />
-                          Emergency Contact Information
+                          {t('academic.emergency_contact_info')}
                         </h6>
                         <hr />
                       </div>
 
                       {/* Emergency Contact Name */}
                       <div className="col-12 col-md-6">
-                        <label className="form-label fw-semibold">Emergency Contact Name</label>
+                        <label className="form-label fw-semibold">{t('academic.emergency_contact_name')}</label>
                         <input
                           type="text"
                           className="form-control"
                           value={userProfile.emergency_contact_name}
                           onChange={(e) => setUserProfile({ ...userProfile, emergency_contact_name: e.target.value })}
-                          placeholder="Full name"
+                          placeholder={t('common.full_name')}
                         />
                       </div>
 
                       {/* Emergency Contact Phone */}
                       <div className="col-12 col-md-6">
-                        <label className="form-label fw-semibold">Emergency Contact Phone</label>
+                        <label className="form-label fw-semibold">{t('academic.emergency_contact_phone')}</label>
                         <PhoneInput
                           country={'tr'}
                           value={userProfile.emergency_contact_phone}
                           onChange={(phone) => setUserProfile({ ...userProfile, emergency_contact_phone: phone })}
-                          placeholder="Enter phone number"
+                          placeholder={t('academic.enter_phone')}
                           inputProps={{
                             className: 'form-control',
                             required: false
@@ -2760,12 +2763,21 @@ const Sidebar = () => {
 
                       {/* Emergency Contact Relationship */}
                       <div className="col-12 col-md-6">
-                        <label className="form-label fw-semibold">Relationship</label>
+                        <label className="form-label fw-semibold">{t('academic.relationship')}</label>
                         <Select
                           value={relationshipOptions.find(option => option.value === userProfile.emergency_contact_relationship)}
                           onChange={(option) => setUserProfile({ ...userProfile, emergency_contact_relationship: option?.value || '' })}
-                          options={relationshipOptions}
-                          placeholder="Select relationship"
+                          options={[
+                            { value: '', label: t('academic.select_relationship') },
+                            { value: 'spouse', label: t('academic.spouse') },
+                            { value: 'parent', label: t('academic.parent') },
+                            { value: 'sibling', label: t('academic.sibling') },
+                            { value: 'child', label: t('academic.child') },
+                            { value: 'friend', label: t('academic.friend') },
+                            { value: 'colleague', label: t('academic.colleague') },
+                            { value: 'other', label: t('academic.other') }
+                          ]}
+                          placeholder={t('academic.select_relationship')}
                           styles={{
                             control: (base) => ({
                               ...base,
@@ -2783,13 +2795,13 @@ const Sidebar = () => {
 
                       {/* Emergency Contact Email */}
                       <div className="col-12 col-md-6">
-                        <label className="form-label fw-semibold">Emergency Contact Email</label>
+                        <label className="form-label fw-semibold">{t('academic.emergency_contact_email')}</label>
                         <input
                           type="email"
                           className="form-control"
                           value={userProfile.emergency_contact_email}
                           onChange={(e) => setUserProfile({ ...userProfile, emergency_contact_email: e.target.value })}
-                          placeholder="Emergency contact email"
+                          placeholder={t('academic.emergency_contact_email')}
                         />
                       </div>
                     </div>
@@ -2810,12 +2822,12 @@ const Sidebar = () => {
     {profileSaving ? (
       <>
         <span className="spinner-border spinner-border-sm me-2" role="status"></span>
-        Saving...
+        {t('academic.saving')}
       </>
     ) : (
       <>
         <Save size={18} className="me-2" />
-        Save Profile
+        {t('academic.save_profile')}
       </>
     )}
   </button>
@@ -2834,7 +2846,7 @@ const Sidebar = () => {
                   <div className="card-header border-0" style={{ background: '#fee2e2', borderRadius: '1rem 1rem 0 0' }}>
                     <h5 className="card-title mb-0 text-danger d-flex align-items-center">
                       <Camera size={20} className="me-2" />
-                      Profile Picture
+                      {t('academic.profile_picture')}
                     </h5>
                   </div>
                   <div className="card-body p-4 text-center">
@@ -2861,7 +2873,7 @@ const Sidebar = () => {
                       disabled={profileSaving}
                     >
                       <Camera size={16} className="me-1" /> 
-                      Upload New Photo
+                      {t('academic.upload_new_photo')}
                     </button>
                     
                     {userProfile.avatar_url && (
@@ -2871,11 +2883,11 @@ const Sidebar = () => {
                         disabled={profileSaving}
                       >
                         <X size={16} className="me-1" /> 
-                        Remove Photo
+                        {t('academic.remove_photo')}
                       </button>
                     )}
                     
-                    {/* Photo Guidelines Dropdown with Inline Styles */}
+                    {/* Photo Guidelines Dropdown */}
                     <div className="accordion" id="academicPhotoGuidelines">
                       <div className="accordion-item" style={{ border: 'none', background: 'transparent' }}>
                         <h2 className="accordion-header" id="academicPhotoGuidelinesHeading">
@@ -2895,17 +2907,9 @@ const Sidebar = () => {
                               color: '#6c757d',
                               boxShadow: 'none'
                             }}
-                            onFocus={(e) => {
-                              e.currentTarget.style.boxShadow = '0 0 0 0.25rem rgba(220, 53, 69, 0.25)';
-                              e.currentTarget.style.borderColor = '#dc3545';
-                            }}
-                            onBlur={(e) => {
-                              e.currentTarget.style.boxShadow = 'none';
-                              e.currentTarget.style.borderColor = '#dee2e6';
-                            }}
                           >
                             <Camera size={16} className="me-2" />
-                            Photo Upload Guidelines
+                            {t('academic.photo_upload_guidelines')}
                           </button>
                         </h2>
                         <div 
@@ -2929,9 +2933,9 @@ const Sidebar = () => {
                                   <div className="d-flex align-items-start">
                                     <CheckCircle size={16} className="text-success me-2 mt-1 flex-shrink-0" />
                                     <div>
-                                      <strong className="text-dark">File Types:</strong>
+                                      <strong className="text-dark">{t('academic.file_types')}</strong>
                                       <br />
-                                      <small className="text-muted">JPEG, PNG, GIF, or WebP formats</small>
+                                      <small className="text-muted">{t('academic.file_types_desc')}</small>
                                     </div>
                                   </div>
                                 </div>
@@ -2940,9 +2944,9 @@ const Sidebar = () => {
                                   <div className="d-flex align-items-start">
                                     <CheckCircle size={16} className="text-success me-2 mt-1 flex-shrink-0" />
                                     <div>
-                                      <strong className="text-dark">File Size:</strong>
+                                      <strong className="text-dark">{t('academic.file_size')}</strong>
                                       <br />
-                                      <small className="text-muted">Maximum 5MB per file</small>
+                                      <small className="text-muted">{t('academic.file_size_desc')}</small>
                                     </div>
                                   </div>
                                 </div>
@@ -2951,9 +2955,9 @@ const Sidebar = () => {
                                   <div className="d-flex align-items-start">
                                     <CheckCircle size={16} className="text-success me-2 mt-1 flex-shrink-0" />
                                     <div>
-                                      <strong className="text-dark">Dimensions:</strong>
+                                      <strong className="text-dark">{t('academic.dimensions')}</strong>
                                       <br />
-                                      <small className="text-muted">Square format (1:1 ratio) recommended</small>
+                                      <small className="text-muted">{t('academic.dimensions_desc')}</small>
                                     </div>
                                   </div>
                                 </div>
@@ -2962,9 +2966,9 @@ const Sidebar = () => {
                                   <div className="d-flex align-items-start">
                                     <CheckCircle size={16} className="text-success me-2 mt-1 flex-shrink-0" />
                                     <div>
-                                      <strong className="text-dark">Quality:</strong>
+                                      <strong className="text-dark">{t('academic.quality')}</strong>
                                       <br />
-                                      <small className="text-muted">Clear, well-lit, professional appearance</small>
+                                      <small className="text-muted">{t('academic.quality_desc')}</small>
                                     </div>
                                   </div>
                                 </div>
@@ -2973,9 +2977,9 @@ const Sidebar = () => {
                                   <div className="d-flex align-items-start">
                                     <CheckCircle size={16} className="text-success me-2 mt-1 flex-shrink-0" />
                                     <div>
-                                      <strong className="text-dark">Content:</strong>
+                                      <strong className="text-dark">{t('academic.content')}</strong>
                                       <br />
-                                      <small className="text-muted">Professional headshot, appropriate academic attire</small>
+                                      <small className="text-muted">{t('academic.content_desc')}</small>
                                     </div>
                                   </div>
                                 </div>
@@ -2984,9 +2988,9 @@ const Sidebar = () => {
                                   <div className="d-flex align-items-start">
                                     <CheckCircle size={16} className="text-success me-2 mt-1 flex-shrink-0" />
                                     <div>
-                                      <strong className="text-dark">Academic Standards:</strong>
+                                      <strong className="text-dark">{t('academic.academic_standards')}</strong>
                                       <br />
-                                      <small className="text-muted">Suitable for staff directory and official use</small>
+                                      <small className="text-muted">{t('academic.academic_standards_desc')}</small>
                                     </div>
                                   </div>
                                 </div>
@@ -3012,147 +3016,146 @@ const Sidebar = () => {
           )}
 
         {/* Medical History Tab - UNCHANGED */}
-        {/* Medical History Tab */}
         {activeTab === 'medical-history' && (
-          <div className="card shadow-sm border-0" style={{ borderRadius: '1rem' }}>
-            <div className="card-header" style={{ backgroundColor: universityTheme.primary, borderRadius: '1rem 1rem 0 0' }}>
-              <h3 className="mb-0 fw-bold text-white">
-                <History size={24} className="me-2" />
-                Medical History
-              </h3>
-            </div>
-            <div className="card-body p-2 p-md-4">
-              {loading ? (
-                <div className="text-center py-5">
-                  <div className="spinner-border" style={{ color: universityTheme.primary }} role="status">
-                    <span className="visually-hidden">Loading...</span>
-                  </div>
-                  <p className="mt-3">Loading medical history...</p>
+        <div className="card shadow-sm border-0" style={{ borderRadius: '1rem' }}>
+          <div className="card-header" style={{ backgroundColor: universityTheme.primary, borderRadius: '1rem 1rem 0 0' }}>
+            <h3 className="mb-0 fw-bold text-white">
+              <History size={24} className="me-2" />
+              {t('academic.medical_history_title')}
+            </h3>
+          </div>
+          <div className="card-body p-2 p-md-4">
+            {loading ? (
+              <div className="text-center py-5">
+                <div className="spinner-border" style={{ color: universityTheme.primary }} role="status">
+                  <span className="visually-hidden">{t('common.loading')}</span>
                 </div>
-              ) : medicalHistory.length === 0 ? (
-                <div className="text-center py-5">
-                  <History size={48} className="text-muted mb-3" />
-                  <h5 className="fw-semibold">No medical records found</h5>
-                  <p className="text-muted">Your medical history will appear here after your first appointment.</p>
-                </div>
-              ) : (
-                <>
-                  {/* Mobile: Card layout */}
-                  <div className="d-block d-lg-none">
-                    {medicalHistory.map((record) => (
-                      <div key={record.id} className="card mb-3 border">
-                        <div className="card-body p-3">
-                          <div className="d-flex justify-content-between align-items-start mb-2">
-                            <div className="flex-grow-1">
-                              <h6 className="mb-1 fw-semibold">{record.diagnosis}</h6>
-                              <div className="d-flex align-items-center small text-muted mb-1">
-                                <User size={12} className="me-1" />
+                <p className="mt-3">{t('academic.loading_medical_history')}</p>
+              </div>
+            ) : medicalHistory.length === 0 ? (
+              <div className="text-center py-5">
+                <History size={48} className="text-muted mb-3" />
+                <h5 className="fw-semibold">{t('academic.no_medical_records')}</h5>
+                <p className="text-muted">{t('academic.first_appointment_message')}</p>
+              </div>
+            ) : (
+              <>
+                {/* Desktop: Table layout */}
+                <div className="d-none d-lg-block">
+                  <div className="table-responsive">
+                    <table className="table table-hover align-middle">
+                      <thead>
+                        <tr>
+                          <th scope="col">{t('academic.date')}</th>
+                          <th scope="col">{t('academic.doctor')}</th>
+                          <th scope="col">{t('academic.diagnosis')}</th>
+                          <th scope="col">{t('academic.treatment')}</th>
+                          <th scope="col">{t('common.actions')}</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {medicalHistory.map((record) => (
+                          <tr key={record.id}>
+                            <td>
+                              <div className="d-flex flex-column">
+                                <span className="fw-semibold">{new Date(record.date).toLocaleDateString()}</span>
+                              </div>
+                            </td>
+                            <td>
+                              <div className="d-flex align-items-center">
+                                <User size={20} className="me-2 text-primary" />
                                 <span>Dr. {record.doctor}</span>
-                                <Calendar size={12} className="ms-3 me-1" />
-                                <span>{new Date(record.date).toLocaleDateString()}</span>
                               </div>
-                            </div>
-                          </div>
-                          
-                          <div className="mb-2">
-                            <div className="small mb-2">
-                              <strong className="text-primary">Diagnosis Details:</strong>
-                              <p className="text-muted mb-1">{record.diagnosis_details}</p>
-                            </div>
-                            <div className="small mb-2">
-                              <strong className="text-success">Treatment:</strong>
-                              <p className="text-muted mb-1">{record.treatment}</p>
-                            </div>
-                          </div>
-                          
-                          {record.prescription && record.prescription.length > 0 && (
-                            <div className="mt-2">
-                              <button 
-                                className="btn btn-sm btn-outline-primary w-100"
-                                type="button"
-                                data-bs-toggle="collapse"
-                                data-bs-target={`#prescription-mobile-${record.id}`}
-                                aria-expanded="false"
-                              >
-                                View Prescription
-                              </button>
-                              <div className="collapse mt-2" id={`prescription-mobile-${record.id}`}>
-                                <div className="card card-body bg-light">
-                                  {record.prescription.map((item, i) => (
-                                    <div key={i} className="mb-2 pb-2 border-bottom">
-                                      <div className="small"><strong>Medication:</strong> {item.medication}</div>
-                                      <div className="small"><strong>Dosage:</strong> {item.dosage}</div>
-                                      <div className="small"><strong>Frequency:</strong> {item.frequency}</div>
-                                      <div className="small"><strong>Duration:</strong> {item.duration}</div>
-                                    </div>
-                                  ))}
-                                </div>
+                            </td>
+                            <td>
+                              <div>
+                                <div className="fw-semibold">{record.diagnosis}</div>
+                                <small className="text-muted">{record.diagnosis_details}</small>
                               </div>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-
-                  {/* Desktop: Table layout */}
-                  <div className="d-none d-lg-block">
-                    <div className="table-responsive">
-                      <table className="table table-hover align-middle">
-                        <thead>
-                          <tr>
-                            <th scope="col">Date</th>
-                            <th scope="col">Doctor</th>
-                            <th scope="col">Diagnosis</th>
-                            <th scope="col">Treatment</th>
-                          
+                            </td>
+                            <td>
+                              <div className="text-truncate" style={{ maxWidth: '200px' }} title={record.treatment}>
+                                {record.treatment}
+                              </div>
+                            </td>
+                            <td>
+                              {record.prescription && record.prescription.length > 0 && (
+                                <button 
+                                  className="btn btn-sm btn-outline-primary"
+                                  type="button"
+                                  data-bs-toggle="modal"
+                                  data-bs-target={`#prescription-modal-${record.id}`}
+                                  style={{ borderRadius: '0.5rem' }}
+                                >
+                                  <FileText size={16} className="me-1" />
+                                  {t('academic.view_prescription')}
+                                </button>
+                              )}
+                            </td>
                           </tr>
-                        </thead>
-                        <tbody>
-                          {medicalHistory.map((record) => (
-                            <tr key={record.id}>
-                              <td>
-                                <div className="d-flex flex-column">
-                                  <span className="fw-semibold">{new Date(record.date).toLocaleDateString()}</span>
-                                </div>
-                              </td>
-                              <td>
-                                <div className="d-flex align-items-center">
-                                  <User size={20} className="me-2 text-primary" />
-                                  <span>Dr. {record.doctor}</span>
-                                </div>
-                              </td>
-                              <td>
-                                <div>
-                                  <div className="fw-semibold">{record.diagnosis}</div>
-                                  <small className="text-muted">{record.diagnosis_details}</small>
-                                </div>
-                              </td>
-                              <td>
-                                <div className="text-truncate" style={{ maxWidth: '200px' }} title={record.treatment}>
-                                  {record.treatment}
-                                </div>
-                              </td>
-                              <td>
-                                {record.prescription && record.prescription.length > 0 && (
-                                  <button 
-                                    className="btn btn-sm btn-outline-primary"
-                                    type="button"
-                                    data-bs-toggle="modal"
-                                    data-bs-target={`#prescription-modal-${record.id}`}
-                                    style={{ borderRadius: '0.5rem' }}
-                                  >
-                                    <FileText size={16} className="me-1" />
-                                    View Prescription
-                                  </button>
-                                )}
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
+                        ))}
+                      </tbody>
+                    </table>
                   </div>
+                </div>
+
+                {/* Mobile: Card layout */}
+                <div className="d-block d-lg-none">
+                  {medicalHistory.map((record) => (
+                    <div key={record.id} className="card mb-3 border">
+                      <div className="card-body p-3">
+                        <div className="d-flex justify-content-between align-items-start mb-2">
+                          <div className="flex-grow-1">
+                            <h6 className="mb-1 fw-semibold">{record.diagnosis}</h6>
+                            <div className="d-flex align-items-center small text-muted mb-1">
+                              <User size={12} className="me-1" />
+                              <span>Dr. {record.doctor}</span>
+                              <Calendar size={12} className="ms-3 me-1" />
+                              <span>{new Date(record.date).toLocaleDateString()}</span>
+                            </div>
+                          </div>
+                        </div>
+                        
+                        <div className="mb-2">
+                          <div className="small mb-2">
+                            <strong className="text-primary">{t('academic.diagnosis_details')}</strong>
+                            <p className="text-muted mb-1">{record.diagnosis_details}</p>
+                          </div>
+                          <div className="small mb-2">
+                            <strong className="text-success">{t('academic.treatment')}</strong>
+                            <p className="text-muted mb-1">{record.treatment}</p>
+                          </div>
+                        </div>
+                        
+                        {record.prescription && record.prescription.length > 0 && (
+                          <div className="mt-2">
+                            <button 
+                              className="btn btn-sm btn-outline-primary w-100"
+                              type="button"
+                              data-bs-toggle="collapse"
+                              data-bs-target={`#prescription-mobile-${record.id}`}
+                              aria-expanded="false"
+                            >
+                              {t('academic.view_prescription')}
+                            </button>
+                            <div className="collapse mt-2" id={`prescription-mobile-${record.id}`}>
+                              <div className="card card-body bg-light">
+                                {record.prescription.map((item, i) => (
+                                  <div key={i} className="mb-2 pb-2 border-bottom">
+                                    <div className="small"><strong>{t('academic.medication')}:</strong> {item.medication}</div>
+                                    <div className="small"><strong>{t('academic.dosage')}:</strong> {item.dosage}</div>
+                                    <div className="small"><strong>{t('academic.frequency')}:</strong> {item.frequency}</div>
+                                    <div className="small"><strong>{t('academic.duration')}:</strong> {item.duration}</div>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
 
                   {/* Prescription Modals for Desktop */}
                   {medicalHistory.map((record) => (
@@ -3163,30 +3166,30 @@ const Sidebar = () => {
                             <div className="modal-header" style={{ backgroundColor: universityTheme.primary }}>
                               <h5 className="modal-title text-white">
                                 <FileText size={20} className="me-2" />
-                                Prescription Details
+                                {t('academic.prescription_details')}
                               </h5>
                               <button type="button" className="btn-close btn-close-white" data-bs-dismiss="modal"></button>
                             </div>
                             <div className="modal-body">
                               <div className="mb-3">
-                                <strong>Date:</strong> {new Date(record.date).toLocaleDateString()}
+                                <strong>{t('academic.date')}</strong> {new Date(record.date).toLocaleDateString()}
                               </div>
                               <div className="mb-3">
-                                <strong>Doctor:</strong> Dr. {record.doctor}
+                                <strong>{t('academic.doctor')}:</strong> Dr. {record.doctor}
                               </div>
                               <div className="mb-3">
-                                <strong>Diagnosis:</strong> {record.diagnosis}
+                                <strong>{t('academic.diagnosis')}:</strong> {record.diagnosis}
                               </div>
                               <hr />
-                              <h6 className="fw-bold mb-3">Medications:</h6>
+                              <h6 className="fw-bold mb-3">{t('academic.medications')}</h6>
                               <div className="table-responsive">
                                 <table className="table table-bordered">
                                   <thead>
                                     <tr>
-                                      <th>Medication</th>
-                                      <th>Dosage</th>
-                                      <th>Frequency</th>
-                                      <th>Duration</th>
+                                      <th>{t('academic.medication')}</th>
+                                      <th>{t('academic.dosage')}</th>
+                                      <th>{t('academic.frequency')}</th>
+                                      <th>{t('academic.duration')}</th>
                                     </tr>
                                   </thead>
                                   <tbody>
@@ -3203,7 +3206,7 @@ const Sidebar = () => {
                               </div>
                             </div>
                             <div className="modal-footer">
-                              <button type="button" className="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                              <button type="button" className="btn btn-secondary" data-bs-dismiss="modal">{t('academic.close')}</button>
                             </div>
                           </div>
                         </div>
@@ -3216,7 +3219,7 @@ const Sidebar = () => {
           </div>
         )}
 
-        {/* Reschedule Modal - UNCHANGED */}
+        {/* Reschedule Modal */}
         {showRescheduleModal && (
           <div className="modal fade show" style={{ display: 'block', backgroundColor: 'rgba(0,0,0,0.5)' }}>
             <div className="modal-dialog modal-dialog-centered">
@@ -3224,7 +3227,7 @@ const Sidebar = () => {
                 <div className="modal-header" style={{ backgroundColor: universityTheme.primary }}>
                   <h5 className="modal-title fw-bold text-white">
                     <Edit size={20} className="me-2" />
-                    Reschedule Appointment
+                    {t('academic.reschedule_appointment')}
                   </h5>
                   <button 
                     type="button" 
@@ -3235,7 +3238,7 @@ const Sidebar = () => {
                 <div className="modal-body">
                   <form onSubmit={handleRescheduleAppointment}>
                     <div className="mb-3">
-                      <label className="form-label">New Date</label>
+                      <label className="form-label">{t('academic.new_date')}</label>
                       <input 
                         type="date" 
                         className="form-control" 
@@ -3246,14 +3249,14 @@ const Sidebar = () => {
                       />
                     </div>
                     <div className="mb-3">
-                      <label className="form-label">New Time</label>
+                      <label className="form-label">{t('academic.new_time')}</label>
                       <select 
                         className="form-select" 
                         value={rescheduleForm.time}
                         onChange={(e) => setRescheduleForm({...rescheduleForm, time: e.target.value})}
                         required
                       >
-                        <option value="">Select a time slot</option>
+                        <option value="">{t('academic.select_time_slot')}</option>
                         {timeSlots.map((time) => (
                           <option key={time} value={time}>{time}</option>
                         ))}
@@ -3266,7 +3269,7 @@ const Sidebar = () => {
                         onClick={() => setShowRescheduleModal(false)}
                         style={{ borderRadius: '0.5rem' }}
                       >
-                        Cancel
+                        {t('common.cancel')}
                       </button>
                       <button 
                         type="submit" 
@@ -3281,9 +3284,9 @@ const Sidebar = () => {
                         {loading ? (
                           <>
                             <span className="spinner-border spinner-border-sm me-2" role="status"></span>
-                            Updating...
+                            {t('academic.updating')}
                           </>
-                        ) : 'Reschedule'}
+                        ) : t('academic.reschedule')}
                       </button>
                     </div>
                   </form>
@@ -3301,7 +3304,7 @@ const Sidebar = () => {
         <div className="modal-header" style={{ backgroundColor: '#dc3545' }}>
           <h5 className="modal-title fw-bold text-white d-flex align-items-center">
             <AlertTriangle size={20} className="me-2" />
-            Cancel Appointment
+            {t('academic.cancel_appointment')}
           </h5>
           <button 
             type="button" 
@@ -3316,16 +3319,16 @@ const Sidebar = () => {
           <div className="d-flex align-items-start mb-3">
             <AlertTriangle size={48} className="text-warning me-3 flex-shrink-0" />
             <div>
-              <h6 className="fw-bold mb-2">Are you sure you want to cancel this appointment?</h6>
+              <h6 className="fw-bold mb-2">{t('academic.sure_cancel')}</h6>
               <p className="text-muted mb-0">
-                This action cannot be undone. You will need to book a new appointment if you change your mind.
+                {t('academic.cannot_undo')}
               </p>
             </div>
           </div>
           
           <div className="alert alert-warning mb-0">
             <small>
-              <strong>Note:</strong> Please cancel at least 24 hours in advance when possible.
+              <strong>{t('common.note')}:</strong> {t('academic.cancel_24h_notice')}
             </small>
           </div>
         </div>
@@ -3339,7 +3342,7 @@ const Sidebar = () => {
             }}
             style={{ borderRadius: '0.5rem' }}
           >
-            Keep Appointment
+            {t('academic.keep_appointment')}
           </button>
           <button 
             type="button" 
@@ -3355,12 +3358,12 @@ const Sidebar = () => {
             {loading ? (
               <>
                 <span className="spinner-border spinner-border-sm me-2" role="status"></span>
-                Cancelling...
+                {t('academic.cancelling')}
               </>
             ) : (
               <>
                 <X size={16} className="me-2" />
-                Yes, Cancel Appointment
+                {t('academic.yes_cancel')}
               </>
             )}
           </button>

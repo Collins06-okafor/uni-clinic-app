@@ -61,10 +61,29 @@ public function dashboard(Request $request): JsonResponse
 
     // Get latest student requests (limit 5)
     $studentRequests = Appointment::with(['patient'])
-        ->whereIn('status', ['pending', 'under_review'])
-        ->orderBy('created_at', 'desc')
-        ->limit(5)
-        ->get();
+    ->whereIn('status', ['pending', 'under_review'])
+    ->orderBy('created_at', 'desc')
+    ->limit(5)
+    ->get()
+    ->map(function($appointment) {
+        return [
+            'id' => $appointment->id,
+            'patient' => $appointment->patient ? [
+                'name' => $appointment->patient->name,
+                'student_id' => $appointment->patient->student_id,
+            ] : null,
+            'date' => $appointment->date,
+            'time' => $appointment->time,
+            'created_at' => $appointment->created_at->toISOString(),
+            'requested_time' => $appointment->time, // ✅ ADD THIS
+            'requested_date' => $appointment->date, // ✅ ADD THIS
+            'reason' => $appointment->reason,
+            'specialization' => $appointment->specialization,
+            'priority' => $appointment->priority ?? 'normal',
+            'urgency' => $appointment->urgency ?? $appointment->priority ?? 'normal',
+            'status' => $appointment->status,
+        ];
+    });
 
     // IMPROVED: Calculate urgent cases more comprehensively
     // 1. Count urgent appointments scheduled for today (active cases)

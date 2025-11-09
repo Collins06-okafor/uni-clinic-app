@@ -185,6 +185,7 @@ const StudentAppointmentSystem: React.FC<Props> = ({
   const [appointmentToCancel, setAppointmentToCancel] = useState<string | null>(null);
 
   const [medicalHistory, setMedicalHistory] = useState<MedicalRecord[]>([]);
+  
 
   // Profile state
   const [userProfile, setUserProfile] = useState<UserProfile>({
@@ -1426,14 +1427,15 @@ const AlternativeDatesModal = () => (
 // ==================== SIDEBAR COMPONENT ====================
 const Sidebar = () => {
   const menuItems = [
-    { id: 'overview', icon: BarChart3, label: 'Dashboard' },
-    { id: 'request', icon: Calendar, label: 'Book Appointment' },
-    { id: 'history', icon: History, label: 'My Appointments' },
-    { id: 'medical-history', icon: FileText, label: 'Medical Records' },
+    { id: 'overview', icon: BarChart3, label: t('student.dashboard') },
+    { id: 'request', icon: Calendar, label: t('student.book_new_short') },
+    { id: 'history', icon: History, label: t('student.my_appointments') },
+    { id: 'medical-history', icon: FileText, label: t('student.medical_records') },
   ];
 
   // Check if mobile
   const isMobile = window.innerWidth < 768;
+  
 
   return (
     <>
@@ -1471,6 +1473,9 @@ const Sidebar = () => {
           overflow: 'hidden',
         }}
       >
+        {/* Rest of your sidebar code stays EXACTLY the same */}
+        {/* Just keep all the header, navigation, and footer sections */}
+        
         {/* ===== HEADER ===== */}
         <div
           style={{
@@ -1530,7 +1535,7 @@ const Sidebar = () => {
                     fontWeight: 500,
                   }}
                 >
-                  Student Portal
+                  {t('student.student_portal')}
                 </small>
               </div>
             </div>
@@ -1598,11 +1603,9 @@ const Sidebar = () => {
         {/* ===== NAVIGATION ===== */}
         <nav
           style={{
-            // DESKTOP: flex:1 with overflow auto (allows scrolling if needed)
-            // MOBILE: flexShrink:0 with no overflow (compact, no scroll)
             flex: isMobile ? 'none' : 1,
             flexShrink: isMobile ? 0 : 1,
-            overflowY: isMobile ? 'visible' : 'auto',
+            overflowY: 'visible',
             overflowX: 'hidden',
             padding: sidebarCollapsed && !isMobile ? '12px 8px' : isMobile ? '6px 10px' : '16px 12px',
             minHeight: isMobile ? 'auto' : 0,
@@ -1621,7 +1624,7 @@ const Sidebar = () => {
                 paddingLeft: isMobile ? '8px' : '12px',
               }}
             >
-              Main Menu
+              {t('clinical.main_menu')}
             </div>
           )}
 
@@ -1660,6 +1663,7 @@ const Sidebar = () => {
                   fontWeight: isActive ? 600 : 500,
                   position: 'relative',
                   overflow: 'hidden',
+
                 }}
                 onMouseEnter={(e) => {
                   if (!isActive) {
@@ -1824,7 +1828,7 @@ const Sidebar = () => {
                       fontWeight: 500,
                     }}
                   >
-                    Student Portal
+                    {t('student.student_portal')}
                   </small>
                 </div>
               </div>
@@ -1842,7 +1846,7 @@ const Sidebar = () => {
                     paddingLeft: '4px',
                   }}
                 >
-                  Language
+                  {t('student.language')}
                 </div>
 
                 <div style={{ display: 'flex', gap: isMobile ? '4px' : '6px' }}>
@@ -1930,7 +1934,7 @@ const Sidebar = () => {
                 }}
               >
                 <LogOut size={isMobile ? 14 : 16} style={{ marginRight: isMobile ? '6px' : '8px' }} />
-                Logout
+                {t('student.logout')}
               </button>
             </div>
           ) : (
@@ -1992,16 +1996,21 @@ const Sidebar = () => {
     style={{
       minHeight: '100vh',
       background: 'linear-gradient(135deg, #e0f2fe 0%, #f0fdf4 100%)',
+      margin: 0,
+      padding: 0,
+      width: '100%'
     }}
   >
-    {/* Add Sidebar */}
+    {/* Sidebar */}
     <Sidebar />
     
     {/* Main Content Container */}
     <div 
       style={{
+        // ✅ Use window.innerWidth directly like AcademicStaffDashboard
         marginLeft: window.innerWidth < 768 ? 0 : (sidebarCollapsed ? '85px' : '280px'),
         transition: 'margin-left 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+        padding: window.innerWidth < 768 ? '20px 16px' : '40px 32px',
       }}
     >
       {/* Mobile Header */}
@@ -2046,10 +2055,18 @@ const Sidebar = () => {
       
 
       {/* Main Container */}
-      <div className="student-appointment-container" style={{ paddingTop: '5px' }}>
+      <div 
+        className="student-appointment-container" 
+        style={{ 
+          paddingTop: window.innerWidth < 768 ? '70px' : '5px',
+          width: '100%',
+          margin: 0,
+          padding: window.innerWidth < 768 ? '70px 15px 15px 15px' : '5px 15px',
+        }}
+      >
         {/* Main Content */}
-        <div className="main-content">
-          <div className="row justify-content-center">
+        <div className="main-content" style={{ width: '100%', margin: 0, padding: 0 }}>
+          <div className="row justify-content-center" style={{ width: '100%', margin: 0 }}>
             <div className="col-12 col-xl-10">
             {/* Profile Complete Warning */}
             {!profileComplete && (
@@ -2087,10 +2104,10 @@ const Sidebar = () => {
                     <div className="card-body">
                       <div className="row align-items-center">
                         <div className="col-md-8">
-                          <h3 className="mb-2">{t('dashboard.welcome', { name: userProfile.name })}</h3>
+                          <h3 className="mb-2">{t('student.welcome', { name: userProfile.name })}</h3>
                           <p className="mb-1 opacity-90">{userProfile.email}</p>
-                          <p className="mb-1 opacity-90">Student ID: {userProfile.student_id}</p>
-                          <p className="mb-0 opacity-75">Department: {userProfile.department}</p>
+                          <p className="mb-1 opacity-90">{t('student.student_id', { studentId: userProfile.student_id })}</p>
+                          <p className="mb-0 opacity-75">{t('student.department', { department: userProfile.department })}</p>
                         </div>{/*
                         <div className="col-md-4 text-end">
                           {userProfile.avatar_url ? (
@@ -2109,12 +2126,13 @@ const Sidebar = () => {
                 </div>
 
                  {/* Statistics Cards - Better mobile layout */}
-    {[
-      { icon: Calendar, value: stats.total, label: t('dashboard.total_appointments'), color: '#E53E3E' },
-      { icon: CheckCircle, value: stats.completed, label: 'Completed', color: '#28a745' },
-      { icon: Clock, value: stats.pending, label: 'Pending', color: '#ffc107' },
-      { icon: TrendingUp, value: stats.upcoming, label: 'Upcoming', color: '#17a2b8' }
-    ].map((stat, index) => (
+    
+            {[
+        { icon: Calendar, value: stats.total, label: t('student.total_appointments'), color: '#E53E3E' },
+        { icon: CheckCircle, value: stats.completed, label: t('student.completed'), color: '#28a745' },
+        { icon: Clock, value: stats.pending, label: t('student.pending'), color: '#ffc107' },
+        { icon: TrendingUp, value: stats.upcoming, label: t('student.upcoming'), color: '#17a2b8' }
+      ].map((stat, index) => (
       <div key={index} className="col-6 col-lg-3">
         <div className="card stat-card h-100">
           <div className="card-body p-3 p-md-4 text-center">
@@ -2147,7 +2165,7 @@ const Sidebar = () => {
                 <div className="col-12">
                   <div className="card card-custom">
                     <div className="card-header bg-white border-0 pb-0">
-                      <h5 className="fw-bold mb-0">Quick Actions</h5>
+                      <h5 className="fw-bold mb-0">{t('student.quick_actions')}</h5>
                     </div>
                     <div className="card-body p-4">
                       <div className="row g-3">
@@ -2158,8 +2176,8 @@ const Sidebar = () => {
                             disabled={!profileComplete || hasPendingAppointments()}
                           >
                             <FileText size={24} className="mb-2" />
-                            <div className="fw-semibold">{t('appointments.schedule')}</div>
-                            <small className="opacity-75">Book a new medical appointment</small>
+                            <div className="fw-semibold">{t('student.schedule')}</div>
+                            <small className="opacity-75">{t('student.book_new')}</small>
                             {!profileComplete && <div className="small text-warning mt-1">Complete profile first</div>}
                             {hasPendingAppointments() && <div className="small text-warning mt-1">Pending appointment exists</div>}
                           </button>
@@ -2171,8 +2189,8 @@ const Sidebar = () => {
                             onClick={() => setActiveTab('history')}
                           >
                             <History size={24} className="mb-2" />
-                            <div className="fw-semibold">View History</div>
-                            <small className="text-muted">Check your appointment history</small>
+                            <div className="fw-semibold">{t('student.view_history')}</div>
+                            <small className="text-muted">{t('student.check_history')}</small>
                           </button>
                         </div>
                         
@@ -2183,9 +2201,9 @@ const Sidebar = () => {
                           >
                             <User size={24} className="mb-2" />
                             <div className="fw-semibold">
-                              {profileComplete ? 'Update Profile' : 'Complete Profile'}
+                            {profileComplete ? t('student.update_profile') : t('student.complete_profile')}
                             </div>
-                            <small className="text-muted">Manage your personal information</small>
+                            <small className="text-muted">{t('student.manage_info')}</small>
                           </button>
                         </div>
                       </div>
@@ -2199,13 +2217,13 @@ const Sidebar = () => {
     <div className="card shadow-sm border-0" style={{ borderRadius: '1rem' }}>
       <div className="card-header bg-white border-0 pb-0">
         <div className="d-flex justify-content-between align-items-center">
-          <h5 className="fw-bold mb-0">Recent Appointments</h5>
+          <h5 className="fw-bold mb-0">{t('student.recent_appointments')}</h5>
           <button 
             className="btn btn-sm btn-outline-primary"
             onClick={() => setActiveTab('history')}
             style={{ borderRadius: '0.5rem' }}
           >
-            View All
+            {t('student.view_all')}
           </button>
         </div>
       </div>
@@ -2234,35 +2252,70 @@ const Sidebar = () => {
           ))}
         </div>
 
-        {/* Mobile: Card layout */}
+        {/* Mobile: FIXED Card layout */}
         <div className="d-block d-md-none">
           {appointments.slice(0, 3).map((appointment) => (
-            <div key={appointment.id} className="card mb-2 border-0 bg-light">
+            <div key={appointment.id} className="card mb-2 border-0 bg-light recent-appointment-card">
               <div className="card-body p-3">
+                {/* Header Row: Doctor name and status badge */}
                 <div className="d-flex justify-content-between align-items-start mb-2">
-                  <div className="flex-grow-1">
+                  <div className="flex-grow-1 me-2" style={{ minWidth: 0 }}>
                     <div className="d-flex align-items-center mb-1">
-                      <div className="me-2">
+                      <div className="me-2 flex-shrink-0">
                         {getSpecialtyIcon(appointment.specialty)}
                       </div>
-                      <h6 className="mb-0 fw-semibold">{appointment.doctor}</h6>
-                    </div>
-                    <div className="d-flex align-items-center text-muted small mb-1">
-                      <Calendar size={12} className="me-1" />
-                      <span className="me-3">{new Date(appointment.date).toLocaleDateString()}</span>
-                      <Clock size={12} className="me-1" />
-                      <span>{appointment.time}</span>
+                      <h6 
+                        className="mb-0 fw-semibold" 
+                        style={{
+                          fontSize: '0.9rem',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          whiteSpace: 'nowrap'
+                        }}
+                      >
+                        {appointment.doctor}
+                      </h6>
                     </div>
                   </div>
-                  <span className={`${getStatusBadge(appointment.status)} small`}>
+                  <span 
+                    className={`${getStatusBadge(appointment.status)} small flex-shrink-0`}
+                    style={{ fontSize: '0.7rem' }}
+                  >
                     {t(`status.${appointment.status}`)}
                   </span>
                 </div>
-                <small className="text-muted d-block" style={{ 
-                  overflow: 'hidden', 
-                  textOverflow: 'ellipsis', 
-                  whiteSpace: 'nowrap' 
-                }}>
+                
+                {/* Date and Time Row - FIXED */}
+                <div className="mb-2">
+                  <div className="d-flex flex-column gap-1">
+                    {/* Date */}
+                    <div className="d-flex align-items-center text-muted" style={{ fontSize: '0.75rem' }}>
+                      <Calendar size={12} className="me-1 flex-shrink-0" />
+                      <span>{new Date(appointment.date).toLocaleDateString('en-US', {
+                        month: 'short',
+                        day: 'numeric',
+                        year: 'numeric'
+                      })}</span>
+                    </div>
+                    
+                    {/* Time */}
+                    <div className="d-flex align-items-center text-muted" style={{ fontSize: '0.75rem' }}>
+                      <Clock size={12} className="me-1 flex-shrink-0" />
+                      <span>{appointment.time}</span>
+                    </div>
+                  </div>
+                </div>
+                
+                {/* Reason - truncated */}
+                <small 
+                  className="text-muted d-block" 
+                  style={{ 
+                    fontSize: '0.75rem',
+                    overflow: 'hidden', 
+                    textOverflow: 'ellipsis', 
+                    whiteSpace: 'nowrap' 
+                  }}
+                >
                   {appointment.reason}
                 </small>
               </div>
@@ -2278,15 +2331,15 @@ const Sidebar = () => {
 
             {/* Profile Tab */}
             {activeTab === 'profile' && (
-              <div className="card card-custom">
-                <div className="card-header card-header-custom">
+              <div className="card card-custom" style={{ border: 'none' }}>
+                <div className="card-header card-header-custom" style={{ borderBottom: 'none' }}>
                   <h3 className="card-title-custom">
                     <User size={24} className="me-2" />
-                    Student Profile
+                    {t('student.profile')}
                   </h3>
                 </div>
-                <div className="card-body p-4">
-                  <div className="row g-4">
+                <div className="card-body p-3">
+                  <div className="row g-3">
                     {/* Profile Image */}
 <div className="col-12 text-center">
   <div className="profile-image-container">
@@ -2375,7 +2428,7 @@ const Sidebar = () => {
             }}
           >
             <Camera size={16} className="me-2" />
-            Photo Upload Guidelines
+            {t('student.photo_guidelines')}
           </button>
         </h2>
         <div 
@@ -2391,9 +2444,9 @@ const Sidebar = () => {
                   <div className="d-flex align-items-start">
                     <CheckCircle size={16} className="text-success me-2 mt-1 flex-shrink-0" />
                     <div>
-                      <strong className="text-dark">File Types:</strong>
+                      <strong className="text-dark">{t('student.file_types')}</strong>
                       <br />
-                      <small className="text-muted">JPEG, PNG, GIF, or WebP formats</small>
+                      <small className="text-muted">{t('student.file_types_desc')}</small>
                     </div>
                   </div>
                 </div>
@@ -2402,9 +2455,9 @@ const Sidebar = () => {
                   <div className="d-flex align-items-start">
                     <CheckCircle size={16} className="text-success me-2 mt-1 flex-shrink-0" />
                     <div>
-                      <strong className="text-dark">File Size:</strong>
+                      <strong className="text-dark">{t('student.file_size')}</strong>
                       <br />
-                      <small className="text-muted">Maximum 5MB per file</small>
+                      <small className="text-muted">{t('student.file_size_desc')}</small>
                     </div>
                   </div>
                 </div>
@@ -2413,9 +2466,9 @@ const Sidebar = () => {
                   <div className="d-flex align-items-start">
                     <CheckCircle size={16} className="text-success me-2 mt-1 flex-shrink-0" />
                     <div>
-                      <strong className="text-dark">Dimensions:</strong>
+                      <strong className="text-dark">{t('student.dimensions')}</strong>
                       <br />
-                      <small className="text-muted">Square format (1:1 ratio) recommended</small>
+                      <small className="text-muted">{t('student.dimensions_desc')}</small>
                     </div>
                   </div>
                 </div>
@@ -2424,9 +2477,9 @@ const Sidebar = () => {
                   <div className="d-flex align-items-start">
                     <CheckCircle size={16} className="text-success me-2 mt-1 flex-shrink-0" />
                     <div>
-                      <strong className="text-dark">Quality:</strong>
+                      <strong className="text-dark">{t('student.quality')}</strong>
                       <br />
-                      <small className="text-muted">Clear, well-lit, professional appearance</small>
+                      <small className="text-muted">{t('student.quality_desc')}</small>
                     </div>
                   </div>
                 </div>
@@ -2435,9 +2488,9 @@ const Sidebar = () => {
                   <div className="d-flex align-items-start">
                     <CheckCircle size={16} className="text-success me-2 mt-1 flex-shrink-0" />
                     <div>
-                      <strong className="text-dark">Content:</strong>
+                      <strong className="text-dark">{t('student.content')}</strong>
                       <br />
-                      <small className="text-muted">Face clearly visible, appropriate attire</small>
+                      <small className="text-muted">{t('student.content_desc')}</small>
                     </div>
                   </div>
                 </div>
@@ -2454,7 +2507,7 @@ const Sidebar = () => {
         type="button"
         className="btn btn-outline-danger btn-sm mt-3"
         onClick={async () => {
-          if (confirm('Are you sure you want to remove your profile photo?')) {
+          if (confirm(t('student.confirm_remove_photo'))) {
             try {
               const token = getAuthToken();
               const response = await fetch(`${API_BASE_URL}/api/auth/profile/avatar`, {
@@ -2479,7 +2532,7 @@ const Sidebar = () => {
         }}
       >
         <X size={14} className="me-1" />
-        Remove Photo
+        {t('student.remove_photo')}
       </button>
     )}
   </div>
@@ -2487,91 +2540,91 @@ const Sidebar = () => {
 
                     {/* Basic Information */}
                     <div className="col-md-6">
-                      <label className="form-label fw-semibold">Student ID <span className="text-danger">*</span></label>
+                      <label className="form-label fw-semibold">{t('student.student_id_label')} <span className="text-danger">*</span></label>
                       <input
                         type="text"
                         className="form-control form-control-custom form-control-lg"
                         value={userProfile.student_id}
                         onChange={(e) => setUserProfile({...userProfile, student_id: e.target.value})}
-                        placeholder="Enter your student ID"
+                        placeholder={t('student.enter_student_id')}
                         required
                       />
                     </div>
 
                     <div className="col-md-6">
-                      <label className="form-label fw-semibold">Full Name <span className="text-danger">*</span></label>
-                      <input
-                        type="text"
-                        className="form-control form-control-custom form-control-lg"
-                        value={userProfile.name}
-                        onChange={(e) => setUserProfile({...userProfile, name: e.target.value})}
-                        placeholder="Enter your full name"
-                        required
-                      />
-                    </div>
+          <label className="form-label fw-semibold">{t('student.full_name')} <span className="text-danger">*</span></label>
+          <input
+            type="text"
+            className="form-control form-control-custom form-control-lg"
+            value={userProfile.name}
+            onChange={(e) => setUserProfile({...userProfile, name: e.target.value})}
+            placeholder={t('student.enter_name')}
+            required
+          />
+        </div>
 
                     <div className="col-md-6">
-                      <label className="form-label fw-semibold">Email Address <span className="text-danger">*</span></label>
-                      <input
-                        type="email"
-                        className="form-control form-control-custom form-control-lg"
-                        value={userProfile.email}
-                        onChange={(e) => setUserProfile({...userProfile, email: e.target.value})}
-                        placeholder="Enter your email"
-                        required
-                      />
-                    </div>
+          <label className="form-label fw-semibold">{t('student.email_address')} <span className="text-danger">*</span></label>
+          <input
+            type="email"
+            className="form-control form-control-custom form-control-lg"
+            value={userProfile.email}
+            onChange={(e) => setUserProfile({...userProfile, email: e.target.value})}
+            placeholder={t('student.enter_email')}
+            required
+          />
+        </div>
 
                     <div className="col-md-6">
-                      <label className="form-label fw-semibold">Department <span className="text-danger">*</span></label>
-                      <input
-                        type="text"
-                        className="form-control form-control-custom form-control-lg"
-                        value={userProfile.department}
-                        onChange={(e) => setUserProfile({...userProfile, department: e.target.value})}
-                        placeholder="Enter your department"
-                        required
-                      />
-                    </div>
+          <label className="form-label fw-semibold">{t('student.department_label')} <span className="text-danger">*</span></label>
+          <input
+            type="text"
+            className="form-control form-control-custom form-control-lg"
+            value={userProfile.department}
+            onChange={(e) => setUserProfile({...userProfile, department: e.target.value})}
+            placeholder={t('student.enter_department')}
+            required
+          />
+        </div>
 
                     <div className="col-md-6">
-                      <label className="form-label fw-semibold">Phone Number <span className="text-danger">*</span></label>
-                      <PhoneInput
-                        country={'tr'}
-                        value={userProfile.phone_number}
-                        onChange={(phone_number) => setUserProfile({...userProfile, phone_number})}
-                        placeholder="Enter your phone number"
-                        inputProps={{
-                          className: 'form-control form-control-lg',
-                          required: true
-                        }}
-                        containerClass="mb-3"
-                      />
-                    </div>
+          <label className="form-label fw-semibold">{t('student.phone_number')} <span className="text-danger">*</span></label>
+          <PhoneInput
+            country={'tr'}
+            value={userProfile.phone_number}
+            onChange={(phone_number) => setUserProfile({...userProfile, phone_number})}
+            placeholder={t('student.enter_phone')}
+            inputProps={{
+              className: 'form-control form-control-lg',
+              required: true
+            }}
+            containerClass="mb-3"
+          />
+        </div>
 
                     <div className="col-md-6">
-                    <label className="form-label fw-semibold">Emergency Contact Relationship <span className="text-danger">*</span></label>
-                    <Select
-                      value={[
-                        { value: '', label: 'Select relationship' },
-                        { value: 'parent', label: 'Parent' },
-                        { value: 'guardian', label: 'Guardian' },
-                        { value: 'spouse', label: 'Spouse' },
-                        { value: 'sibling', label: 'Sibling' },
-                        { value: 'friend', label: 'Friend' },
-                        { value: 'other', label: 'Other' }
-                      ].find(option => option.value === (userProfile.emergency_contact_relationship || ''))}
-                      onChange={(option) => setUserProfile({...userProfile, emergency_contact_relationship: option?.value || ''})}
-                      options={[
-                        { value: '', label: 'Select relationship' },
-                        { value: 'parent', label: 'Parent' },
-                        { value: 'guardian', label: 'Guardian' },
-                        { value: 'spouse', label: 'Spouse' },
-                        { value: 'sibling', label: 'Sibling' },
-                        { value: 'friend', label: 'Friend' },
-                        { value: 'other', label: 'Other' }
-                      ]}
-                      placeholder="Select relationship"
+          <label className="form-label fw-semibold">{t('student.emergency_relationship')} <span className="text-danger">*</span></label>
+          <Select
+            value={[
+              { value: '', label: t('student.select_relationship') },
+              { value: 'parent', label: t('student.relationship.parent') },
+              { value: 'guardian', label: t('student.relationship.guardian') },
+              { value: 'spouse', label: t('student.relationship.spouse') },
+              { value: 'sibling', label: t('student.relationship.sibling') },
+              { value: 'friend', label: t('student.relationship.friend') },
+              { value: 'other', label: t('student.relationship.other') }
+            ].find(option => option.value === (userProfile.emergency_contact_relationship || ''))}
+            onChange={(option) => setUserProfile({...userProfile, emergency_contact_relationship: option?.value || ''})}
+            options={[
+              { value: '', label: t('student.select_relationship') },
+              { value: 'parent', label: t('student.relationship.parent') },
+              { value: 'guardian', label: t('student.relationship.guardian') },
+              { value: 'spouse', label: t('student.relationship.spouse') },
+              { value: 'sibling', label: t('student.relationship.sibling') },
+              { value: 'friend', label: t('student.relationship.friend') },
+              { value: 'other', label: t('student.relationship.other') }
+            ]}
+            placeholder={t('student.select_relationship')}
                       menuPortalTarget={document.body}
                       menuPosition="fixed"
                       styles={{
@@ -2599,46 +2652,46 @@ const Sidebar = () => {
                   </div>
 
                   <div className="col-md-6">
-                    <label className="form-label fw-semibold">Emergency Contact Email <span className="text-danger">*</span></label>
-                    <input
-                      type="email"
-                      className="form-control form-control-custom form-control-lg"
-                      value={userProfile.emergency_contact_email}
-                      onChange={(e) => setUserProfile({...userProfile, emergency_contact_email: e.target.value})}
-                      placeholder="Emergency contact email"
-                      required
-                    />
-                  </div>
+          <label className="form-label fw-semibold">{t('student.emergency_email')} <span className="text-danger">*</span></label>
+          <input
+            type="email"
+            className="form-control form-control-custom form-control-lg"
+            value={userProfile.emergency_contact_email}
+            onChange={(e) => setUserProfile({...userProfile, emergency_contact_email: e.target.value})}
+            placeholder={t('student.emergency_contact_email')}
+            required
+          />
+        </div>
 
                   <div className="col-md-6">
-                  <label className="form-label fw-semibold">Blood Type <span className="text-danger">*</span></label>
-                  <Select
-                    value={[
-                      { value: '', label: 'Select blood type' },
-                      { value: 'A+', label: 'A+' },
-                      { value: 'A-', label: 'A-' },
-                      { value: 'B+', label: 'B+' },
-                      { value: 'B-', label: 'B-' },
-                      { value: 'AB+', label: 'AB+' },
-                      { value: 'AB-', label: 'AB-' },
-                      { value: 'O+', label: 'O+' },
-                      { value: 'O-', label: 'O-' },
-                      { value: 'Unknown', label: 'Unknown' }
-                    ].find(option => option.value === (userProfile.blood_type || ''))}
-                    onChange={(option) => setUserProfile({...userProfile, blood_type: option?.value || ''})}
-                    options={[
-                      { value: '', label: 'Select blood type' },
-                      { value: 'A+', label: 'A+' },
-                      { value: 'A-', label: 'A-' },
-                      { value: 'B+', label: 'B+' },
-                      { value: 'B-', label: 'B-' },
-                      { value: 'AB+', label: 'AB+' },
-                      { value: 'AB-', label: 'AB-' },
-                      { value: 'O+', label: 'O+' },
-                      { value: 'O-', label: 'O-' },
-                      { value: 'Unknown', label: 'Unknown' }
-                    ]}
-                    placeholder="Select blood type"
+          <label className="form-label fw-semibold">{t('student.blood_type')} <span className="text-danger">*</span></label>
+          <Select
+            value={[
+              { value: '', label: t('student.select_blood_type') },
+              { value: 'A+', label: 'A+' },
+              { value: 'A-', label: 'A-' },
+              { value: 'B+', label: 'B+' },
+              { value: 'B-', label: 'B-' },
+              { value: 'AB+', label: 'AB+' },
+              { value: 'AB-', label: 'AB-' },
+              { value: 'O+', label: 'O+' },
+              { value: 'O-', label: 'O-' },
+              { value: 'Unknown', label: t('common.unknown') }
+            ].find(option => option.value === (userProfile.blood_type || ''))}
+            onChange={(option) => setUserProfile({...userProfile, blood_type: option?.value || ''})}
+            options={[
+              { value: '', label: t('student.select_blood_type') },
+              { value: 'A+', label: 'A+' },
+              { value: 'A-', label: 'A-' },
+              { value: 'B+', label: 'B+' },
+              { value: 'B-', label: 'B-' },
+              { value: 'AB+', label: 'AB+' },
+              { value: 'AB-', label: 'AB-' },
+              { value: 'O+', label: 'O+' },
+              { value: 'O-', label: 'O-' },
+              { value: 'Unknown', label: t('common.unknown') }
+            ]}
+            placeholder={t('student.select_blood_type')}
                     menuPortalTarget={document.body}
                     menuPosition="fixed"
                     styles={{
@@ -2666,20 +2719,20 @@ const Sidebar = () => {
                 </div>
 
                   <div className="col-md-6">
-                  <label className="form-label fw-semibold">Gender <span className="text-danger">*</span></label>
-                  <Select
-                    value={[
-                      { value: '', label: 'Select gender' },
-                      { value: 'male', label: 'Male' },
-                      { value: 'female', label: 'Female' }
-                    ].find(option => option.value === (userProfile.gender || ''))}
-                    onChange={(option) => setUserProfile({...userProfile, gender: option?.value || ''})}
-                    options={[
-                      { value: '', label: 'Select gender' },
-                      { value: 'male', label: 'Male' },
-                      { value: 'female', label: 'Female' }
-                    ]}
-                    placeholder="Select gender"
+          <label className="form-label fw-semibold">{t('student.gender')} <span className="text-danger">*</span></label>
+          <Select
+            value={[
+              { value: '', label: t('student.select_gender') },
+              { value: 'male', label: t('student.male') },
+              { value: 'female', label: t('student.female') }
+            ].find(option => option.value === (userProfile.gender || ''))}
+            onChange={(option) => setUserProfile({...userProfile, gender: option?.value || ''})}
+            options={[
+              { value: '', label: t('student.select_gender') },
+              { value: 'male', label: t('student.male') },
+              { value: 'female', label: t('student.female') }
+            ]}
+            placeholder={t('student.select_gender')}
                     menuPortalTarget={document.body}
                     menuPosition="fixed"
                     styles={{
@@ -2702,142 +2755,141 @@ const Sidebar = () => {
                 </div>
 
                     <div className="col-md-6 col-overflow-visible">
-                     <label className="form-label fw-semibold">Date of Birth <span className="text-danger">*</span></label>
-                      <div className="date-input-wrapper">
-                        <input
-                          type="date"
-                          className={`form-control form-control-custom form-control-lg ${
-                            userProfile.date_of_birth && !validateAge(userProfile.date_of_birth) ? 'is-invalid' : ''
-                          }`}
-                          value={userProfile.date_of_birth}
-                          onChange={(e) => handleDateOfBirthChange(e.target.value)}
-                          max={getMaxBirthDate()}
-                          required
-                        />
-                      </div>
-                      {userProfile.date_of_birth && !validateAge(userProfile.date_of_birth) && (
-                        <div className="invalid-feedback d-block">
-                          Students must be at least 16 years old to register.
-                        </div>
-                      )}
-                      <small className="form-text text-muted">
-                        Students must be at least 16 years old
-                      </small>
-                    </div>
+          <label className="form-label fw-semibold">{t('student.date_of_birth')} <span className="text-danger">*</span></label>
+          <div className="date-input-wrapper">
+            <input
+              type="date"
+              className={`form-control form-control-custom form-control-lg ${
+                userProfile.date_of_birth && !validateAge(userProfile.date_of_birth) ? 'is-invalid' : ''
+              }`}
+              value={userProfile.date_of_birth}
+              onChange={(e) => handleDateOfBirthChange(e.target.value)}
+              max={getMaxBirthDate()}
+              required
+            />
+          </div>
+          {userProfile.date_of_birth && !validateAge(userProfile.date_of_birth) && (
+            <div className="invalid-feedback d-block">
+              {t('student.min_age_error')}
+            </div>
+          )}
+          <small className="form-text text-muted">
+            {t('student.min_age')}
+          </small>
+        </div>
 
                     <div className="col-md-6">
-                      <label className="form-label fw-semibold">Emergency Contact Name <span className="text-danger">*</span></label>
-                      <input
-                        type="text"
-                        className="form-control form-control-custom form-control-lg"
-                        value={userProfile.emergency_contact_name}
-                        onChange={(e) => setUserProfile({...userProfile, emergency_contact_name: e.target.value})}
-                        placeholder="Emergency contact name"
-                        required
-                      />
-                    </div>
+          <label className="form-label fw-semibold">{t('student.emergency_contact_name')} <span className="text-danger">*</span></label>
+          <input
+            type="text"
+            className="form-control form-control-custom form-control-lg"
+            value={userProfile.emergency_contact_name}
+            onChange={(e) => setUserProfile({...userProfile, emergency_contact_name: e.target.value})}
+            placeholder={t('student.emergency_contact_name')}
+            required
+          />
+        </div>
 
                     <div className="col-md-6">
-                      <label className="form-label fw-semibold">Emergency Contact Number <span className="text-danger">*</span></label>
-                      <PhoneInput
-                        country={'tr'}
-                        value={userProfile.emergency_contact_phone}
-                        onChange={(emergency_contact_phone) => setUserProfile({...userProfile, emergency_contact_phone})}
-                        placeholder="Emergency contact phone number"
-                        inputProps={{
-                          className: 'form-control form-control-lg',
-                          required: true
-                        }}
-                        containerClass="mb-3"
-                      />
-                    </div>
+          <label className="form-label fw-semibold">{t('student.emergency_contact_number')} <span className="text-danger">*</span></label>
+          <PhoneInput
+            country={'tr'}
+            value={userProfile.emergency_contact_phone}
+            onChange={(emergency_contact_phone) => setUserProfile({...userProfile, emergency_contact_phone})}
+            placeholder={t('student.emergency_phone')}
+            inputProps={{
+              className: 'form-control form-control-lg',
+              required: true
+            }}
+            containerClass="mb-3"
+          />
+        </div>
 
-                    {/* Medical Information */}
                     <div className="col-12 mt-4">
-                      <h5 className="fw-bold mb-3 text-university-primary">
-                        <Stethoscope size={20} className="me-2" />
-                        Medical Information
-                      </h5>
-                    </div>
+          <h5 className="fw-bold mb-3 text-university-primary">
+            <Stethoscope size={20} className="me-2" />
+            {t('student.medical_information')}
+          </h5>
+        </div>
 
-                    <div className="col-12">
-                      <label className="form-label fw-semibold">Allergies</label>
-                      <div className="mb-3">
-                        <div className="form-check">
-                          <input 
-                            className="form-check-input" 
-                            type="checkbox" 
-                            id="hasKnownAllergies"
-                            checked={userProfile.has_known_allergies}
-                            onChange={() => handleAllergiesChange('known')}
-                          />
-                          <label className="form-check-label" htmlFor="hasKnownAllergies">
-                            I have known allergies
-                          </label>
-                        </div>
-                        <div className="form-check">
-                          <input 
-                            className="form-check-input" 
-                            type="checkbox" 
-                            id="allergiesUncertain"
-                            checked={userProfile.allergies_uncertain}
-                            onChange={() => handleAllergiesChange('uncertain')}
-                          />
-                          <label className="form-check-label" htmlFor="allergiesUncertain">
-                            I'm not sure if I have allergies
-                          </label>
-                        </div>
-                      </div>
-                      {userProfile.has_known_allergies && (
-                        <div className="mb-3">
-                          <label className="form-label">List of Allergies</label>
-                          <textarea
-                            className="form-control form-control-custom"
-                            rows={2}
-                            value={userProfile.allergies}
-                            onChange={(e) => setUserProfile({...userProfile, allergies: e.target.value})}
-                            placeholder="List all known allergies (e.g., penicillin, nuts, etc.)"
-                          />
-                        </div>
-                      )}
-                    </div>
+        <div className="col-12">
+          <label className="form-label fw-semibold">{t('student.allergies')}</label>
+          <div className="mb-3">
+            <div className="form-check">
+              <input 
+                className="form-check-input" 
+                type="checkbox" 
+                id="hasKnownAllergies"
+                checked={userProfile.has_known_allergies}
+                onChange={() => handleAllergiesChange('known')}
+              />
+              <label className="form-check-label" htmlFor="hasKnownAllergies">
+                {t('student.has_allergies')}
+              </label>
+            </div>
+            <div className="form-check">
+              <input 
+                className="form-check-input" 
+                type="checkbox" 
+                id="allergiesUncertain"
+                checked={userProfile.allergies_uncertain}
+                onChange={() => handleAllergiesChange('uncertain')}
+              />
+              <label className="form-check-label" htmlFor="allergiesUncertain">
+                {t('student.uncertain_allergies')}
+              </label>
+            </div>
+          </div>
+          {userProfile.has_known_allergies && (
+            <div className="mb-3">
+              <label className="form-label">{t('student.list_allergies')}</label>
+              <textarea
+                className="form-control form-control-custom"
+                rows={2}
+                value={userProfile.allergies}
+                onChange={(e) => setUserProfile({...userProfile, allergies: e.target.value})}
+                placeholder={t('student.list_allergies_placeholder')}
+              />
+            </div>
+          )}
+        </div>
 
-                    <div className="col-md-6">
-                      <label className="form-label fw-semibold">Addictions (if any)</label>
-                      <input
-                        type="text"
-                        className="form-control form-control-custom"
-                        value={userProfile.addictions}
-                        onChange={(e) => setUserProfile({...userProfile, addictions: e.target.value})}
-                        placeholder="e.g., smoking, alcohol, etc."
-                      />
-                    </div>
+        <div className="col-md-6">
+          <label className="form-label fw-semibold">{t('student.addictions')}</label>
+          <input
+            type="text"
+            className="form-control form-control-custom"
+            value={userProfile.addictions}
+            onChange={(e) => setUserProfile({...userProfile, addictions: e.target.value})}
+            placeholder={t('student.addictions_placeholder')}
+          />
+        </div>
 
-                    <div className="col-12">
-                      <label className="form-label fw-semibold">Medical History</label>
-                      <textarea
-                        className="form-control form-control-custom"
-                        rows={3}
-                        value={userProfile.medical_history}
-                        onChange={(e) => setUserProfile({...userProfile, medical_history: e.target.value})}
-                        placeholder="Any past medical conditions, surgeries, or chronic illnesses"
-                      />
-                    </div>
+        <div className="col-12">
+          <label className="form-label fw-semibold">{t('student.medical_history')}</label>
+          <textarea
+            className="form-control form-control-custom"
+            rows={3}
+            value={userProfile.medical_history}
+            onChange={(e) => setUserProfile({...userProfile, medical_history: e.target.value})}
+            placeholder={t('student.medical_history_placeholder')}
+          />
+        </div>
 
-                    {/* Save Button */}
-                    <div className="col-12 mt-4">
-                      <button 
-                        className="btn btn-success" 
-                        onClick={saveProfile}
-                        disabled={loading}
-                      >
-                        {loading ? (
-                          <span className="loading-spinner me-2" role="status" aria-hidden="true"></span>
-                        ) : (
-                          <Save size={18} className="me-2" />
-                        )}
-                        Save Profile
-                      </button>
+        {/* Save Button */}
+        <div className="col-12 mt-4">
+          <button 
+            className="btn btn-success" 
+            onClick={saveProfile}
+            disabled={loading}
+          >
+            {loading ? (
+              <span className="loading-spinner me-2" role="status" aria-hidden="true"></span>
+            ) : (
+              <Save size={18} className="me-2" />
+            )}
+            {t('student.save_profile')}
+          </button>
                     </div>
                   </div>
                 </div>
@@ -2852,7 +2904,7 @@ const Sidebar = () => {
         <div className="card-header card-header-custom">
           <h3 className="card-title-custom">
             <FileText size={24} className="me-2" />
-            Request New Appointment
+            {t('student.request_new')}
           </h3>
         </div>
         <div className="card-body p-4 card-body-overflow-visible">
@@ -2862,8 +2914,7 @@ const Sidebar = () => {
               <div className="d-flex align-items-center">
                 <AlertTriangle size={20} className="me-2" />
                 <div>
-                  <strong>Pending Appointment:</strong> You already have a pending appointment request. 
-                  Please wait for it to be approved before requesting another appointment.
+                  <strong>{t('student.pending_warning')}</strong> {t('student.pending_message')}
                 </div>
               </div>
             </div>
@@ -2875,12 +2926,12 @@ const Sidebar = () => {
               <div className="d-flex align-items-center">
                 <AlertTriangle size={20} className="me-2" />
                 <div>
-                  <strong>Profile Incomplete:</strong> You must complete your profile before booking appointments. 
+                   <strong>{t('student.profile_incomplete')}</strong> {t('student.must_complete')}
                   <button 
                     className="btn btn-sm btn-outline-warning ms-2"
                     onClick={() => setActiveTab('profile')}
                   >
-                    Complete Profile
+                    {t('student.complete_profile')}
                   </button>
                 </div>
               </div>
@@ -2891,7 +2942,7 @@ const Sidebar = () => {
             {/* Select Doctor (Optional) */}
             {/* Select Doctor (Optional) */}
             <div className="col-md-6">
-              <label className="form-label fw-semibold">Select Doctor (Optional)</label>
+              <label className="form-label fw-semibold">{t('student.select_doctor')}</label>
               <Select
                 value={[
                   { value: '', label: 'Any available doctor' },
@@ -2936,12 +2987,12 @@ const Sidebar = () => {
                   })
                 }}
               />
-              <div className="form-text">Leave blank to be assigned to any available doctor</div>
+              <div className="form-text">{t('student.leave_blank')}</div>
             </div>
 
             {/* Urgency Level */}
             <div className="col-md-6">
-              <label className="form-label fw-semibold">Urgency Level <span className="text-danger">*</span></label>
+              <label className="form-label fw-semibold">{t('student.urgency_level')}  <span className="text-danger">*</span></label>
               <div className="d-flex gap-3">
                 {urgencyLevels.map((level) => (
                   <div key={level.value} className="flex-grow-1">
@@ -2968,7 +3019,7 @@ const Sidebar = () => {
 
             {/* Date - with clinic hours validation */}
             <div className="col-md-6 col-overflow-visible">
-              <label className="form-label fw-semibold">Date <span className="text-danger">*</span></label>
+              <label className="form-label fw-semibold">{t('student.date')} <span className="text-danger">*</span></label>
               <div className="date-input-wrapper">
               <input
                 type="date"
@@ -2983,7 +3034,7 @@ const Sidebar = () => {
                   if (selectedDate && !isWeekday(selectedDate)) {
                     setMessage({
                       type: 'error',
-                      text: getDateClosureReason(selectedDate) + '. Please select a weekday (Monday-Friday).'
+                      text: getDateClosureReason(selectedDate) + '. ' + t('academic.select_weekday')
                     });
                     setTimeout(() => setMessage({ type: '', text: '' }), 5000);
                     return; // Don't set the date
@@ -2999,7 +3050,7 @@ const Sidebar = () => {
                     
                     setMessage({
                       type: 'error',
-                      text: `Selected date is not available. ${blockingHoliday ? `Reason: ${blockingHoliday.name}` : 'University holiday period'}`
+                      text: `${t('student.date_unavailable')} ${blockingHoliday ? `${t('common.reason')}: ${blockingHoliday.name}` : t('student.university_holiday')}`
                     });
                     setTimeout(() => setMessage({ type: '', text: '' }), 3000);
                     return;
@@ -3014,23 +3065,23 @@ const Sidebar = () => {
               </div>
               {appointmentForm.date && !isWeekday(appointmentForm.date) && (
                 <div className="invalid-feedback d-block">
-                  {getDateClosureReason(appointmentForm.date)}. Please select a weekday.
+                  {getDateClosureReason(appointmentForm.date)}. {t('academic.select_weekday')}
                 </div>
               )}
               <small className="form-text text-muted">
-                Clinic operates Monday-Friday, 9:00 AM - 5:00 PM
+                {t('student.clinic_hours')}
               </small>
             </div>
 
             {/* Time */}
             <div className="col-md-6">
-              <label className="form-label fw-semibold">Time <span className="text-danger">*</span></label>
+              <label className="form-label fw-semibold">{t('student.time')} <span className="text-danger">*</span></label>
               <Select
                 value={timeSlots.map(time => ({ value: time, label: time })).find(option => option.value === appointmentForm.time)}
                 onChange={(option) => setAppointmentForm({...appointmentForm, time: option?.value || ''})}
                 options={timeSlots.map(time => ({ value: time, label: time }))}
                 isDisabled={loading || !appointmentForm.date || !profileComplete}
-                placeholder={!appointmentForm.date ? 'Select date first' : 'Select a time slot'}
+                placeholder={!appointmentForm.date ? t('student.select_date_first') : t('student.select_time')}
                 menuPortalTarget={document.body}
                 menuPosition="fixed"
                 styles={{
@@ -3060,7 +3111,7 @@ const Sidebar = () => {
 
             {/* Reason */}
             <div className="col-12">
-              <label className="form-label fw-semibold">Reason for Appointment <span className="text-danger">*</span></label>
+              <label className="form-label fw-semibold">{t('student.reason')} <span className="text-danger">*</span></label>
               <textarea
                 className="form-control form-control-custom"
                 rows={3}
@@ -3084,19 +3135,19 @@ const Sidebar = () => {
                 ) : (
                   <FileText size={18} className="me-2" />
                 )}
-                Request Appointment
+                {t('student.request_appointment')}
               </button>
 
               {hasPendingAppointments() && (
                 <div className="text-warning small mt-2">
-                  You cannot request a new appointment while you have pending requests.
+                  {t('student.cannot_request')}            
                 </div>
               )}
             </div>
             {/* Doctor Cards */}
             {doctors.length > 0 && (
               <div className="mt-5">
-                <h5 className="mb-3 fw-semibold">Available Doctors</h5>
+                <h5 className="mb-3 fw-semibold">{t('student.available_doctors')}</h5>
                 <div className="row g-3">
                   {doctors.map((doctor) => (
                     <div key={doctor.id} className="col-md-6">
@@ -3138,7 +3189,7 @@ const Sidebar = () => {
       <div className="card-header card-header-custom">
         <h3 className="card-title-custom">
           <History size={24} className="me-2" />
-          Appointment History
+          {t('student.appointment_history')}
         </h3>
       </div>
       <div className="card-body p-2 p-md-4">
@@ -3147,14 +3198,14 @@ const Sidebar = () => {
             <div className="empty-state-icon">
               <FileText size={48} />
             </div>
-            <h5 className="fw-bold">No Appointments Found</h5>
-            <p className="text-muted">You haven't booked any appointments yet.</p>
+            <h5 className="fw-bold">{t('student.no_appointments')}</h5>
+            <p className="text-muted">{t('student.no_appointments_message')}</p>
             <button 
               className="btn btn-primary-custom"
               onClick={() => setActiveTab('request')}
             >
               <FileText size={18} className="me-2" />
-              Book an Appointment
+              {t('student.book_appointment')}
             </button>
           </div>
         ) : (
@@ -3194,7 +3245,7 @@ const Sidebar = () => {
                         onClick={() => openRescheduleModal(appointment)}
                       >
                         <Edit size={14} className="me-1" />
-                        Reschedule
+                        {t('student.reschedule')}
                       </button>
                     ) : (
                       <button 
@@ -3209,7 +3260,7 @@ const Sidebar = () => {
                         }
                       >
                         <Edit size={14} className="me-1" />
-                        Reschedule
+                        {t('student.reschedule')}
                       </button>
                     )}
 
@@ -3222,7 +3273,7 @@ const Sidebar = () => {
                         }}
                       >
                         <X size={14} className="me-1" />
-                        Cancel
+                        {t('student.cancel')}
                       </button>
                     ) : (
                       <button 
@@ -3237,7 +3288,7 @@ const Sidebar = () => {
                         }
                       >
                         <X size={14} className="me-1" />
-                        Cancel
+                        {t('student.cancel')}
                       </button>
                     )}
                   </div>
@@ -3252,12 +3303,12 @@ const Sidebar = () => {
               <table className="table table-custom table-hover">
                 <thead>
                   <tr>
-                    <th>Doctor</th>
-                    <th>Specialty</th>
-                    <th>Date</th>
-                    <th>Time</th>
-                    <th>Status</th>
-                    <th>Actions</th>
+                   <th>{t('student.doctor')}</th>
+                    <th>{t('student.specialty')}</th>
+                    <th>{t('student.date')}</th>
+                    <th>{t('student.time')}</th>
+                    <th>{t('student.status')}</th>
+                    <th>{t('student.actions')}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -3299,7 +3350,7 @@ const Sidebar = () => {
                                 console.log('Reschedule button clicked for:', appointment);
                                 openRescheduleModal(appointment);
                               }}
-                              title="Reschedule appointment"
+                              title={t('student.reschedule')}
                             >
                               <Edit size={16} />
                             </button>
@@ -3326,7 +3377,7 @@ const Sidebar = () => {
                                 setAppointmentToCancel(appointment.id);
                                 setShowCancelModal(true);
                               }}
-                              title="Cancel appointment"
+                              title={t('student.cancel')}
                             >
                               <X size={16} />
                             </button>
@@ -3373,22 +3424,22 @@ const Sidebar = () => {
     <div className="card-header" style={{ backgroundColor: 'var(--university-primary)', borderRadius: '1rem 1rem 0 0' }}>
       <h3 className="mb-0 fw-bold text-white">
         <Stethoscope size={24} className="me-2" />
-        Medical History
+        {t('student.medical_records')}
       </h3>
     </div>
     <div className="card-body p-2 p-md-4">
       {loading ? (
         <div className="text-center py-5">
           <div className="spinner-border" style={{ color: 'var(--university-primary)' }} role="status">
-            <span className="visually-hidden">Loading...</span>
+            <span className="visually-hidden">{t('common.loading')}</span>
           </div>
-          <p className="mt-3">Loading medical history...</p>
+          <p className="mt-3">{t('student.loading_history')}</p>
         </div>
       ) : medicalHistory.length === 0 ? (
         <div className="text-center py-5">
           <Stethoscope size={48} className="text-muted mb-3" />
-          <h5 className="fw-semibold">No medical records found</h5>
-          <p className="text-muted">Your medical history will appear here after your first appointment.</p>
+          <h5 className="fw-semibold">{t('student.no_records')}</h5>
+          <p className="text-muted">{t('student.records_message')}</p>
         </div>
       ) : (
         <>
@@ -3411,11 +3462,11 @@ const Sidebar = () => {
                   
                   <div className="mb-2">
                     <div className="small mb-2">
-                      <strong className="text-primary">Diagnosis Details:</strong>
+                      <strong className="text-primary">{t('student.diagnosis_details')}</strong>
                       <p className="text-muted mb-1">{record.diagnosis_details}</p>
                     </div>
                     <div className="small mb-2">
-                      <strong className="text-success">Treatment:</strong>
+                      <strong className="text-success">{record.treatment}</strong>
                       <p className="text-muted mb-1">{record.treatment}</p>
                     </div>
                   </div>
@@ -3429,16 +3480,16 @@ const Sidebar = () => {
                         data-bs-target={`#prescription-mobile-${record.id}`}
                         aria-expanded="false"
                       >
-                        View Prescription
+                        {t('student.view_prescription')}
                       </button>
                       <div className="collapse mt-2" id={`prescription-mobile-${record.id}`}>
                         <div className="card card-body bg-light">
                           {record.prescription.map((item, i) => (
                             <div key={i} className="mb-2 pb-2 border-bottom">
-                              <div className="small"><strong>Medication:</strong> {item.medication}</div>
-                              <div className="small"><strong>Dosage:</strong> {item.dosage}</div>
-                              <div className="small"><strong>Frequency:</strong> {item.frequency}</div>
-                              <div className="small"><strong>Duration:</strong> {item.duration}</div>
+                              <div className="small"><strong>{t('student.medication')}:</strong> {item.medication}</div>
+                              <div className="small"><strong>{t('student.dosage')}:</strong> {item.dosage}</div>
+                              <div className="small"><strong>{t('student.frequency')}:</strong> {item.frequency}</div>
+                              <div className="small"><strong>{t('student.duration')}:</strong> {item.duration}</div>
                             </div>
                           ))}
                         </div>
@@ -3456,10 +3507,10 @@ const Sidebar = () => {
               <table className="table table-hover align-middle">
                 <thead>
                   <tr>
-                    <th scope="col">Date</th>
-                    <th scope="col">Doctor</th>
-                    <th scope="col">Diagnosis</th>
-                    <th scope="col">Treatment</th>
+                    <th scope="col">{t('student.date')}</th>
+                    <th scope="col">{t('student.doctor')}</th>
+                    <th scope="col">{t('student.diagnosis')}</th>
+                    <th scope="col">{t('common.treatment')}</th>
                     
                   </tr>
                 </thead>
@@ -3498,7 +3549,7 @@ const Sidebar = () => {
                             style={{ borderRadius: '0.5rem' }}
                           >
                             <FileText size={16} className="me-1" />
-                            View Prescription
+                            {t('student.view_prescription')}
                           </button>
                         )}
                       </td>
@@ -3518,30 +3569,30 @@ const Sidebar = () => {
                     <div className="modal-header" style={{ backgroundColor: 'var(--university-primary)' }}>
                       <h5 className="modal-title text-white">
                         <FileText size={20} className="me-2" />
-                        Prescription Details
+                        {t('student.prescription_details')}
                       </h5>
                       <button type="button" className="btn-close btn-close-white" data-bs-dismiss="modal"></button>
                     </div>
                     <div className="modal-body">
                       <div className="mb-3">
-                        <strong>Date:</strong> {new Date(record.date).toLocaleDateString()}
+                        <strong>{t('student.date')}:</strong> {formatDate(record.date)}
                       </div>
                       <div className="mb-3">
-                        <strong>Doctor:</strong> Dr. {record.doctor}
+                        <strong>{t('student.doctor')}:</strong> Dr. {record.doctor}
                       </div>
                       <div className="mb-3">
-                        <strong>Diagnosis:</strong> {record.diagnosis}
+                        <strong>{t('student.diagnosis')}:</strong> {record.diagnosis}
                       </div>
                       <hr />
-                      <h6 className="fw-bold mb-3">Medications:</h6>
+                      <h6 className="fw-bold mb-3">{t('student.medications')}</h6>
                       <div className="table-responsive">
                         <table className="table table-bordered">
                           <thead>
                             <tr>
-                              <th>Medication</th>
-                              <th>Dosage</th>
-                              <th>Frequency</th>
-                              <th>Duration</th>
+                              <th>{t('student.medication')}</th>
+                              <th>{t('student.dosage')}</th>
+                              <th>{t('student.frequency')}</th>
+                              <th>{t('student.duration')}</th>
                             </tr>
                           </thead>
                           <tbody>
@@ -3558,7 +3609,7 @@ const Sidebar = () => {
                       </div>
                     </div>
                     <div className="modal-footer">
-                      <button type="button" className="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                      <button type="button" className="btn btn-secondary" data-bs-dismiss="modal">{t('student.close')}</button>
                     </div>
                   </div>
                 </div>
@@ -3597,7 +3648,9 @@ const Sidebar = () => {
     <div 
       className="modal fade show"
       style={{ 
-        display: 'block',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
         position: 'fixed',
         top: 0,
         left: 0,
@@ -3609,7 +3662,7 @@ const Sidebar = () => {
       tabIndex={-1}
       role="dialog"
     >
-      <div className="modal-dialog modal-dialog-centered" role="document">
+      <div className="modal-dialog" role="document">
         <div 
           className="modal-content"
           style={{
@@ -3629,7 +3682,7 @@ const Sidebar = () => {
               padding: '1rem 1.5rem'
             }}
           >
-            <h5 className="modal-title mb-0">Reschedule Appointment</h5>
+            <h5 className="modal-title mb-0">{t('student.reschedule_modal')}</h5>
             <button 
               type="button" 
               className="btn-close btn-close-white"
@@ -3652,7 +3705,7 @@ const Sidebar = () => {
           <div className="modal-body" style={{ padding: '1.5rem' }}>
             <div className="row g-3">
               <div className="col-12">
-                <label className="form-label fw-semibold">New Date <span className="text-danger">*</span></label>
+                <label className="form-label fw-semibold">{t('student.new_date')} <span className="text-danger">*</span></label>
                 <input
                   type="date"
                   className="form-control form-control-custom"
@@ -3670,7 +3723,7 @@ const Sidebar = () => {
                       
                       setMessage({
                         type: 'error',
-                        text: `Selected date is not available. ${blockingHoliday ? `Reason: ${blockingHoliday.name}` : 'University holiday period'}`
+                        text: `${t('student.date_unavailable')} ${blockingHoliday ? `${t('common.reason')}: ${blockingHoliday.name}` : t('student.university_holiday')}`
                       });
                       setTimeout(() => setMessage({ type: '', text: '' }), 3000);
                       return;
@@ -3683,13 +3736,13 @@ const Sidebar = () => {
                 />
                 {rescheduleForm.date && isDateBlocked(rescheduleForm.date) && (
                   <small className="text-danger">
-                    This date is not available due to university holidays
+                    {t('student.date_blocked')}
                   </small>
                 )}
               </div>
               
               <div className="col-12">
-              <label className="form-label fw-semibold">New Time <span className="text-danger">*</span></label>
+              <label className="form-label fw-semibold">{t('student.new_time')} <span className="text-danger">*</span></label>
               <Select
                 value={timeSlots.map(time => ({ value: time, label: time })).find(option => option.value === rescheduleForm.time)}
                 onChange={(option) => setRescheduleForm({...rescheduleForm, time: option?.value || ''})}
@@ -3745,7 +3798,7 @@ const Sidebar = () => {
                 padding: '0.5rem 1rem'
               }}
             >
-              Cancel
+              {t('common.cancel')}
             </button>
             <button 
               type="button" 
@@ -3767,12 +3820,12 @@ const Sidebar = () => {
                     aria-hidden="true"
                     style={{ width: '1rem', height: '1rem' }}
                   />
-                  Rescheduling...
+                 {t('student.rescheduling')}
                 </>
               ) : (
                 <>
                   <Edit size={16} className="me-2" />
-                  Reschedule Appointment
+                  {t('student.reschedule')}
                 </>
               )}
             </button>
@@ -3841,7 +3894,7 @@ const Sidebar = () => {
                             >
                               <h5 className="modal-title mb-0 d-flex align-items-center">
                                 <AlertTriangle size={20} className="me-2" />
-                                Cancel Appointment
+                                {t('student.cancel_modal')}
                               </h5>
                               <button 
                                 type="button" 
@@ -3869,16 +3922,16 @@ const Sidebar = () => {
                               <div className="d-flex align-items-start mb-3">
                                 <AlertTriangle size={48} className="text-warning me-3 flex-shrink-0" />
                                 <div>
-                                  <h6 className="fw-bold mb-2">Are you sure you want to cancel this appointment?</h6>
+                                  <h6 className="fw-bold mb-2">{t('student.confirm_cancel')}</h6>
                                   <p className="text-muted mb-0">
-                                    This action cannot be undone. You will need to book a new appointment if you change your mind.
+                                    {t('student.cannot_undo')}
                                   </p>
                                 </div>
                               </div>
                               
                               <div className="alert alert-warning mb-0">
                                 <small>
-                                  <strong>Note:</strong> Please cancel at least 24 hours in advance when possible to allow other students to book this slot.
+                                <strong>{t('common.note')}:</strong> {t('student.cancel_notice')}                                
                                 </small>
                               </div>
                             </div>
@@ -3903,7 +3956,7 @@ const Sidebar = () => {
                                   padding: '0.5rem 1rem'
                                 }}
                               >
-                                Keep Appointment
+                                {t('student.keep_appointment')}
                               </button>
                               <button 
                                 type="button" 
@@ -3923,12 +3976,12 @@ const Sidebar = () => {
                                       aria-hidden="true"
                                       style={{ width: '1rem', height: '1rem' }}
                                     />
-                                    Cancelling...
+                                    {t('student.cancelling')}
                                   </>
                                 ) : (
                                   <>
                                     <X size={16} className="me-2" />
-                                    Yes, Cancel Appointment
+                                    {t('student.yes_cancel')}
                                   </>
                                 )}
                               </button>

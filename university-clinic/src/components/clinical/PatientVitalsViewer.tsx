@@ -37,6 +37,9 @@ const PatientVitalsViewer: React.FC<PatientVitalsViewerProps> = ({
   const [days, setDays] = useState(7);
   const [error, setError] = useState('');
 
+  // MOBILE: Detect mobile device
+  const isMobile = window.innerWidth < 768;
+
   useEffect(() => {
     loadVitalsHistory();
   }, [patientId, days]);
@@ -96,46 +99,101 @@ const PatientVitalsViewer: React.FC<PatientVitalsViewerProps> = ({
   const stats = calculateStats();
 
   return (
-    <div className="modal fade show d-block" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
-      <div className="modal-dialog modal-xl modal-dialog-scrollable">
-        <div className="modal-content" style={{ borderRadius: '1rem' }}>
-          <div className="modal-header border-0" style={{ background: 'linear-gradient(135deg, #ec5757ff 0%, #d03b3bff 100%)' }}>
-            <div className="text-white">
-              <h4 className="modal-title mb-1">
-                <Activity size={24} className="me-2" />
-                Vital Signs History - {patientName}
+    <div 
+      className="modal fade show d-block vitals-viewer-modal" 
+      style={{ backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 1055 }}
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+    >
+      <div 
+        className="modal-dialog modal-dialog-scrollable"
+        style={{
+          margin: isMobile ? '0' : '1.75rem auto',
+          maxWidth: isMobile ? '100%' : '1140px',
+          height: isMobile ? '100vh' : 'auto',
+          maxHeight: isMobile ? '100vh' : 'calc(100vh - 3.5rem)'
+        }}
+      >
+        <div 
+          className="modal-content" 
+          style={{ 
+            borderRadius: isMobile ? '0' : '1rem',
+            height: isMobile ? '100vh' : 'auto'
+          }}
+        >
+          <div 
+            className="modal-header border-0" 
+            style={{ 
+              background: 'linear-gradient(135deg, #ec5757ff 0%, #d03b3bff 100%)',
+              padding: isMobile ? '14px 16px' : '16px 24px',
+              flexShrink: 0
+            }}
+          >
+            <div className="text-white" style={{ flex: 1, minWidth: 0 }}>
+              <h4 
+                className="modal-title mb-1 d-flex align-items-center"
+                style={{ fontSize: isMobile ? '1.1rem' : '1.5rem' }}
+              >
+                <Activity size={isMobile ? 20 : 24} className="me-2 flex-shrink-0" />
+                <span style={{ 
+                  overflow: 'hidden', 
+                  textOverflow: 'ellipsis', 
+                  whiteSpace: 'nowrap' 
+                }}>
+                  Vital Signs - {patientName}
+                </span>
               </h4>
-              <small className="opacity-75">Last {days} days</small>
+              <small className="opacity-75" style={{ fontSize: isMobile ? '0.75rem' : '0.875rem' }}>
+                Last {days} days
+              </small>
             </div>
             <button
               type="button"
               className="btn-close btn-close-white"
               onClick={onClose}
+              style={{
+                width: isMobile ? '36px' : '44px',
+                height: isMobile ? '36px' : '44px',
+                flexShrink: 0
+              }}
             />
           </div>
 
-          <div className="modal-body p-4">
-            {/* Time Range Selector */}
-            <div className="mb-4">
-              <div className="btn-group" role="group">
-                <button
-                  className={`btn ${days === 7 ? 'btn-primary' : 'btn-outline-primary'}`}
-                  onClick={() => setDays(7)}
-                >
-                  7 Days
-                </button>
-                <button
-                  className={`btn ${days === 14 ? 'btn-primary' : 'btn-outline-primary'}`}
-                  onClick={() => setDays(14)}
-                >
-                  14 Days
-                </button>
-                <button
-                  className={`btn ${days === 30 ? 'btn-primary' : 'btn-outline-primary'}`}
-                  onClick={() => setDays(30)}
-                >
-                  30 Days
-                </button>
+          <div 
+            className="modal-body" 
+            style={{ 
+              padding: isMobile ? '12px 16px' : '24px',
+              overflowY: 'auto',
+              flex: 1,
+              WebkitOverflowScrolling: 'touch'
+            }}
+          >
+            {/* Time Range Selector - MOBILE OPTIMIZED */}
+            <div className="mb-3">
+              <div 
+                className="btn-group w-100" 
+                role="group"
+                style={{ 
+                  display: 'flex',
+                  gap: isMobile ? '4px' : '0'
+                }}
+              >
+                {[7, 14, 30].map((d) => (
+                  <button
+                    key={d}
+                    className={`btn ${days === d ? 'btn-primary' : 'btn-outline-primary'}`}
+                    onClick={() => setDays(d)}
+                    style={{
+                      flex: 1,
+                      fontSize: isMobile ? '0.85rem' : '1rem',
+                      padding: isMobile ? '8px' : '10px 16px',
+                      minHeight: isMobile ? '38px' : '44px'
+                    }}
+                  >
+                    {d} Days
+                  </button>
+                ))}
               </div>
             </div>
 
@@ -157,113 +215,160 @@ const PatientVitalsViewer: React.FC<PatientVitalsViewerProps> = ({
               </div>
             ) : (
               <>
-                {/* Summary Statistics Cards */}
+                {/* Summary Statistics Cards - MOBILE OPTIMIZED */}
                 {stats && (
-                  <div className="row g-3 mb-4">
-                    <div className="col-md-3">
-                      <div className="card text-center border-0 shadow-sm">
-                        <div className="card-body">
-                          <Heart size={32} className="text-danger mb-2" />
-                          <h6 className="text-muted mb-1">Avg Blood Pressure</h6>
-                          <h4 className="mb-0">{stats.avgSystolic}/{stats.avgDiastolic}</h4>
-                          <small className="text-muted">mmHg</small>
+                  <div className="row g-2 mb-3">
+                    {[
+                      { 
+                        icon: Heart, 
+                        color: 'danger', 
+                        label: 'Avg Blood Pressure', 
+                        value: `${stats.avgSystolic}/${stats.avgDiastolic}`, 
+                        unit: 'mmHg' 
+                      },
+                      { 
+                        icon: Activity, 
+                        color: 'success', 
+                        label: 'Avg Heart Rate', 
+                        value: stats.avgHeartRate, 
+                        unit: 'bpm' 
+                      },
+                      { 
+                        icon: Thermometer, 
+                        color: 'warning', 
+                        label: 'Avg Temperature', 
+                        value: `${stats.avgTemp}°C`, 
+                        unit: 'celsius' 
+                      },
+                      { 
+                        icon: AlertTriangle, 
+                        color: 'danger', 
+                        label: 'Abnormal Readings', 
+                        value: stats.abnormalCount, 
+                        unit: `of ${vitals.length}` 
+                      }
+                    ].map((stat, idx) => (
+                      <div key={idx} className="col-6 col-md-3">
+                        <div className="card text-center border-0 shadow-sm h-100">
+                          <div className="card-body" style={{ padding: isMobile ? '12px' : '16px' }}>
+                            <stat.icon 
+                              size={isMobile ? 24 : 32} 
+                              className={`text-${stat.color} mb-2`} 
+                            />
+                            <h6 
+                              className="text-muted mb-1" 
+                              style={{ 
+                                fontSize: isMobile ? '0.7rem' : '0.875rem',
+                                lineHeight: 1.2
+                              }}
+                            >
+                              {stat.label}
+                            </h6>
+                            <h4 
+                              className="mb-0" 
+                              style={{ fontSize: isMobile ? '1.1rem' : '1.5rem' }}
+                            >
+                              {stat.value}
+                            </h4>
+                            <small 
+                              className="text-muted" 
+                              style={{ fontSize: isMobile ? '0.65rem' : '0.75rem' }}
+                            >
+                              {stat.unit}
+                            </small>
+                          </div>
                         </div>
                       </div>
-                    </div>
-                    <div className="col-md-3">
-                      <div className="card text-center border-0 shadow-sm">
-                        <div className="card-body">
-                          <Activity size={32} className="text-success mb-2" />
-                          <h6 className="text-muted mb-1">Avg Heart Rate</h6>
-                          <h4 className="mb-0">{stats.avgHeartRate}</h4>
-                          <small className="text-muted">bpm</small>
-                        </div>
-                      </div>
-                    </div>
-                    <div className="col-md-3">
-                      <div className="card text-center border-0 shadow-sm">
-                        <div className="card-body">
-                          <Thermometer size={32} className="text-warning mb-2" />
-                          <h6 className="text-muted mb-1">Avg Temperature</h6>
-                          <h4 className="mb-0">{stats.avgTemp}°C</h4>
-                          <small className="text-muted">celsius</small>
-                        </div>
-                      </div>
-                    </div>
-                    <div className="col-md-3">
-                      <div className="card text-center border-0 shadow-sm">
-                        <div className="card-body">
-                          <AlertTriangle size={32} className="text-danger mb-2" />
-                          <h6 className="text-muted mb-1">Abnormal Readings</h6>
-                          <h4 className="mb-0">{stats.abnormalCount}</h4>
-                          <small className="text-muted">out of {vitals.length}</small>
-                        </div>
-                      </div>
-                    </div>
+                    ))}
                   </div>
                 )}
 
-                {/* Detailed Records Table */}
+                {/* Detailed Records Table - MOBILE OPTIMIZED */}
                 <div className="card shadow-sm border-0">
-                  <div className="card-header bg-light">
-                    <h5 className="mb-0">
-                      <Clock size={20} className="me-2" />
-                      Detailed Vital Signs Records
+                  <div 
+                    className="card-header bg-light"
+                    style={{ padding: isMobile ? '10px 12px' : '12px 16px' }}
+                  >
+                    <h5 
+                      className="mb-0 d-flex align-items-center"
+                      style={{ fontSize: isMobile ? '0.95rem' : '1.125rem' }}
+                    >
+                      <Clock size={isMobile ? 16 : 20} className="me-2" />
+                      Detailed Records
                     </h5>
                   </div>
                   <div className="card-body p-0">
-                    <div className="table-responsive">
-                      <table className="table table-hover align-middle mb-0">
+                    <div 
+                      className="table-responsive"
+                      style={{
+                        marginLeft: isMobile ? '-16px' : '0',
+                        marginRight: isMobile ? '-16px' : '0',
+                        paddingLeft: isMobile ? '16px' : '0',
+                        paddingRight: isMobile ? '16px' : '0'
+                      }}
+                    >
+                      <table 
+                        className="table table-hover align-middle mb-0"
+                        style={{
+                          fontSize: isMobile ? '0.75rem' : '0.875rem',
+                          minWidth: isMobile ? '700px' : 'auto'
+                        }}
+                      >
                         <thead className="table-light">
                           <tr>
-                            <th>Date & Time</th>
-                            <th>Blood Pressure</th>
-                            <th>Heart Rate</th>
-                            <th>Temperature</th>
-                            <th>Resp. Rate</th>
-                            <th>SpO2</th>
-                            <th>Recorded By</th>
-                            <th>Status</th>
+                            <th style={{ padding: isMobile ? '8px 6px' : '12px' }}>Date & Time</th>
+                            <th style={{ padding: isMobile ? '8px 6px' : '12px' }}>BP</th>
+                            <th style={{ padding: isMobile ? '8px 6px' : '12px' }}>HR</th>
+                            <th style={{ padding: isMobile ? '8px 6px' : '12px' }}>Temp</th>
+                            <th style={{ padding: isMobile ? '8px 6px' : '12px' }}>RR</th>
+                            <th style={{ padding: isMobile ? '8px 6px' : '12px' }}>SpO2</th>
+                            <th style={{ padding: isMobile ? '8px 6px' : '12px' }}>By</th>
+                            <th style={{ padding: isMobile ? '8px 6px' : '12px' }}>Status</th>
                           </tr>
                         </thead>
                         <tbody>
                           {vitals.map((vital) => (
                             <tr key={vital.id}>
-                              <td>
-                                <Clock size={14} className="me-2 text-muted" />
-                                <small>{new Date(vital.date).toLocaleString('en-US', {
-                                  month: 'short',
-                                  day: 'numeric',
-                                  hour: '2-digit',
-                                  minute: '2-digit'
-                                })}</small>
+                              <td style={{ padding: isMobile ? '8px 6px' : '12px' }}>
+                                <Clock size={12} className="me-1 text-muted" />
+                                <small style={{ fontSize: isMobile ? '0.7rem' : '0.8rem' }}>
+                                  {new Date(vital.date).toLocaleString('en-US', {
+                                    month: 'short',
+                                    day: 'numeric',
+                                    hour: '2-digit',
+                                    minute: '2-digit'
+                                  })}
+                                </small>
                               </td>
-                              <td>
-                                <Heart size={14} className="me-1 text-danger" />
+                              <td style={{ padding: isMobile ? '8px 6px' : '12px' }}>
+                                <Heart size={12} className="me-1 text-danger" />
                                 <strong>{vital.blood_pressure}</strong>
-                                <small className="text-muted d-block">mmHg</small>
                               </td>
-                              <td>
-                                <Activity size={14} className="me-1 text-success" />
+                              <td style={{ padding: isMobile ? '8px 6px' : '12px' }}>
+                                <Activity size={12} className="me-1 text-success" />
                                 <strong>{vital.heart_rate}</strong>
-                                <small className="text-muted d-block">bpm</small>
                               </td>
-                              <td>
-                                <Thermometer size={14} className="me-1 text-warning" />
+                              <td style={{ padding: isMobile ? '8px 6px' : '12px' }}>
+                                <Thermometer size={12} className="me-1 text-warning" />
                                 <strong>{vital.temperature}</strong>
                               </td>
-                              <td>
-                                <Wind size={14} className="me-1 text-info" />
+                              <td style={{ padding: isMobile ? '8px 6px' : '12px' }}>
+                                <Wind size={12} className="me-1 text-info" />
                                 {vital.respiratory_rate || '-'}
                               </td>
-                              <td>
-                                <Droplets size={14} className="me-1 text-primary" />
+                              <td style={{ padding: isMobile ? '8px 6px' : '12px' }}>
+                                <Droplets size={12} className="me-1 text-primary" />
                                 {vital.oxygen_saturation ? `${vital.oxygen_saturation}%` : '-'}
                               </td>
-                              <td>
-                                <small className="text-muted">{vital.recorded_by}</small>
+                              <td style={{ padding: isMobile ? '8px 6px' : '12px' }}>
+                                <small 
+                                  className="text-muted"
+                                  style={{ fontSize: isMobile ? '0.65rem' : '0.75rem' }}
+                                >
+                                  {vital.recorded_by}
+                                </small>
                               </td>
-                              <td>
+                              <td style={{ padding: isMobile ? '8px 6px' : '12px' }}>
                                 {vital.alerts.length > 0 ? (
                                   <div className="d-flex flex-column gap-1">
                                     {vital.alerts.map((alert, idx) => (
@@ -271,7 +376,7 @@ const PatientVitalsViewer: React.FC<PatientVitalsViewerProps> = ({
                                         key={idx}
                                         className={`badge ${getAlertBadge(alert.severity)}`}
                                         title={alert.message}
-                                        style={{ fontSize: '0.7rem' }}
+                                        style={{ fontSize: isMobile ? '0.65rem' : '0.7rem' }}
                                       >
                                         <AlertTriangle size={10} className="me-1" />
                                         {alert.type}
@@ -279,7 +384,12 @@ const PatientVitalsViewer: React.FC<PatientVitalsViewerProps> = ({
                                     ))}
                                   </div>
                                 ) : (
-                                  <span className="badge bg-success">Normal</span>
+                                  <span 
+                                    className="badge bg-success"
+                                    style={{ fontSize: isMobile ? '0.65rem' : '0.7rem' }}
+                                  >
+                                    Normal
+                                  </span>
                                 )}
                               </td>
                             </tr>
@@ -290,14 +400,23 @@ const PatientVitalsViewer: React.FC<PatientVitalsViewerProps> = ({
                   </div>
                 </div>
 
-                {/* Alerts Summary */}
+                {/* Alerts Summary - MOBILE OPTIMIZED */}
                 {vitals.some(v => v.alerts.length > 0) && (
-                  <div className="alert alert-warning mt-4">
-                    <h6 className="alert-heading d-flex align-items-center">
-                      <AlertTriangle size={20} className="me-2" />
+                  <div 
+                    className="alert alert-warning mt-3"
+                    style={{ 
+                      padding: isMobile ? '12px' : '16px',
+                      fontSize: isMobile ? '0.85rem' : '1rem'
+                    }}
+                  >
+                    <h6 
+                      className="alert-heading d-flex align-items-center"
+                      style={{ fontSize: isMobile ? '0.9rem' : '1rem' }}
+                    >
+                      <AlertTriangle size={isMobile ? 16 : 20} className="me-2" />
                       Health Alerts Summary
                     </h6>
-                    <ul className="mb-0">
+                    <ul className="mb-0" style={{ fontSize: isMobile ? '0.8rem' : '0.875rem' }}>
                       {vitals
                         .filter(v => v.alerts.length > 0)
                         .map((vital) => (
@@ -318,12 +437,29 @@ const PatientVitalsViewer: React.FC<PatientVitalsViewerProps> = ({
             )}
           </div>
 
-          <div className="modal-footer border-0 bg-light">
-            <div className="text-muted small me-auto">
+          <div 
+            className="modal-footer border-0 bg-light"
+            style={{ 
+              padding: isMobile ? '10px 16px' : '12px 24px',
+              flexShrink: 0
+            }}
+          >
+            <div 
+              className="text-muted small me-auto"
+              style={{ fontSize: isMobile ? '0.75rem' : '0.875rem' }}
+            >
               <TrendingUp size={14} className="me-1" />
               Total records: {vitals.length}
             </div>
-            <button className="btn btn-secondary" onClick={onClose}>
+            <button 
+              className="btn btn-secondary" 
+              onClick={onClose}
+              style={{
+                fontSize: isMobile ? '0.85rem' : '1rem',
+                padding: isMobile ? '8px 16px' : '10px 20px',
+                minHeight: isMobile ? '38px' : '44px'
+              }}
+            >
               Close
             </button>
           </div>

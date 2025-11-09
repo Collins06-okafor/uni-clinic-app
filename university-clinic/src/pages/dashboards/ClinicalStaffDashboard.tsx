@@ -32,7 +32,7 @@ import MedicationManagement from '../../components/clinical/MedicationManagement
 import PhoneInput from "react-phone-input-2";
 import "react-phone-input-2/lib/style.css";
 import Select from 'react-select';
-
+import './ClinicalStaffDashboard.css';
 
 ChartJS.register(
   CategoryScale,
@@ -1612,131 +1612,81 @@ useEffect(() => {
 // ==================== SIDEBAR COMPONENT ====================
 const Sidebar = () => {
   const menuItems = [
-    { id: 'overview', icon: BarChart3, label: 'Dashboard' },
-    { id: 'appointments', icon: Calendar, label: 'Appointments', 
+    { id: 'overview', icon: BarChart3, label: t('clinical.dashboard') },
+    { id: 'appointments', icon: Calendar, label: t('clinical.appointments'), 
       badge: dashboardData?.today_overview?.pending_student_requests || null },
-    { id: 'patients', icon: Users, label: 'Patients' },
-    { id: 'medications', icon: Pill, label: 'Medications' },
-    { id: 'doctors', icon: Stethoscope, label: 'Doctors' },
-    { id: 'walkin', icon: UserPlus, label: 'Walk-in Patients',
+    { id: 'patients', icon: Users, label: t('clinical.patients') },
+    { id: 'medications', icon: Pill, label: t('clinical.medications') },
+    { id: 'doctors', icon: Stethoscope, label: t('clinical.doctors') },
+    { id: 'walkin', icon: UserPlus, label: t('clinical.walkin_patients'),
       badge: urgentRequests.length > 0 ? urgentRequests.length : null },
   ];
 
-  // Check if mobile
   const isMobile = window.innerWidth < 768;
-  const isTablet = window.innerWidth >= 768 && window.innerWidth < 992;
 
   return (
-      <>
-        {/* Mobile Overlay */}
-        {sidebarOpen && isMobile && (
-          <div
-            style={{
-              position: 'fixed',
-              top: 0,
-              left: 0,
-              right: 0,
-              bottom: 0,
-              backgroundColor: 'rgba(0, 0, 0, 0.6)',
-              zIndex: 1040,
-              backdropFilter: 'blur(2px)',
-            }}
-            onClick={() => setSidebarOpen(false)}
-          />
-        )}
-
-        {/* Sidebar Container */}
+    <>
+      {/* Mobile Overlay */}
+      {sidebarOpen && isMobile && (
         <div
           style={{
             position: 'fixed',
             top: 0,
-            left: isMobile ? (sidebarOpen ? 0 : '-280px') : 0,
+            left: 0,
+            right: 0,
             bottom: 0,
-            width: sidebarCollapsed && !isMobile ? '80px' : '280px',
-            background: '#1a1d29',
-            boxShadow: '4px 0 24px rgba(0, 0, 0, 0.12)',
-            transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-            zIndex: 1050,
+            backgroundColor: 'rgba(0, 0, 0, 0.6)',
+            zIndex: 1040,
+            backdropFilter: 'blur(2px)',
+          }}
+          onClick={() => setSidebarOpen(false)}
+        />
+      )}
+
+      {/* Sidebar Container */}
+      <div
+        style={{
+          position: 'fixed',
+          top: 0,
+          left: isMobile ? (sidebarOpen ? 0 : '-280px') : 0,
+          bottom: 0,
+          width: sidebarCollapsed && !isMobile ? '80px' : '280px',
+          background: '#1a1d29',
+          boxShadow: '4px 0 24px rgba(0, 0, 0, 0.12)',
+          transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+          zIndex: 1050,
+          display: 'flex',
+          flexDirection: 'column',
+          overflow: 'hidden', // KEY FIX: Prevent scrollbars
+        }}
+      >
+        {/* Header - Fixed height */}
+        <div
+          style={{
+            padding: sidebarCollapsed && !isMobile ? '10px' : isMobile ? '12px 14px' : '14px 16px',
+            borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
+            background: 'linear-gradient(135deg, #1e2230 0%, #1a1d29 100%)',
+            minHeight: isMobile ? '60px' : '65px',
+            maxHeight: isMobile ? '60px' : '65px', // KEY FIX: Set max height
+            flexShrink: 0, // KEY FIX: Don't allow shrinking
             display: 'flex',
-            flexDirection: 'column',
-            overflow: 'hidden',
+            alignItems: 'center',
+            justifyContent: 'space-between',
           }}
         >
-          {/* Header */}
-          <div
-            style={{
-              padding: sidebarCollapsed && !isMobile ? '10px' : isMobile ? '12px 14px' : '14px 16px',
-              borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              background: 'linear-gradient(135deg, #1e2230 0%, #1a1d29 100%)',
-              minHeight: isMobile ? '60px' : '65px',
-              flexShrink: 0,
-            }}
-          >
-            {!(sidebarCollapsed && !isMobile) ? (
-              <div style={{ display: 'flex', alignItems: 'center', flex: 1 }}>
-                <div
-                  style={{
-                    width: isMobile ? '36px' : '42px',
-                    height: isMobile ? '36px' : '42px',
-                    borderRadius: isMobile ? '8px' : '10px',
-                    background: 'linear-gradient(135deg, #dc3545 0%, #c82333 100%)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    marginRight: isMobile ? '10px' : '12px',
-                    boxShadow: '0 4px 12px rgba(220, 53, 69, 0.3)',
-                    overflow: 'hidden',
-                  }}
-                >
-                  <img
-                    src="/logo6.png"
-                    alt="FIU Logo"
-                    style={{
-                      width: isMobile ? '24px' : '28px',
-                      height: isMobile ? '24px' : '28px',
-                      objectFit: 'cover',
-                    }}
-                  />
-                </div>
-                <div>
-                  <h6
-                    style={{
-                      color: '#ffffff',
-                      margin: 0,
-                      fontSize: isMobile ? '0.95rem' : '1rem',
-                      fontWeight: 700,
-                      letterSpacing: '-0.02em',
-                      lineHeight: 1.2,
-                    }}
-                  >
-                    FIU Medical
-                  </h6>
-                  <small
-                    style={{
-                      color: 'rgba(255, 255, 255, 0.6)',
-                      fontSize: isMobile ? '0.7rem' : '0.75rem',
-                      fontWeight: 500,
-                    }}
-                  >
-                    Clinical Portal
-                  </small>
-                </div>
-              </div>
-            ) : (
+          {!(sidebarCollapsed && !isMobile) ? (
+            <div style={{ display: 'flex', alignItems: 'center', flex: 1 }}>
               <div
                 style={{
-                  width: '42px',
-                  height: '42px',
-                  borderRadius: '10px',
+                  width: isMobile ? '36px' : '42px',
+                  height: isMobile ? '36px' : '42px',
+                  borderRadius: isMobile ? '8px' : '10px',
                   background: 'linear-gradient(135deg, #dc3545 0%, #c82333 100%)',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
+                  marginRight: isMobile ? '10px' : '12px',
                   boxShadow: '0 4px 12px rgba(220, 53, 69, 0.3)',
-                  margin: '0 auto',
                   overflow: 'hidden',
                 }}
               >
@@ -1744,448 +1694,505 @@ const Sidebar = () => {
                   src="/logo6.png"
                   alt="FIU Logo"
                   style={{
-                    width: '28px',
-                    height: '28px',
+                    width: isMobile ? '24px' : '28px',
+                    height: isMobile ? '24px' : '28px',
                     objectFit: 'cover',
                   }}
                 />
               </div>
-            )}
-
-            {!isMobile && (
-              <button
-                onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
-                style={{
-                  background: 'linear-gradient(135deg, rgba(220, 53, 69, 0.15) 0%, rgba(200, 35, 51, 0.15) 100%)',
-                  border: '1px solid rgba(220, 53, 69, 0.3)',
-                  borderRadius: '8px',
-                  width: '32px',
-                  height: '32px',
-                  color: '#dc3545',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-                  fontSize: '0.85rem',
-                  fontWeight: 700,
-                  boxShadow: '0 2px 8px rgba(220, 53, 69, 0.2)',
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.background = 'linear-gradient(135deg, rgba(220, 53, 69, 0.25) 0%, rgba(200, 35, 51, 0.25) 100%)';
-                  e.currentTarget.style.transform = 'scale(1.05)';
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.background = 'linear-gradient(135deg, rgba(220, 53, 69, 0.15) 0%, rgba(200, 35, 51, 0.15) 100%)';
-                  e.currentTarget.style.transform = 'scale(1)';
-                }}
-              >
-                {sidebarCollapsed ? '»' : '«'}
-              </button>
-            )}
-          </div>
-
-          {/* Navigation */}
-          <nav
-            style={{
-              flex: isMobile ? 'none' : 1,
-              flexShrink: isMobile ? 0 : 1,
-              overflowY: isMobile ? 'visible' : 'auto',
-              overflowX: 'hidden',
-              padding: sidebarCollapsed && !isMobile ? '12px 8px' : isMobile ? '8px 10px' : '16px 12px',
-              minHeight: isMobile ? 'auto' : 0,
-            }}
-          >
-            {!(sidebarCollapsed && !isMobile) && (
-              <div
-                style={{
-                  color: 'rgba(255, 255, 255, 0.5)',
-                  fontSize: isMobile ? '0.65rem' : '0.7rem',
-                  fontWeight: 600,
-                  textTransform: 'uppercase',
-                  letterSpacing: '0.08em',
-                  marginBottom: isMobile ? '6px' : '8px',
-                  paddingLeft: isMobile ? '8px' : '12px',
-                }}
-              >
-                Main Menu
-              </div>
-            )}
-
-            {menuItems.map((item) => {
-              const Icon = item.icon;
-              const isActive = activeTab === item.id;
-
-              return (
-                <button
-                  key={item.id}
-                  onClick={() => {
-                    setActiveTab(item.id as TabType);
-                    if (isMobile) setSidebarOpen(false);
-                  }}
+              <div>
+                <h6
                   style={{
-                    width: '100%',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: sidebarCollapsed && !isMobile ? 'center' : 'space-between',
-                    padding: sidebarCollapsed && !isMobile 
-                      ? '12px' 
-                      : isMobile 
-                      ? '10px 12px' 
-                      : '12px 14px',
-                    marginBottom: isMobile ? '4px' : '6px',
-                    background: isActive
-                      ? 'linear-gradient(135deg, rgba(220, 53, 69, 0.15) 0%, rgba(200, 35, 51, 0.15) 100%)'
-                      : 'transparent',
-                    border: isActive ? '1px solid rgba(220, 53, 69, 0.3)' : '1px solid transparent',
-                    borderRadius: isMobile ? '8px' : '10px',
-                    color: isActive ? '#dc3545' : 'rgba(255, 255, 255, 0.75)',
-                    cursor: 'pointer',
-                    transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
-                    fontSize: isMobile ? '0.85rem' : '0.9rem',
-                    fontWeight: isActive ? 600 : 500,
-                    position: 'relative',
-                    overflow: 'hidden',
-                    minHeight: '44px',
-                  }}
-                  onMouseEnter={(e) => {
-                    if (!isActive) {
-                      e.currentTarget.style.background = 'rgba(255, 255, 255, 0.06)';
-                      e.currentTarget.style.color = '#ffffff';
-                      e.currentTarget.style.transform = 'translateX(4px)';
-                    }
-                  }}
-                  onMouseLeave={(e) => {
-                    if (!isActive) {
-                      e.currentTarget.style.background = 'transparent';
-                      e.currentTarget.style.color = 'rgba(255, 255, 255, 0.75)';
-                      e.currentTarget.style.transform = 'translateX(0)';
-                    }
+                    color: '#ffffff',
+                    margin: 0,
+                    fontSize: isMobile ? '0.95rem' : '1rem',
+                    fontWeight: 700,
+                    letterSpacing: '-0.02em',
+                    lineHeight: 1.2,
                   }}
                 >
-                  <div style={{ display: 'flex', alignItems: 'center' }}>
-                    <Icon size={isMobile ? 18 : 20} style={{ minWidth: isMobile ? '18px' : '20px' }} />
-                    {!(sidebarCollapsed && !isMobile) && (
-                      <span style={{ marginLeft: isMobile ? '10px' : '14px' }}>{item.label}</span>
-                    )}
-                  </div>
-
-                  {item.badge && item.badge > 0 && !(sidebarCollapsed && !isMobile) && (
-                    <span
-                      style={{
-                        background: 'linear-gradient(135deg, #dc3545 0%, #c82333 100%)',
-                        color: 'white',
-                        fontSize: isMobile ? '0.7rem' : '0.75rem',
-                        fontWeight: 700,
-                        padding: isMobile ? '2px 6px' : '3px 8px',
-                        borderRadius: '12px',
-                        minWidth: isMobile ? '20px' : '24px',
-                        textAlign: 'center',
-                        boxShadow: '0 2px 8px rgba(220, 53, 69, 0.4)',
-                      }}
-                    >
-                      {item.badge}
-                    </span>
-                  )}
-
-                  {isActive && (
-                    <div
-                      style={{
-                        position: 'absolute',
-                        left: 0,
-                        top: '50%',
-                        transform: 'translateY(-50%)',
-                        width: isMobile ? '3px' : '4px',
-                        height: '60%',
-                        background: 'linear-gradient(180deg, #dc3545 0%, #c82333 100%)',
-                        borderRadius: '0 4px 4px 0',
-                      }}
-                    />
-                  )}
-                </button>
-              );
-            })}
-
+                  FIU Medical
+                </h6>
+                <small
+                  style={{
+                    color: 'rgba(255, 255, 255, 0.6)',
+                    fontSize: isMobile ? '0.7rem' : '0.75rem',
+                    fontWeight: 500,
+                  }}
+                >
+                  {t('clinical.clinic_portal')}
+                </small>
+              </div>
+            </div>
+          ) : (
             <div
               style={{
-                height: '1px',
-                background: 'rgba(255, 255, 255, 0.08)',
-                margin: isMobile ? '8px 0' : '12px 0',
-              }}
-            />
-
-            <button
-              onClick={() => {
-                setActiveTab('profile');
-                if (isMobile) setSidebarOpen(false);
-              }}
-              style={{
-                width: '100%',
+                width: '42px',
+                height: '42px',
+                borderRadius: '10px',
+                background: 'linear-gradient(135deg, #dc3545 0%, #c82333 100%)',
                 display: 'flex',
                 alignItems: 'center',
-                justifyContent: sidebarCollapsed && !isMobile ? 'center' : 'flex-start',
-                padding: sidebarCollapsed && !isMobile 
-                  ? '12px' 
-                  : isMobile 
-                  ? '10px 12px' 
-                  : '12px 14px',
-                marginBottom: isMobile ? '4px' : '6px',
-                background: activeTab === 'profile'
-                  ? 'linear-gradient(135deg, rgba(220, 53, 69, 0.15) 0%, rgba(200, 35, 51, 0.15) 100%)'
-                  : 'transparent',
-                border: activeTab === 'profile' ? '1px solid rgba(220, 53, 69, 0.3)' : '1px solid transparent',
-                borderRadius: isMobile ? '8px' : '10px',
-                color: activeTab === 'profile' ? '#dc3545' : 'rgba(255, 255, 255, 0.75)',
-                cursor: 'pointer',
-                transition: 'all 0.2s ease',
-                fontSize: isMobile ? '0.85rem' : '0.9rem',
-                fontWeight: activeTab === 'profile' ? 600 : 500,
-                minHeight: '44px',
-              }}
-              onMouseEnter={(e) => {
-                if (activeTab !== 'profile') {
-                  e.currentTarget.style.background = 'rgba(255, 255, 255, 0.06)';
-                  e.currentTarget.style.color = '#ffffff';
-                }
-              }}
-              onMouseLeave={(e) => {
-                if (activeTab !== 'profile') {
-                  e.currentTarget.style.background = 'transparent';
-                  e.currentTarget.style.color = 'rgba(255, 255, 255, 0.75)';
-                }
+                justifyContent: 'center',
+                boxShadow: '0 4px 12px rgba(220, 53, 69, 0.3)',
+                margin: '0 auto',
+                overflow: 'hidden',
               }}
             >
-              <User size={isMobile ? 18 : 20} />
-              {!(sidebarCollapsed && !isMobile) && (
-                <span style={{ marginLeft: isMobile ? '10px' : '14px' }}>Profile</span>
-              )}
+              <img
+                src="/logo6.png"
+                alt="FIU Logo"
+                style={{
+                  width: '28px',
+                  height: '28px',
+                  objectFit: 'cover',
+                }}
+              />
+            </div>
+          )}
+
+          {!isMobile && (
+            <button
+              onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+              style={{
+                background: 'linear-gradient(135deg, rgba(220, 53, 69, 0.15) 0%, rgba(200, 35, 51, 0.15) 100%)',
+                border: '1px solid rgba(220, 53, 69, 0.3)',
+                borderRadius: '8px',
+                width: '32px',
+                height: '32px',
+                color: '#dc3545',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                fontSize: '0.85rem',
+                fontWeight: 700,
+                boxShadow: '0 2px 8px rgba(220, 53, 69, 0.2)',
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.background = 'linear-gradient(135deg, rgba(220, 53, 69, 0.25) 0%, rgba(200, 35, 51, 0.25) 100%)';
+                e.currentTarget.style.transform = 'scale(1.05)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.background = 'linear-gradient(135deg, rgba(220, 53, 69, 0.15) 0%, rgba(200, 35, 51, 0.15) 100%)';
+                e.currentTarget.style.transform = 'scale(1)';
+              }}
+            >
+              {sidebarCollapsed ? '»' : '«'}
             </button>
-          </nav>
+          )}
+        </div>
 
-          {!isMobile && <div style={{ flex: 1, minHeight: 0 }} />}
+        {/* Navigation - Flexible with hidden scrollbar */}
+        <nav
+          style={{
+            flex: 1,
+            minHeight: 0, // KEY FIX: Important for flexbox scrolling
+            overflowY: 'auto',
+            overflowX: 'hidden',
+            padding: sidebarCollapsed && !isMobile ? '12px 8px' : isMobile ? '8px 10px' : '12px 12px', // Reduced padding
+            scrollbarWidth: 'none', // Firefox
+            msOverflowStyle: 'none', // IE and Edge
+          }}
+          className="sidebar-nav-no-scrollbar"
+        >
+          {!(sidebarCollapsed && !isMobile) && (
+            <div
+              style={{
+                color: 'rgba(255, 255, 255, 0.5)',
+                fontSize: isMobile ? '0.65rem' : '0.7rem',
+                fontWeight: 600,
+                textTransform: 'uppercase',
+                letterSpacing: '0.08em',
+                marginBottom: isMobile ? '6px' : '6px', // Reduced
+                paddingLeft: isMobile ? '8px' : '12px',
+              }}
+            >
+              {t('clinical.main_menu')}
+            </div>
+          )}
 
-          {/* Footer */}
-          <div
-            style={{
-              padding: sidebarCollapsed && !isMobile ? '14px 10px' : isMobile ? '10px 12px' : '16px',
-              borderTop: '1px solid rgba(255, 255, 255, 0.08)',
-              background: 'linear-gradient(180deg, transparent 0%, rgba(0, 0, 0, 0.2) 100%)',
-              flexShrink: 0,
-            }}
-          >
-            {!(sidebarCollapsed && !isMobile) ? (
-              <div>
-                <div
-                  style={{
-                    background: 'rgba(255, 255, 255, 0.06)',
-                    border: '1px solid rgba(255, 255, 255, 0.1)',
-                    padding: isMobile ? '8px 10px' : '10px 12px',
-                    borderRadius: isMobile ? '8px' : '10px',
-                    marginBottom: isMobile ? '8px' : '10px',
-                    display: 'flex',
-                    alignItems: 'center',
-                  }}
-                >
+          {menuItems.map((item) => {
+            const Icon = item.icon;
+            const isActive = activeTab === item.id;
+
+            return (
+              <button
+                key={item.id}
+                onClick={() => {
+                  setActiveTab(item.id as TabType);
+                  if (isMobile) setSidebarOpen(false);
+                }}
+                style={{
+                  width: '100%',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: sidebarCollapsed && !isMobile ? 'center' : 'space-between',
+                  padding: sidebarCollapsed && !isMobile 
+                    ? '12px' 
+                    : isMobile 
+                    ? '10px 12px' 
+                    : '10px 14px', // KEY FIX: Reduced from 12px 14px
+                  marginBottom: isMobile ? '4px' : '4px', // KEY FIX: Reduced from 6px
+                  background: isActive
+                    ? 'linear-gradient(135deg, rgba(220, 53, 69, 0.15) 0%, rgba(200, 35, 51, 0.15) 100%)'
+                    : 'transparent',
+                  border: isActive ? '1px solid rgba(220, 53, 69, 0.3)' : '1px solid transparent',
+                  borderRadius: isMobile ? '8px' : '10px',
+                  color: isActive ? '#dc3545' : 'rgba(255, 255, 255, 0.75)',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+                  fontSize: isMobile ? '0.85rem' : '0.9rem',
+                  fontWeight: isActive ? 600 : 500,
+                  position: 'relative',
+                  overflow: 'hidden',
+                  minHeight: '42px', // KEY FIX: Reduced from 44px
+                }}
+                onMouseEnter={(e) => {
+                  if (!isActive) {
+                    e.currentTarget.style.background = 'rgba(255, 255, 255, 0.06)';
+                    e.currentTarget.style.color = '#ffffff';
+                    e.currentTarget.style.transform = 'translateX(4px)';
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  if (!isActive) {
+                    e.currentTarget.style.background = 'transparent';
+                    e.currentTarget.style.color = 'rgba(255, 255, 255, 0.75)';
+                    e.currentTarget.style.transform = 'translateX(0)';
+                  }
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center' }}>
+                  <Icon size={isMobile ? 18 : 20} style={{ minWidth: isMobile ? '18px' : '20px' }} />
+                  {!(sidebarCollapsed && !isMobile) && (
+                    <span style={{ marginLeft: isMobile ? '10px' : '14px' }}>{item.label}</span>
+                  )}
+                </div>
+
+                {item.badge && item.badge > 0 && !(sidebarCollapsed && !isMobile) && (
+                  <span
+                    style={{
+                      background: 'linear-gradient(135deg, #dc3545 0%, #c82333 100%)',
+                      color: 'white',
+                      fontSize: isMobile ? '0.7rem' : '0.75rem',
+                      fontWeight: 700,
+                      padding: isMobile ? '2px 6px' : '3px 8px',
+                      borderRadius: '12px',
+                      minWidth: isMobile ? '20px' : '24px',
+                      textAlign: 'center',
+                      boxShadow: '0 2px 8px rgba(220, 53, 69, 0.4)',
+                    }}
+                  >
+                    {item.badge}
+                  </span>
+                )}
+
+                {isActive && (
                   <div
                     style={{
-                      width: isMobile ? '32px' : '36px',
-                      height: isMobile ? '32px' : '36px',
+                      position: 'absolute',
+                      left: 0,
+                      top: '50%',
+                      transform: 'translateY(-50%)',
+                      width: isMobile ? '3px' : '4px',
+                      height: '60%',
+                      background: 'linear-gradient(180deg, #dc3545 0%, #c82333 100%)',
+                      borderRadius: '0 4px 4px 0',
+                    }}
+                  />
+                )}
+              </button>
+            );
+          })}
+
+          <div
+            style={{
+              height: '1px',
+              background: 'rgba(255, 255, 255, 0.08)',
+              margin: isMobile ? '8px 0' : '10px 0', // KEY FIX: Reduced from 12px
+            }}
+          />
+
+          <button
+            onClick={() => {
+              setActiveTab('profile');
+              if (isMobile) setSidebarOpen(false);
+            }}
+            style={{
+              width: '100%',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: sidebarCollapsed && !isMobile ? 'center' : 'flex-start',
+              padding: sidebarCollapsed && !isMobile 
+                ? '12px' 
+                : isMobile 
+                ? '10px 12px' 
+                : '10px 14px', // KEY FIX: Reduced
+              marginBottom: isMobile ? '4px' : '4px',
+              background: activeTab === 'profile'
+                ? 'linear-gradient(135deg, rgba(220, 53, 69, 0.15) 0%, rgba(200, 35, 51, 0.15) 100%)'
+                : 'transparent',
+              border: activeTab === 'profile' ? '1px solid rgba(220, 53, 69, 0.3)' : '1px solid transparent',
+              borderRadius: isMobile ? '8px' : '10px',
+              color: activeTab === 'profile' ? '#dc3545' : 'rgba(255, 255, 255, 0.75)',
+              cursor: 'pointer',
+              transition: 'all 0.2s ease',
+              fontSize: isMobile ? '0.85rem' : '0.9rem',
+              fontWeight: activeTab === 'profile' ? 600 : 500,
+              minHeight: '42px', // KEY FIX: Reduced from 44px
+            }}
+            onMouseEnter={(e) => {
+              if (activeTab !== 'profile') {
+                e.currentTarget.style.background = 'rgba(255, 255, 255, 0.06)';
+                e.currentTarget.style.color = '#ffffff';
+              }
+            }}
+            onMouseLeave={(e) => {
+              if (activeTab !== 'profile') {
+                e.currentTarget.style.background = 'transparent';
+                e.currentTarget.style.color = 'rgba(255, 255, 255, 0.75)';
+              }
+            }}
+          >
+            <User size={isMobile ? 18 : 20} />
+            {!(sidebarCollapsed && !isMobile) && (
+              <span style={{ marginLeft: isMobile ? '10px' : '14px' }}>{t('clinical.profile')}</span>
+            )}
+          </button>
+        </nav>
+
+        {/* Footer - Fixed height */}
+        <div
+          style={{
+            padding: sidebarCollapsed && !isMobile ? '12px 10px' : isMobile ? '10px 12px' : '12px 16px', // KEY FIX: Reduced
+            borderTop: '1px solid rgba(255, 255, 255, 0.08)',
+            background: 'linear-gradient(180deg, transparent 0%, rgba(0, 0, 0, 0.2) 100%)',
+            flexShrink: 0, // KEY FIX: Don't shrink
+            maxHeight: '260px', // KEY FIX: Set maximum height
+          }}
+        >
+          {!(sidebarCollapsed && !isMobile) ? (
+            <div>
+              <div
+                style={{
+                  background: 'rgba(255, 255, 255, 0.06)',
+                  border: '1px solid rgba(255, 255, 255, 0.1)',
+                  padding: isMobile ? '8px 10px' : '8px 10px', // KEY FIX: Reduced
+                  borderRadius: isMobile ? '8px' : '10px',
+                  marginBottom: isMobile ? '8px' : '8px', // KEY FIX: Reduced
+                  display: 'flex',
+                  alignItems: 'center',
+                }}
+              >
+                <div
+                  style={{
+                    width: isMobile ? '32px' : '36px',
+                    height: isMobile ? '32px' : '36px',
+                    borderRadius: isMobile ? '6px' : '8px',
+                    background: 'linear-gradient(135deg, #dc3545 0%, #c82333 100%)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    marginRight: isMobile ? '8px' : '10px',
+                    fontSize: isMobile ? '0.9rem' : '1rem',
+                    fontWeight: 700,
+                    boxShadow: '0 4px 12px rgba(220, 53, 69, 0.3)',
+                    color: 'white',
+                  }}
+                >
+                  {user?.name?.charAt(0).toUpperCase() || 'C'}
+                </div>
+                <div style={{ flex: 1, overflow: 'hidden' }}>
+                  <div
+                    style={{
+                      fontSize: isMobile ? '0.85rem' : '0.9rem',
+                      fontWeight: 600,
+                      color: 'white',
+                      whiteSpace: 'nowrap',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      lineHeight: 1.2,
+                    }}
+                  >
+                    {user?.name || 'Clinical Staff'}
+                  </div>
+                  <small
+                    style={{
+                      color: 'rgba(255, 255, 255, 0.6)',
+                      fontSize: isMobile ? '0.65rem' : '0.7rem',
+                      fontWeight: 500,
+                    }}
+                  >
+                    {t('clinical.clinic_portal')}
+                  </small>
+                </div>
+              </div>
+
+              <div style={{ marginBottom: isMobile ? '8px' : '8px' }}> {/* KEY FIX: Reduced */}
+                <div
+                  style={{
+                    color: 'rgba(255, 255, 255, 0.5)',
+                    fontSize: isMobile ? '0.6rem' : '0.65rem',
+                    fontWeight: 600,
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.08em',
+                    marginBottom: isMobile ? '4px' : '4px', // KEY FIX: Reduced
+                    paddingLeft: '4px',
+                  }}
+                >
+                  {t('clinical.language')}
+                </div>
+
+                <div style={{ display: 'flex', gap: isMobile ? '4px' : '6px' }}>
+                  <button
+                    onClick={() => i18n.changeLanguage('en')}
+                    style={{
+                      flex: 1,
+                      background: i18n.language === 'en'
+                        ? 'linear-gradient(135deg, rgba(220, 53, 69, 0.2) 0%, rgba(200, 35, 51, 0.2) 100%)'
+                        : 'rgba(255, 255, 255, 0.05)',
+                      border: i18n.language === 'en'
+                        ? '1px solid rgba(220, 53, 69, 0.4)'
+                        : '1px solid rgba(255, 255, 255, 0.1)',
+                      color: i18n.language === 'en' ? '#dc3545' : 'rgba(255, 255, 255, 0.7)',
+                      padding: isMobile ? '6px 8px' : '6px 10px', // KEY FIX: Reduced
                       borderRadius: isMobile ? '6px' : '8px',
-                      background: 'linear-gradient(135deg, #dc3545 0%, #c82333 100%)',
+                      cursor: 'pointer',
+                      transition: 'all 0.2s ease',
+                      fontSize: isMobile ? '0.75rem' : '0.8rem',
+                      fontWeight: i18n.language === 'en' ? 600 : 500,
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
-                      marginRight: isMobile ? '8px' : '10px',
-                      fontSize: isMobile ? '0.9rem' : '1rem',
-                      fontWeight: 700,
-                      boxShadow: '0 4px 12px rgba(220, 53, 69, 0.3)',
-                      color: 'white',
+                      gap: isMobile ? '4px' : '5px',
+                      minHeight: '34px', // KEY FIX: Reduced from 36px
                     }}
                   >
-                    {user?.name?.charAt(0).toUpperCase() || 'C'}
-                  </div>
-                  <div style={{ flex: 1, overflow: 'hidden' }}>
-                    <div
-                      style={{
-                        fontSize: isMobile ? '0.85rem' : '0.9rem',
-                        fontWeight: 600,
-                        color: 'white',
-                        whiteSpace: 'nowrap',
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
-                        lineHeight: 1.2,
-                      }}
-                    >
-                      {user?.name || 'Clinical Staff'}
-                    </div>
-                    <small
-                      style={{
-                        color: 'rgba(255, 255, 255, 0.6)',
-                        fontSize: isMobile ? '0.65rem' : '0.7rem',
-                        fontWeight: 500,
-                      }}
-                    >
-                      Clinical Portal
-                    </small>
-                  </div>
-                </div>
+                    <Globe size={isMobile ? 12 : 13} />
+                    <span>EN</span>
+                    {i18n.language === 'en' && <CheckCircle size={isMobile ? 10 : 12} />}
+                  </button>
 
-                <div style={{ marginBottom: isMobile ? '8px' : '10px' }}>
-                  <div
+                  <button
+                    onClick={() => i18n.changeLanguage('tr')}
                     style={{
-                      color: 'rgba(255, 255, 255, 0.5)',
-                      fontSize: isMobile ? '0.6rem' : '0.65rem',
-                      fontWeight: 600,
-                      textTransform: 'uppercase',
-                      letterSpacing: '0.08em',
-                      marginBottom: isMobile ? '4px' : '6px',
-                      paddingLeft: '4px',
+                      flex: 1,
+                      background: i18n.language === 'tr'
+                        ? 'linear-gradient(135deg, rgba(220, 53, 69, 0.2) 0%, rgba(200, 35, 51, 0.2) 100%)'
+                        : 'rgba(255, 255, 255, 0.05)',
+                      border: i18n.language === 'tr'
+                        ? '1px solid rgba(220, 53, 69, 0.4)'
+                        : '1px solid rgba(255, 255, 255, 0.1)',
+                      color: i18n.language === 'tr' ? '#dc3545' : 'rgba(255, 255, 255, 0.7)',
+                      padding: isMobile ? '6px 8px' : '6px 10px', // KEY FIX: Reduced
+                      borderRadius: isMobile ? '6px' : '8px',
+                      cursor: 'pointer',
+                      transition: 'all 0.2s ease',
+                      fontSize: isMobile ? '0.75rem' : '0.8rem',
+                      fontWeight: i18n.language === 'tr' ? 600 : 500,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: isMobile ? '4px' : '5px',
+                      minHeight: '34px', // KEY FIX: Reduced from 36px
                     }}
                   >
-                    Language
-                  </div>
-
-                  <div style={{ display: 'flex', gap: isMobile ? '4px' : '6px' }}>
-                    <button
-                      onClick={() => i18n.changeLanguage('en')}
-                      style={{
-                        flex: 1,
-                        background: i18n.language === 'en'
-                          ? 'linear-gradient(135deg, rgba(220, 53, 69, 0.2) 0%, rgba(200, 35, 51, 0.2) 100%)'
-                          : 'rgba(255, 255, 255, 0.05)',
-                        border: i18n.language === 'en'
-                          ? '1px solid rgba(220, 53, 69, 0.4)'
-                          : '1px solid rgba(255, 255, 255, 0.1)',
-                        color: i18n.language === 'en' ? '#dc3545' : 'rgba(255, 255, 255, 0.7)',
-                        padding: isMobile ? '6px 8px' : '8px 10px',
-                        borderRadius: isMobile ? '6px' : '8px',
-                        cursor: 'pointer',
-                        transition: 'all 0.2s ease',
-                        fontSize: isMobile ? '0.75rem' : '0.8rem',
-                        fontWeight: i18n.language === 'en' ? 600 : 500,
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        gap: isMobile ? '4px' : '5px',
-                        minHeight: '36px',
-                      }}
-                    >
-                      <Globe size={isMobile ? 12 : 13} />
-                      <span>EN</span>
-                      {i18n.language === 'en' && <CheckCircle size={isMobile ? 10 : 12} />}
-                    </button>
-
-                    <button
-                      onClick={() => i18n.changeLanguage('tr')}
-                      style={{
-                        flex: 1,
-                        background: i18n.language === 'tr'
-                          ? 'linear-gradient(135deg, rgba(220, 53, 69, 0.2) 0%, rgba(200, 35, 51, 0.2) 100%)'
-                          : 'rgba(255, 255, 255, 0.05)',
-                        border: i18n.language === 'tr'
-                          ? '1px solid rgba(220, 53, 69, 0.4)'
-                          : '1px solid rgba(255, 255, 255, 0.1)',
-                        color: i18n.language === 'tr' ? '#dc3545' : 'rgba(255, 255, 255, 0.7)',
-                        padding: isMobile ? '6px 8px' : '8px 10px',
-                        borderRadius: isMobile ? '6px' : '8px',
-                        cursor: 'pointer',
-                        transition: 'all 0.2s ease',
-                        fontSize: isMobile ? '0.75rem' : '0.8rem',
-                        fontWeight: i18n.language === 'tr' ? 600 : 500,
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        gap: isMobile ? '4px' : '5px',
-                        minHeight: '36px',
-                      }}
-                    >
-                      <Globe size={isMobile ? 12 : 13} />
-                      <span>TR</span>
-                      {i18n.language === 'tr' && <CheckCircle size={isMobile ? 10 : 12} />}
-                    </button>
-                  </div>
+                    <Globe size={isMobile ? 12 : 13} />
+                    <span>TR</span>
+                    {i18n.language === 'tr' && <CheckCircle size={isMobile ? 10 : 12} />}
+                  </button>
                 </div>
-
-                <button
-                  onClick={onLogout}
-                  style={{
-                    width: '100%',
-                    background: 'rgba(220, 53, 69, 0.15)',
-                    border: '1px solid rgba(220, 53, 69, 0.3)',
-                    color: '#dc3545',
-                    padding: isMobile ? '10px' : '12px',
-                    borderRadius: isMobile ? '6px' : '8px',
-                    cursor: 'pointer',
-                    transition: 'all 0.2s ease',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    fontSize: isMobile ? '0.85rem' : '0.9rem',
-                    fontWeight: 600,
-                    minHeight: '44px',
-                  }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.background = 'rgba(220, 53, 69, 0.25)';
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.background = 'rgba(220, 53, 69, 0.15)';
-                  }}
-                >
-                  <LogOut size={isMobile ? 16 : 18} style={{ marginRight: isMobile ? '6px' : '8px' }} />
-                  Logout
-                </button>
               </div>
-            ) : (
-              <div>
-                <button
-                  onClick={() => i18n.changeLanguage(i18n.language === 'en' ? 'tr' : 'en')}
-                  title={`Switch to ${i18n.language === 'en' ? 'Turkish' : 'English'}`}
-                  style={{
-                    width: '100%',
-                    background: 'rgba(255, 255, 255, 0.06)',
-                    border: '1px solid rgba(255, 255, 255, 0.1)',
-                    color: 'rgba(255, 255, 255, 0.75)',
-                    padding: '12px',
-                    borderRadius: '10px',
-                    cursor: 'pointer',
-                    transition: 'all 0.2s ease',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    marginBottom: '8px',
-                    minHeight: '44px',
-                  }}
-                >
-                  <Globe size={18} />
-                </button>
 
-                <button
-                  onClick={onLogout}
-                  title="Logout"
-                  style={{
-                    width: '100%',
-                    background: 'rgba(220, 53, 69, 0.15)',
-                    border: '1px solid rgba(220, 53, 69, 0.3)',
-                    color: '#dc3545',
-                    padding: '12px',
-                    borderRadius: '10px',
-                    cursor: 'pointer',
-                    transition: 'all 0.2s ease',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    minHeight: '44px',
-                  }}
-                >
-                  <LogOut size={18} />
-                </button>
-              </div>
-            )}
-          </div>
+              <button
+                onClick={onLogout}
+                style={{
+                  width: '100%',
+                  background: 'rgba(220, 53, 69, 0.15)',
+                  border: '1px solid rgba(220, 53, 69, 0.3)',
+                  color: '#dc3545',
+                  padding: isMobile ? '10px' : '10px', // KEY FIX: Reduced from 12px
+                  borderRadius: isMobile ? '6px' : '8px',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s ease',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontSize: isMobile ? '0.85rem' : '0.9rem',
+                  fontWeight: 600,
+                  minHeight: '42px', // KEY FIX: Reduced from 44px
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.background = 'rgba(220, 53, 69, 0.25)';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background = 'rgba(220, 53, 69, 0.15)';
+                }}
+              >
+                <LogOut size={isMobile ? 16 : 18} style={{ marginRight: isMobile ? '6px' : '8px' }} />
+                {t('clinical.logout')}
+              </button>
+            </div>
+          ) : (
+            <div>
+              <button
+                onClick={() => i18n.changeLanguage(i18n.language === 'en' ? 'tr' : 'en')}
+                title={`Switch to ${i18n.language === 'en' ? 'Turkish' : 'English'}`}
+                style={{
+                  width: '100%',
+                  background: 'rgba(255, 255, 255, 0.06)',
+                  border: '1px solid rgba(255, 255, 255, 0.1)',
+                  color: 'rgba(255, 255, 255, 0.75)',
+                  padding: '12px',
+                  borderRadius: '10px',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s ease',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  marginBottom: '8px',
+                  minHeight: '42px', // KEY FIX: Reduced from 44px
+                }}
+              >
+                <Globe size={18} />
+              </button>
+
+              <button
+                onClick={onLogout}
+                title="Logout"
+                style={{
+                  width: '100%',
+                  background: 'rgba(220, 53, 69, 0.15)',
+                  border: '1px solid rgba(220, 53, 69, 0.3)',
+                  color: '#dc3545',
+                  padding: '12px',
+                  borderRadius: '10px',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s ease',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  minHeight: '42px', // KEY FIX: Reduced from 44px
+                }}
+              >
+                <LogOut size={18} />
+              </button>
+            </div>
+          )}
         </div>
-      </>
-    );
-  };
+      </div>
+
+      {/* Add CSS to hide scrollbar */}
+      <style>{`
+        .sidebar-nav-no-scrollbar::-webkit-scrollbar {
+          display: none;
+        }
+      `}</style>
+    </>
+  );
+};
 
 
   // Dashboard Overview Component
@@ -2342,20 +2349,20 @@ const DashboardOverview: React.FC = () => {
               {/* Left side - Text content */}
               <div className="flex-grow-1">
                 <h3 className="mb-2">
-                  {t('dashboard.welcome', {
+                  {t('clinical.welcome', {
                     name: user?.name || 'Clinical Staff',
                   })}
                 </h3>
                 <div className="d-flex align-items-center mb-1">
                   <User size={16} className="me-2 opacity-75" />
                   <span className="opacity-90">
-                    Staff No: {user?.staff_no || 'N/A'}
+                    {t('clinical.staff_no', { staffNo: user?.staff_no || 'N/A' })}
                   </span>
                 </div>
                 <div className="d-flex align-items-center mb-1">
                   <Stethoscope size={16} className="me-2 opacity-75" />
                   <span className="opacity-75">
-                    Department: {user?.department || 'General'}
+                    {t('clinical.department', { department: user?.department || 'General' })}
                   </span>
                 </div>
               </div>
@@ -2399,7 +2406,7 @@ const DashboardOverview: React.FC = () => {
                 {dashboardData.today_overview?.scheduled_appointments ?? 0}
               </h4>
               <p className="text-muted mb-0 small">
-                {t('dashboard.scheduled_appointments', 'Scheduled Appointments')}
+                {t('clinical.scheduled_appointments')}
               </p>
               <small className="text-primary">Click to view</small>
             </div>
@@ -2430,7 +2437,7 @@ const DashboardOverview: React.FC = () => {
                 {dashboardData.today_overview?.pending_student_requests ?? 0}
               </h4>
               <p className="text-muted mb-0 small">
-                Pending Student Requests
+                {t('clinical.pending_student_requests')}
               </p>
               <small className="text-info">Click to manage</small>
               {(dashboardData.today_overview?.pending_student_requests ?? 0) > 0 && (
@@ -2471,7 +2478,7 @@ const DashboardOverview: React.FC = () => {
                 {dashboardData.today_overview?.pending_tasks ?? 0}
               </h4>
               <p className="text-muted mb-0 small">
-                {t('dashboard.pending_tasks', 'Pending Tasks')}
+                {t('clinical.pending_tasks')}
               </p>
               <small className="text-warning">Click to view</small>
             </div>
@@ -2505,13 +2512,13 @@ const DashboardOverview: React.FC = () => {
                 {dashboardData.today_overview?.urgent_cases ?? 0}
               </h4>
               <p className="text-muted mb-0 small">
-                {t('dashboard.urgent_cases', 'Urgent Cases')}
+                {t('clinical.urgent_cases')}
               </p>
               <small className="text-danger">Click to view urgent</small>
               {(dashboardData.today_overview?.urgent_cases ?? 0) > 0 && (
                 <div className="mt-2">
                   <span className="badge bg-danger">
-                    Immediate Action Required
+                     {t('clinical.immediate_action_required')}
                   </span>
                 </div>
               )}
@@ -2523,7 +2530,7 @@ const DashboardOverview: React.FC = () => {
         <div className="col-12">
           <h5 className="fw-bold mb-3 d-flex align-items-center">
             <TrendingUp size={20} className="me-2 text-primary" />
-            Weekly Performance Metrics
+            {t('clinical.weekly_performance')}
           </h5>
           <div className="row g-3">
             <div className="col-md-3">
@@ -2531,7 +2538,7 @@ const DashboardOverview: React.FC = () => {
                 <div className="card-body text-center">
                   <CheckCircle size={32} className="text-success mb-2" />
                   <h3 className="fw-bold mb-1">{weeklyMetrics.appointments_completed || 0}</h3>
-                  <p className="text-muted mb-0 small">Appointments Completed</p>
+                  <p className="text-muted mb-0 small">{t('clinical.appointments_completed')}</p>
                 </div>
               </div>
             </div>
@@ -2540,7 +2547,7 @@ const DashboardOverview: React.FC = () => {
                 <div className="card-body text-center">
                   <Users size={32} className="text-info mb-2" />
                   <h3 className="fw-bold mb-1">{weeklyMetrics.medications_administered || 0}</h3>
-                  <p className="text-muted mb-0 small">Medications Administered</p>
+                  <p className="text-muted mb-0 small">{t('clinical.medications_administered')}</p>
                 </div>
               </div>
             </div>
@@ -2549,7 +2556,7 @@ const DashboardOverview: React.FC = () => {
                 <div className="card-body text-center">
                   <TrendingUp size={32} className="text-warning mb-2" />
                   <h3 className="fw-bold mb-1">{weeklyMetrics.vital_signs_recorded || 0}</h3>
-                  <p className="text-muted mb-0 small">Vital Signs Recorded</p>
+                  <p className="text-muted mb-0 small">{t('clinical.vital_signs_recorded')}</p>
                 </div>
               </div>
             </div>
@@ -2558,7 +2565,7 @@ const DashboardOverview: React.FC = () => {
                 <div className="card-body text-center">
                   <Clock size={32} className="text-primary mb-2" />
                   <h3 className="fw-bold mb-1">{responseTime.avg_response_time_minutes || 0}min</h3>
-                  <p className="text-muted mb-0 small">Avg Response Time</p>
+                  <p className="text-muted mb-0 small">{t('clinical.avg_response_time')}</p>
                   <div className="mt-2">
                     <div 
                       className="progress" 
@@ -2580,7 +2587,7 @@ const DashboardOverview: React.FC = () => {
         <div className="col-md-8">
           <div className="card shadow-sm border-0 h-100">
             <div className="card-header bg-white border-0">
-              <h6 className="fw-bold mb-0">Appointments Trend (Last 7 Days)</h6>
+              <h6 className="fw-bold mb-0">{t('clinical.appointments_trend')} (Last 7 Days)</h6>
             </div>
             <div className="card-body">
               <div style={{ height: '300px' }}>
@@ -2598,7 +2605,7 @@ const DashboardOverview: React.FC = () => {
         <div className="col-md-4">
           <div className="card shadow-sm border-0 h-100">
             <div className="card-header bg-white border-0">
-              <h6 className="fw-bold mb-0">Priority Distribution</h6>
+              <h6 className="fw-bold mb-0">{t('clinical.priority_distribution')}</h6>
             </div>
             <div className="card-body">
               <div style={{ height: '300px' }}>
@@ -2617,7 +2624,7 @@ const DashboardOverview: React.FC = () => {
         <div className="col-md-6">
           <div className="card shadow-sm border-0 h-100">
             <div className="card-header bg-white border-0">
-              <h6 className="fw-bold mb-0">Patient Status Today</h6>
+              <h6 className="fw-bold mb-0">{t('clinical.patient_status_today')}</h6>
             </div>
             <div className="card-body">
               <div style={{ height: '300px' }}>
@@ -2635,7 +2642,7 @@ const DashboardOverview: React.FC = () => {
         <div className="col-md-6">
           <div className="card shadow-sm border-0 h-100">
             <div className="card-header bg-white border-0">
-              <h6 className="fw-bold mb-0">Department Workload</h6>
+              <h6 className="fw-bold mb-0">{t('clinical.department_workload')}</h6>
             </div>
             <div className="card-body">
               <div style={{ height: '300px' }}>
@@ -2655,7 +2662,7 @@ const DashboardOverview: React.FC = () => {
           <div className="card shadow-sm border-0">
             <div className="card-header bg-white border-0">
               <h6 className="fw-bold mb-0 d-flex align-items-center justify-content-between">
-                Response Time Performance
+                {t('clinical.response_time_performance')}
                 <span className={`badge ${
                   (responseTime.performance_score || 0) >= 80 ? 'bg-success' : 
                   (responseTime.performance_score || 0) >= 60 ? 'bg-warning' : 'bg-danger'
@@ -2668,11 +2675,11 @@ const DashboardOverview: React.FC = () => {
               <div className="row align-items-center">
                 <div className="col-md-8">
                   <p className="mb-2">
-                    Average response time to student requests: 
+                    {t('clinical.avg_response_time_to_requests')} 
                     <strong className="ms-2">{responseTime.avg_response_time_minutes || 0} minutes</strong>
                   </p>
                   <p className="mb-3 text-muted small">
-                    Target: {responseTime.target_response_time || 30} minutes
+                    {t('clinical.target')} {responseTime.target_response_time || 30} minutes
                   </p>
                   <div className="progress" style={{ height: '12px' }}>
                     <div 
@@ -2691,8 +2698,8 @@ const DashboardOverview: React.FC = () => {
                     <AlertTriangle size={48} className="text-warning" />
                   )}
                   <p className="mt-2 mb-0 small text-muted">
-                    {(responseTime.performance_score || 0) >= 80 ? 'Excellent Performance' : 
-                     (responseTime.performance_score || 0) >= 60 ? 'Good Performance' : 'Needs Improvement'}
+                    {(responseTime.performance_score || 0) >= 80 ? t('clinical.excellent_performance') : 
+                     (responseTime.performance_score || 0) >= 60 ? t('clinical.good_performance') : t('clinical.needs_improvement')}
                   </p>
                 </div>
               </div>
@@ -2707,25 +2714,25 @@ const DashboardOverview: React.FC = () => {
             style={{ borderRadius: '1rem' }}
           >
             <div className="card-header bg-white border-0">
-              <h5 className="fw-bold mb-0">Patient Queue</h5>
+              <h5 className="fw-bold mb-0">{t('clinical.patient_queue')}</h5>
             </div>
             <div className="card-body">
               {dashboardData.patient_queue.length === 0 ? (
                 <div className="text-muted text-center py-4">
                   <Users size={32} className="mb-2" />
-                  <div>No patients in queue</div>
+                  <div>{t('clinical.no_patients_in_queue')}</div>
                 </div>
               ) : (
                 <div className="table-responsive">
   <table className="table table-hover align-middle">
     <thead>
       <tr>
-        <th>Date</th>
-        <th>Time</th>
-        <th>Patient</th>
-        <th>Status</th>
-        <th>Priority</th>
-        <th>Doctor</th>
+        <th>{t('clinical.date')}</th>
+        <th>{t('clinical.time')}</th>
+        <th>{t('clinical.patient')}</th>
+        <th>{t('clinical.status')}</th>
+        <th>{t('clinical.priority')}</th>
+        <th>{t('clinical.doctor')}</th>
       </tr>
     </thead>
     <tbody>
@@ -2790,14 +2797,14 @@ const DashboardOverview: React.FC = () => {
                   <table className="table table-hover align-middle">
                     <thead>
                       <tr>
-                        <th>Student</th>
-                        <th>Time</th>
-                        <th>Date</th>
-                        <th>Specialization</th>
-                        <th>Urgency</th>
-                        <th>Status</th>
-                        <th>Time Waiting</th>
-                        <th>Actions</th>
+                        <th>{t('clinical.patient')}</th>
+                        <th>{t('clinical.time')}</th>
+                        <th>{t('clinical.date')}</th>
+                        <th>{t('clinical.specialization')}</th>
+                        <th>{t('clinical.urgency')}</th>
+                        <th>{t('clinical.status')}</th>
+                        <th>{t('clinical.time_waiting')}</th>
+                        <th>{t('clinical.actions')}</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -2819,19 +2826,13 @@ const DashboardOverview: React.FC = () => {
                                 </div>
                               </td>
                               <td>
-                                {request.created_at 
-                                  ? new Date(request.created_at).toLocaleDateString('en-US', { 
-                                      year: 'numeric', 
-                                      month: 'short', 
-                                      day: 'numeric' 
-                                    })
-                                  : new Date(request.date).toLocaleDateString('en-US', { 
-                                      year: 'numeric', 
-                                      month: 'short', 
-                                      day: 'numeric' 
-                                    })
-                                }
-                              </td>
+  {request.requested_time 
+    ? formatTime(request.requested_time)
+    : request.time
+    ? formatTime(request.time)
+    : 'Not set'
+  }
+</td>
                               <td>
                                 {request.date 
                                   ? new Date(request.date).toLocaleDateString('en-US', { 
@@ -2859,7 +2860,7 @@ const DashboardOverview: React.FC = () => {
                               </td>
                               <td>
                                 <span className={`badge ${hoursWaiting > 24 ? 'bg-danger' : hoursWaiting > 4 ? 'bg-warning text-dark' : 'bg-success'}`}>
-                                  {hoursWaiting}h
+                                  {hoursWaiting}{t('clinical.hours_short')}
                                 </span>
                               </td>
                               <td>
@@ -2972,7 +2973,7 @@ const AppointmentsTab: React.FC = () => {
           <div className="d-flex justify-content-between align-items-center">
             <h3 className="card-title text-white mb-0 d-flex align-items-center">
               <Calendar size={24} className="me-2" />
-              {t('appointments.management', 'Appointments Management')}
+              {t('clinical.appointments_management')}
             </h3>
             <button 
               onClick={() => {
@@ -2991,7 +2992,7 @@ const AppointmentsTab: React.FC = () => {
               style={{ borderRadius: '0.5rem' }}
             >
               <Plus size={16} className="me-1" />
-              Schedule Appointment
+              {t('clinical.schedule_appointment')}
             </button>
           </div>
         </div>
@@ -2999,34 +3000,83 @@ const AppointmentsTab: React.FC = () => {
           {/* Enhanced Filters */}
           <div className="row mb-4">
             <div className="col-md-3">
-              <select
-                className="form-select"
-                value={filters.status}
-                onChange={(e) => setFilters({...filters, status: e.target.value})}
-              >
-                <option value="all">All Statuses</option>
-                <option value="scheduled">Scheduled</option>
-                <option value="confirmed">Confirmed</option>
-                <option value="in_progress">In Progress</option>
-                <option value="completed">Completed</option>
-                <option value="cancelled">Cancelled</option>
-                <option value="pending">Pending (Student Requests)</option>
-                <option value="under_review">Under Review</option>
-                <option value="rejected">Rejected</option>
-                <option value="needs_reassignment">Needs Reassignment</option>
-              </select>
+              <Select
+  value={{
+    value: filters.status,
+    label: filters.status === 'all' 
+      ? t('clinical.all_statuses')
+      : t(`clinical.${filters.status}`)
+  }}
+  onChange={(option) => setFilters({...filters, status: option?.value || 'all'})}
+  options={[
+    { value: 'all', label: t('clinical.all_statuses') },
+    { value: 'scheduled', label: t('clinical.scheduled') },
+    { value: 'confirmed', label: t('clinical.confirmed') },
+    { value: 'in_progress', label: t('clinical.in_progress') },
+    { value: 'completed', label: t('clinical.completed') },
+    { value: 'cancelled', label: t('clinical.cancelled') },
+    { value: 'pending', label: t('clinical.pending') },
+    { value: 'under_review', label: t('clinical.under_review') },
+    { value: 'rejected', label: t('clinical.rejected') },
+    { value: 'needs_reassignment', label: t('clinical.needs_reassignment') }
+  ]}
+  placeholder={t('clinical.select_status')}
+  menuPortalTarget={document.body}
+  menuPosition="fixed"
+  styles={{
+    control: (base) => ({
+      ...base,
+      minHeight: window.innerWidth < 768 ? '44px' : '38px',
+      fontSize: window.innerWidth < 768 ? '16px' : '14px'
+    }),
+    menu: (base) => ({
+      ...base,
+      maxHeight: window.innerWidth < 768 ? '250px' : '300px',
+      zIndex: 9999
+    }),
+    menuList: (base) => ({
+      ...base,
+      maxHeight: window.innerWidth < 768 ? '250px' : '300px',
+    }),
+    menuPortal: (base) => ({ 
+      ...base, 
+      zIndex: 9999 
+    })
+  }}
+/>
             </div>
             <div className="col-md-3">
-              <select
-                className="form-select"
-                value={filters.priority}
-                onChange={(e) => setFilters({...filters, priority: e.target.value})}
-              >
-                <option value="all">All Priorities</option>
-                <option value="normal">Normal</option>
-                <option value="high">High</option>
-                <option value="urgent">Urgent</option>
-              </select>
+              <Select
+  value={{
+    value: filters.priority,
+    label: filters.priority === 'all' 
+      ? t('clinical.all_priorities')
+      : t(`clinical.${filters.priority}`)
+  }}
+  onChange={(option) => setFilters({...filters, priority: option?.value || 'all'})}
+  options={[
+    { value: 'all', label: t('clinical.all_priorities') },
+    { value: 'normal', label: t('clinical.normal') },
+    { value: 'high', label: t('clinical.high') },
+    { value: 'urgent', label: t('clinical.urgent') }
+  ]}
+  placeholder={t('clinical.select_priority')}
+  menuPortalTarget={document.body}
+  menuPosition="fixed"
+  styles={{
+    control: (base) => ({
+      ...base,
+      minHeight: window.innerWidth < 768 ? '44px' : '38px',
+      fontSize: window.innerWidth < 768 ? '16px' : '14px'
+    }),
+    menu: (base) => ({
+      ...base,
+      maxHeight: window.innerWidth < 768 ? '250px' : '300px',
+      zIndex: 9999
+    }),
+    menuPortal: (base) => ({ ...base, zIndex: 9999 })
+  }}
+/>
             </div>
             <div className="col-md-3">
               <button 
@@ -3037,7 +3087,7 @@ const AppointmentsTab: React.FC = () => {
                 className="btn btn-primary"
               >
                 <Filter size={16} className="me-1" />
-                Apply Filters
+                {t('clinical.apply_filters')}
               </button>
             </div>
           </div>
@@ -3046,15 +3096,15 @@ const AppointmentsTab: React.FC = () => {
             <table className="table table-hover align-middle">
               <thead>
                 <tr>
-                  <th style={{ fontWeight: 'normal' }}>Type</th>
-                  <th style={{ fontWeight: 'normal' }}>Patient</th>
-                  <th style={{ fontWeight: 'normal' }}>Date</th>
-                  <th style={{ fontWeight: 'normal' }}>Time</th>
-                  <th style={{ fontWeight: 'normal' }}>Appointment Type</th>
-                  <th style={{ fontWeight: 'normal' }}>Status</th>
-                  <th style={{ fontWeight: 'normal' }}>Priority</th>
-                  <th style={{ fontWeight: 'normal' }}>Doctor</th>
-                  <th style={{ fontWeight: 'normal' }}>Actions</th>
+                  <th style={{ fontWeight: 'normal' }}>{t('clinical.type')}</th>
+                  <th style={{ fontWeight: 'normal' }}>{t('clinical.patient_name')}</th>
+                  <th style={{ fontWeight: 'normal' }}>{t('clinical.date')}</th>
+                  <th style={{ fontWeight: 'normal' }}>{t('clinical.time')}</th>
+                  <th style={{ fontWeight: 'normal' }}>{t('clinical.appointment_type')}</th>
+                  <th style={{ fontWeight: 'normal' }}>{t('clinical.status')}</th>
+                  <th style={{ fontWeight: 'normal' }}>{t('clinical.priority')}</th>
+                  <th style={{ fontWeight: 'normal' }}>{t('clinical.doctor')}</th>
+                  <th style={{ fontWeight: 'normal' }}>{t('clinical.actions')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -3062,16 +3112,17 @@ const AppointmentsTab: React.FC = () => {
                   <tr>
                     <td colSpan={9} className="text-center py-5">
                       <div className="spinner-border text-primary" role="status">
-                        <span className="visually-hidden">Loading...</span>
+                        <span className="visually-hidden">{t('clinical.loading')}</span>
                       </div>
+                      <p className="text-muted mt-2">{t('clinical.loading_data')}</p>
                     </td>
                   </tr>
                 ) : combinedAppointments.length === 0 ? (
                   <tr>
                     <td colSpan={9} className="text-center py-5 text-muted">
                       <Calendar size={48} className="text-muted mb-3" />
-                      <p className="text-muted">No appointments or requests found</p>
-                      <small className="text-muted">Try adjusting your filters</small>
+                      <p className="text-muted">{t('clinical.no_appointments_found')}</p>
+                      <small className="text-muted">{t('clinical.try_adjusting_filters')}</small>
                     </td>
                   </tr>
                 ) : (
@@ -3087,11 +3138,11 @@ const AppointmentsTab: React.FC = () => {
                         <tr key={`${apt.isStudentRequest ? 'request' : 'appointment'}-${apt.id}`}>
                           <td>
                             <span className={`badge ${apt.isStudentRequest ? 'bg-info' : 'bg-primary'}`}>
-                              {apt.isStudentRequest ? apt.request_type || 'Student Request' : 'Appointment'}
+                              {apt.isStudentRequest ? apt.request_type || t('clinical.student_request') : t('clinical.appointment')}
                             </span>
                             {apt.needs_reassignment && (
                               <span className="badge bg-warning text-dark ms-1">
-                                Needs Reassignment
+                               {t('clinical.needs_reassignment')}
                               </span>
                             )}
                           </td>
@@ -3117,11 +3168,11 @@ const AppointmentsTab: React.FC = () => {
                             {/* Keep rejected status as rejected, others use default styling */}
                             {apt.isStudentRequest && apt.status === 'rejected' ? (
                               <span className="badge bg-danger">
-                                Rejected
+                                {t('clinical.rejected')}
                               </span>
                             ) : apt.status === 'pending' && apt.needs_reassignment ? (
                               <span className="badge bg-warning text-dark">
-                                Awaiting Reassignment
+                                {t('clinical.awaiting_reassignment')}
                               </span>
                             ) : (
                               <span className={getStatusBadge(apt.status)}>
@@ -3180,7 +3231,7 @@ const AppointmentsTab: React.FC = () => {
                                         setShowModal('assignRequest');
                                       }}
                                     >
-                                      Assign Doctor
+                                      {t('clinical.assign_doctor')}
                                     </button>
                                   )}
                                   
@@ -3197,7 +3248,7 @@ const AppointmentsTab: React.FC = () => {
                                         setShowModal('reviewRequest');
                                       }}
                                     >
-                                      Approve & Schedule
+                                      {t('clinical.approve_schedule')}
                                     </button>
                                   )}
 
@@ -3208,7 +3259,7 @@ const AppointmentsTab: React.FC = () => {
                                       disabled
                                     >
                                       <Check size={14} className="me-1" />
-                                      Ready for Doctor
+                                      {t('clinical.ready_for_doctor')}
                                     </button>
                                   )}
 
@@ -3226,7 +3277,7 @@ const AppointmentsTab: React.FC = () => {
                                       }}
                                     >
                                       <RotateCcw size={14} className="me-1" />
-                                      Reopen
+                                      {t('clinical.reopen')}
                                     </button>
                                   )}
                                 </>
@@ -3286,7 +3337,7 @@ const AppointmentsTab: React.FC = () => {
         <div className="card-header" style={{ background: 'linear-gradient(135deg, #e85555ff 0%, #d43434ff 100%)' }}>
           <h3 className="card-title text-white mb-0 d-flex align-items-center">
             <Users size={24} className="me-2" />
-            {t('patients.management')}
+            {t('clinical.patients_management')}
           </h3>
         </div>
         <div className="card-body p-4">
@@ -3299,7 +3350,7 @@ const AppointmentsTab: React.FC = () => {
         </span>
         <input
           type="text"
-          placeholder="Search patients..."
+          placeholder={t('clinical.search_patients')}
           value={searchTerm}
           onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSearchTerm(e.target.value)}
           className="form-control"
@@ -3313,12 +3364,12 @@ const AppointmentsTab: React.FC = () => {
   <table className="table table-hover align-middle">
     <thead>
       <tr>
-        <th style={{ fontWeight: 'normal' }}>Patient Name</th>
-        <th style={{ fontWeight: 'normal' }}>Student ID</th>
-        <th style={{ fontWeight: 'normal' }}>Staff No</th>
-        <th style={{ fontWeight: 'normal' }}>Age</th>
-        <th style={{ fontWeight: 'normal' }}>Department</th>
-        <th style={{ fontWeight: 'normal' }}>Actions</th>
+        <th style={{ fontWeight: 'normal' }}>{t('clinical.patient_name')}</th>
+        <th style={{ fontWeight: 'normal' }}>{t('clinical.student_id')}</th>
+        <th style={{ fontWeight: 'normal' }}>{t('clinical.staff_no')}</th>
+        <th style={{ fontWeight: 'normal' }}>{t('clinical.age')}</th>
+        <th style={{ fontWeight: 'normal' }}>{t('clinical.department')}</th>
+        <th style={{ fontWeight: 'normal' }}>{t('clinical.actions')}</th> 
       </tr>
     </thead>
     <tbody>
@@ -3368,7 +3419,7 @@ const AppointmentsTab: React.FC = () => {
                     setShowModal('vitals');
                   }}
                   className="btn btn-outline-primary"
-                  title="Record Vitals"
+                  title={t('clinical.record_vitals')}
                 >
                   <Heart size={16} />
                 </button>
@@ -3379,7 +3430,7 @@ const AppointmentsTab: React.FC = () => {
                     setShowVitalsViewer(true);
                   }}
                   className="btn btn-outline-info"
-                  title="View Vitals History"
+                  title={t('clinical.view_vitals_history')}
                 >
                   <Activity size={16} />
                 </button>
@@ -3391,7 +3442,7 @@ const AppointmentsTab: React.FC = () => {
                     setShowMedicalCard(true);
                   }}
                   className="btn btn-outline-success"
-                  title="View Medical Card"
+                  title={t('clinical.view_medical_card')}
                 >
                   <FileText size={16} />
                 </button>
@@ -3417,7 +3468,7 @@ const AppointmentsTab: React.FC = () => {
         <div className="d-flex justify-content-between align-items-center">
           <h3 className="card-title text-white mb-0 d-flex align-items-center">
             <Pill size={24} className="me-2" />
-            {t('medications.management', 'Medication Management')}
+            {t('clinical.medication_management')}
           </h3>
           <button 
             onClick={() => setShowMedicationManagement(true)}
@@ -3425,21 +3476,19 @@ const AppointmentsTab: React.FC = () => {
             style={{ borderRadius: '0.5rem' }}
           >
             <Plus size={16} className="me-1" />
-            Manage Medications
+            {t('clinical.manage_medications')}
           </button>
         </div>
       </div>
       <div className="card-body p-4">
         <div className="alert alert-info">
           <Pill size={20} className="me-2" />
-          <strong>Medication Management System</strong>
-          <p className="mb-0 mt-2">
-            Click "Manage Medications" to:
-          </p>
+          <strong>{t('clinical.medication_system')}</strong>
+          <p className="mb-0 mt-2">{t('clinical.medication_system_desc')}</p>
           <ul className="mb-0 mt-2">
-            <li>View and administer medications prescribed by doctors</li>
-            <li>Record minor treatments (headaches, minor injuries, etc.)</li>
-            <li>Track medication administration history</li>
+            <li>{t('clinical.view_administer_medications')}</li>
+            <li>{t('clinical.record_minor_treatments')}</li>
+            <li>{t('clinical.track_medication_history')}</li>
           </ul>
         </div>
       </div>
@@ -3454,7 +3503,7 @@ const AppointmentsTab: React.FC = () => {
         <div className="card-header" style={{ background: 'linear-gradient(135deg, #ea6666ff 0%, #ed4141ff 100%)' }}>
           <h3 className="card-title text-white mb-0 d-flex align-items-center">
             <User size={24} className="me-2" />
-            Available Doctors
+            {t('clinical.available_doctors')}
           </h3>
         </div>
         <div className="card-body p-4">
@@ -3462,12 +3511,12 @@ const AppointmentsTab: React.FC = () => {
           <table className="table table-hover align-middle">
             <thead>
               <tr>
-                <th style={{ fontWeight: 'normal' }}>Doctor Name</th>
-                <th style={{ fontWeight: 'normal' }}>Specialization</th>
-                <th style={{ fontWeight: 'normal' }}>Department</th>
-                <th style={{ fontWeight: 'normal' }}>Phone</th>
-                <th style={{ fontWeight: 'normal' }}>Email</th>
-                <th style={{ fontWeight: 'normal' }}>Patients</th>
+                <th style={{ fontWeight: 'normal' }}>{t('clinical.doctor_name')}</th>
+                <th style={{ fontWeight: 'normal' }}>{t('clinical.specialization')}</th>
+                <th style={{ fontWeight: 'normal' }}>{t('clinical.department')}</th>
+                <th style={{ fontWeight: 'normal' }}>{t('clinical.phone')}</th>
+                <th style={{ fontWeight: 'normal' }}>{t('clinical.email')}</th>
+                <th style={{ fontWeight: 'normal' }}>{t('clinical.patients')}</th>
               </tr>
             </thead>
             <tbody>
@@ -3521,14 +3570,14 @@ const AppointmentsTab: React.FC = () => {
                           <span className="badge bg-primary me-2">
                             {doctor.total_patients || 0}
                           </span>
-                          <small className="text-muted">Total</small>
+                          <small className="text-muted">{t('clinical.total_patients')}</small>
                         </div>
                         <div className="d-flex align-items-center">
                           <Activity size={14} className="me-1 text-success" />
                           <span className="badge bg-success me-2">
                             {doctor.patients_today || 0}
                           </span>
-                          <small className="text-muted">Today</small>
+                          <small className="text-muted">{t('clinical.patients_today')}</small>
                         </div>
                       </div>
                     </td>
@@ -3606,7 +3655,7 @@ const AppointmentsTab: React.FC = () => {
           >
             <h5 className="card-title mb-0 text-white d-flex align-items-center">
               <User size={20} className="me-2" />
-              Personal Information
+              {t('clinical.personal_information')}
             </h5>
           </div>
           <div className="card-body p-4">
@@ -3623,7 +3672,7 @@ const AppointmentsTab: React.FC = () => {
                   {/* Staff Number - Read Only */}
                   <div className="col-12 col-md-6">
                     <label className="form-label fw-semibold">
-                      Staff Number <span className="text-danger">*</span>
+                      {t('clinical.staff_number')} <span className="text-danger">*</span>
                     </label>
                     <input
                       type="text"
@@ -3632,13 +3681,13 @@ const AppointmentsTab: React.FC = () => {
                       disabled
                       style={{ backgroundColor: '#f8f9fa' }}
                     />
-                    <div className="form-text">Staff number cannot be changed</div>
+                    <div className="form-text">{t('clinical.staff_no_cannot_change')}</div>
                   </div>
 
                   {/* Email - Read Only */}
                   <div className="col-12 col-md-6">
                     <label className="form-label fw-semibold">
-                      Email Address <span className="text-danger">*</span>
+                      {t('clinical.email_address')} <span className="text-danger">*</span>
                     </label>
                     <input
                       type="email"
@@ -3647,13 +3696,13 @@ const AppointmentsTab: React.FC = () => {
                       disabled
                       style={{ backgroundColor: '#f8f9fa' }}
                     />
-                    <div className="form-text">Email cannot be changed</div>
+                    <div className="form-text">{t('clinical.email_cannot_change')}</div>
                   </div>
 
                   {/* Full Name */}
                   <div className="col-12 col-md-6">
                     <label className="form-label fw-semibold">
-                      Full Name <span className="text-danger">*</span>
+                      {t('clinical.full_name')}  <span className="text-danger">*</span>
                     </label>
                     <input
                       type="text"
@@ -3664,14 +3713,14 @@ const AppointmentsTab: React.FC = () => {
   setUserProfile(prev => ({ ...prev, name: value }));
 }}
                       required
-                      placeholder="Enter your full name"
+                      placeholder={t('clinical.enter_full_name')}
                     />
                   </div>
 
                   {/* Phone Number */}
                   <div className="col-12 col-md-6">
                     <label className="form-label fw-semibold">
-                      Phone Number <span className="text-danger">*</span>
+                      {t('clinical.phone_number')} <span className="text-danger">*</span>
                     </label>
                     <PhoneInput
                       country={'tr'}
@@ -3689,7 +3738,7 @@ const AppointmentsTab: React.FC = () => {
                   {/* Date of Birth */}
                   <div className="col-12 col-md-6">
                     <label className="form-label fw-semibold">
-                      Date of Birth <span className="text-danger">*</span>
+                      {t('clinical.date_of_birth')}<span className="text-danger">*</span>
                     </label>
                     <input
                       type="date"
@@ -3699,13 +3748,13 @@ const AppointmentsTab: React.FC = () => {
                       max={new Date(new Date().setFullYear(new Date().getFullYear() - 21)).toISOString().split('T')[0]}
                       required
                     />
-                    <div className="form-text">Must be at least 21 years old</div>
+                    <div className="form-text">{t('clinical.must_be_21')}</div>
                   </div>
 
                   {/* Gender */}
                   <div className="col-12 col-md-6">
                     <label className="form-label fw-semibold">
-                      Gender <span className="text-danger">*</span>
+                      {t('clinical.gender')} <span className="text-danger">*</span>
                     </label>
                     <Select
   value={[
@@ -3717,7 +3766,7 @@ const AppointmentsTab: React.FC = () => {
     { value: 'male', label: 'Male' },
     { value: 'female', label: 'Female' }
   ]}
-  placeholder="Select gender"
+  placeholder={t('clinical.select_gender')}
   menuPortalTarget={document.body}
   menuPosition="fixed"
   styles={{
@@ -3739,7 +3788,7 @@ const AppointmentsTab: React.FC = () => {
 
                   {/* Department - Read Only */}
                   <div className="col-12 col-md-6">
-                    <label className="form-label fw-semibold">Department</label>
+                    <label className="form-label fw-semibold">{t('clinical.department')}</label>
                     <input
                       type="text"
                       className="form-control"
@@ -3764,10 +3813,10 @@ const AppointmentsTab: React.FC = () => {
                     {profileSaving ? (
                       <>
                         <span className="spinner-border spinner-border-sm me-2" role="status"></span>
-                        Saving...
+                        {t('clinical.saving')}
                       </>
                     ) : (
-                      'Save Changes'
+                      t('clinical.save_changes')
                     )}
                   </button>
                 </div>
@@ -3783,7 +3832,7 @@ const AppointmentsTab: React.FC = () => {
           <div className="card-header border-0" style={{ background: '#fee2e2', borderRadius: '1rem 1rem 0 0' }}>
             <h5 className="card-title mb-0 text-danger d-flex align-items-center">
               <Camera size={20} className="me-2" />
-              Profile Picture
+              {t('clinical.profile_picture')}
             </h5>
           </div>
           <div className="card-body p-4 text-center">
@@ -3809,7 +3858,7 @@ const AppointmentsTab: React.FC = () => {
               disabled={profileSaving}
             >
               <Camera size={16} className="me-1" /> 
-              Upload New Photo
+              {t('clinical.upload_new_photo')}
             </button>
             
             {userProfile.avatar_url && (
@@ -3819,7 +3868,7 @@ const AppointmentsTab: React.FC = () => {
                 disabled={profileSaving}
               >
                 <X size={16} className="me-1" /> 
-                Remove Photo
+                {t('clinical.remove_photo')}
               </button>
             )}
             
@@ -3842,7 +3891,7 @@ const AppointmentsTab: React.FC = () => {
                     }}
                   >
                     <Camera size={16} className="me-2" />
-                    Photo Guidelines
+                    {t('clinical.photo_guidelines')}
                   </button>
                 </h2>
                 <div 
@@ -3854,19 +3903,19 @@ const AppointmentsTab: React.FC = () => {
                     <div className="text-start" style={{ fontSize: '0.875rem' }}>
                       <div className="mb-2">
                         <CheckCircle size={14} className="text-success me-2" />
-                        <strong>Types:</strong> JPEG, PNG, GIF, WebP
+                        <strong>{t('clinical.file_types')}:</strong> {t('clinical.file_types_desc')}
                       </div>
                       <div className="mb-2">
                         <CheckCircle size={14} className="text-success me-2" />
-                        <strong>Size:</strong> Maximum 5MB
+                        <strong>{t('clinical.file_size')}:</strong> {t('clinical.file_size_desc')}
                       </div>
                       <div className="mb-2">
                         <CheckCircle size={14} className="text-success me-2" />
-                        <strong>Format:</strong> Square (1:1 ratio) recommended
+                        <strong>{t('clinical.dimensions')}:</strong> {t('clinical.dimensions_desc')}
                       </div>
                       <div className="mb-2">
                         <CheckCircle size={14} className="text-success me-2" />
-                        <strong>Quality:</strong> Professional appearance
+                        <strong>{t('clinical.quality')}:</strong> {t('clinical.quality_desc')}
                       </div>
                     </div>
                   </div>
@@ -3948,10 +3997,10 @@ const AppointmentsTab: React.FC = () => {
             <AlertTriangle size={24} className="me-3" />
             <div className="flex-grow-1">
               <h5 className="alert-heading mb-1">
-                URGENT: {urgentRequests.length} cases need immediate attention
+                {t('clinical.urgent_alert', { count: urgentRequests.length })}
               </h5>
               <p className="mb-0">
-                These urgent requests should be processed before scheduled appointments.
+                {t('clinical.urgent_warning')}
               </p>
             </div>
             <button 
@@ -3961,7 +4010,7 @@ const AppointmentsTab: React.FC = () => {
                 setFilters({ status: 'all', priority: 'urgent' });
               }}
             >
-              Process Urgent Cases
+              {t('clinical.process_urgent_cases')}
             </button>
           </div>
         </div>
@@ -3985,13 +4034,13 @@ const AppointmentsTab: React.FC = () => {
 
            {/* Modals */}
       {showModal === 'createAppointment' && (
-        <Modal title="Schedule New Appointment" onClose={() => setShowModal('')}>
+        <Modal title={t('clinical.schedule_new_appointment')} onClose={() => setShowModal('')}>
           <form onSubmit={(e) => {
             e.preventDefault();
             createAppointment();
           }}>
             <div className="mb-3">
-  <label className="form-label">Patient <span className="text-danger">*</span></label>
+  <label className="form-label">{t('clinical.select_patient')} <span className="text-danger">*</span></label>
   <Select
     value={patients.map(patient => ({
       value: String(patient.id),
@@ -4091,7 +4140,7 @@ const AppointmentsTab: React.FC = () => {
             
             {/* Doctor selection - shows available doctors based on date/time */}
             <div className="mb-3">
-  <label className="form-label">Available Doctors <span className="text-danger">*</span></label>
+  <label className="form-label">{t('clinical.select_doctor')}<span className="text-danger">*</span></label>
   <Select
     value={availableDoctors.map(doctor => ({
       value: String(doctor.id),
@@ -4139,25 +4188,46 @@ const AppointmentsTab: React.FC = () => {
             
             {/* Rest of form fields */}
             <div className="mb-3">
-              <label className="form-label">Appointment Type <span className="text-danger">*</span></label>
-              <select
-                className="form-select"
-                value={formData.appointment_type || ''}
-                onChange={(e) => setFormData({...formData, appointment_type: e.target.value})}
-                required
-              >
-                <option value="">Select Type</option>
-                <option value="consultation">Consultation</option>
-                <option value="follow_up">Follow-up</option>
-                <option value="emergency">Emergency</option>
-                <option value="vaccination">Vaccination</option>
-                <option value="blood_test">Blood Test</option>
-                <option value="physical_therapy">Physical Therapy</option>
-              </select>
+              <label className="form-label">{t('clinical.appointment_type')} <span className="text-danger">*</span></label>
+              <Select
+  value={formData.appointment_type ? {
+    value: formData.appointment_type,
+    label: formData.appointment_type.charAt(0).toUpperCase() + formData.appointment_type.slice(1).replace('_', ' ')
+  } : null}
+  onChange={(option) => setFormData({...formData, appointment_type: option?.value || ''})}
+  options={[
+    { value: 'consultation', label: 'Consultation' },
+    { value: 'follow_up', label: 'Follow-up' },
+    { value: 'emergency', label: 'Emergency' },
+    { value: 'vaccination', label: 'Vaccination' },
+    { value: 'blood_test', label: 'Blood Test' },
+    { value: 'physical_therapy', label: 'Physical Therapy' }
+  ]}
+  placeholder="Select Appointment Type"
+  required
+  menuPortalTarget={document.body}
+  menuPosition="fixed"
+  styles={{
+    control: (base) => ({
+      ...base,
+      minHeight: window.innerWidth < 768 ? '44px' : '38px',
+      fontSize: window.innerWidth < 768 ? '16px' : '14px',
+      borderColor: !formData.appointment_type ? '#dc3545' : base.borderColor
+    }),
+    menu: (base) => ({
+      ...base,
+      zIndex: 9999
+    }),
+    menuPortal: (base) => ({ ...base, zIndex: 9999 })
+  }}
+/>
+{!formData.appointment_type && (
+  <div className="form-text text-danger">Please select an appointment type</div>
+)}
             </div>
             
             <div className="mb-3">
-              <label className="form-label">Priority</label>
+              <label className="form-label">{t('clinical.priority')}</label>
               <Select
   value={[
     { value: 'normal', label: 'Normal' },
@@ -4190,7 +4260,7 @@ const AppointmentsTab: React.FC = () => {
 />
             </div>
             <div className="mb-3">
-              <label className="form-label">Notes</label>
+              <label className="form-label">{t('clinical.notes')}</label>
               <textarea
                 className="form-control"
                 rows={3}
@@ -4377,7 +4447,7 @@ const AppointmentsTab: React.FC = () => {
 
       {showModal === 'vitals' && selectedPatient && (
         <Modal
-          title={`Record Vital Signs - ${selectedPatient.name}`}
+          title={`${t('clinical.record_vital_signs')} - ${selectedPatient.name}`}
           onClose={() => setShowModal('')}
         >
           <form
@@ -4403,7 +4473,7 @@ const AppointmentsTab: React.FC = () => {
               {/* Systolic BP */}
               <div className="col-md-6">
                 <label className="form-label fw-semibold">
-                  Systolic BP (mmHg) <span className="text-danger">*</span>
+                  {t('clinical.systolic_bp')} <span className="text-danger">*</span>
                 </label>
                 <input
                   type="number"
@@ -4430,7 +4500,7 @@ const AppointmentsTab: React.FC = () => {
               {/* Diastolic BP */}
               <div className="col-md-6">
                 <label className="form-label fw-semibold">
-                  Diastolic BP (mmHg) <span className="text-danger">*</span>
+                  {t('clinical.diastolic_bp')} <span className="text-danger">*</span>
                 </label>
                 <input
                   type="number"
@@ -4457,7 +4527,7 @@ const AppointmentsTab: React.FC = () => {
               {/* Heart Rate */}
               <div className="col-md-6">
                 <label className="form-label fw-semibold">
-                  Heart Rate (bpm) <span className="text-danger">*</span>
+                  {t('clinical.heart_rate')} <span className="text-danger">*</span>
                 </label>
                 <input
                   type="number"
@@ -4481,7 +4551,7 @@ const AppointmentsTab: React.FC = () => {
               {/* Temperature */}
               <div className="col-md-4">
                 <label className="form-label fw-semibold">
-                  Temperature <span className="text-danger">*</span>
+                  {t('clinical.temperature')} <span className="text-danger">*</span>
                 </label>
                 <input
                   type="number"
@@ -4578,7 +4648,7 @@ const AppointmentsTab: React.FC = () => {
                 Cancel
               </button>
               <button type="submit" className="btn btn-primary">
-                Record Vitals
+                {t('clinical.record_vitals_btn')}
               </button>
             </div>
           </form>
@@ -4957,16 +5027,37 @@ const AppointmentsTab: React.FC = () => {
     }}>
       <div className="mb-3">
         <label className="form-label">Action <span className="text-danger">*</span></label>
-        <select
-          className="form-select"
-          value={formData.reviewAction || ''}
-          onChange={(e) => setFormData({...formData, reviewAction: e.target.value})}
-          required
-        >
-          <option value="">Select Action</option>
-          <option value="approve">Approve & Assign</option>
-          <option value="reject">Reject</option>
-        </select>
+        <Select
+  value={formData.reviewAction ? {
+    value: formData.reviewAction,
+    label: formData.reviewAction === 'approve' ? 'Approve & Assign' : 'Reject'
+  } : null}
+  onChange={(option) => setFormData({...formData, reviewAction: option?.value || ''})}
+  options={[
+    { value: 'approve', label: 'Approve & Assign' },
+    { value: 'reject', label: 'Reject' }
+  ]}
+  placeholder="Select Action"
+  required
+  menuPortalTarget={document.body}
+  menuPosition="fixed"
+  styles={{
+    control: (base) => ({
+      ...base,
+      minHeight: window.innerWidth < 768 ? '44px' : '38px',
+      fontSize: window.innerWidth < 768 ? '16px' : '14px',
+      borderColor: !formData.reviewAction ? '#dc3545' : base.borderColor
+    }),
+    menu: (base) => ({
+      ...base,
+      zIndex: 9999
+    }),
+    menuPortal: (base) => ({ ...base, zIndex: 9999 })
+  }}
+/>
+{!formData.reviewAction && (
+  <div className="form-text text-danger">Please select an action</div>
+)}
       </div>
       
       {formData.reviewAction === 'approve' && (

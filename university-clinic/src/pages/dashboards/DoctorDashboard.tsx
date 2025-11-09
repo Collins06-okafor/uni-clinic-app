@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Calendar, Clock, Users, FileText, Pill, User, Plus, Search, Eye, Edit, CheckCircle, XCircle, Stethoscope, Heart, Brain, Thermometer, BarChart3, Activity, TrendingUp, Check, Globe, X, Archive, Settings, Save, Camera, AlertTriangle, LogOut, Phone, Mail } from 'lucide-react';
+import { Calendar, Clock, Users, FileText, Pill, User, Plus, Search, Eye, Edit, CheckCircle, XCircle, Stethoscope, Heart, Brain, Thermometer, BarChart3, Activity, TrendingUp, Check, Globe, X, Archive, Settings, Save, Camera, AlertTriangle, LogOut, Phone, Mail, Menu } from 'lucide-react';
 import RealTimeDashboard from '../../components/RealTimeDashboard';
 import { useTranslation } from 'react-i18next';
 import LanguageSwitcher from '../../components/LanguageSwitcher';
@@ -8,6 +8,9 @@ import WalkInAlert from '../../components/WalkInAlert';
 import websocketService from '../../services/websocket';
 import "react-phone-input-2/lib/style.css";
 import PhoneInput from "react-phone-input-2";
+import Select from 'react-select';
+import './DoctorDashboard.css';
+
 
 
 // Types
@@ -102,6 +105,11 @@ interface MedicalRecord {
     id: number;
     name: string;
   };
+}
+
+interface SelectOption {
+  value: string;
+  label: string;
 }
 
 interface PrescriptionForm {
@@ -1353,7 +1361,9 @@ const updateAvailability = async (): Promise<void> => {
 };
 
 const getAvailableTimeSlots = (selectedDate: string): string[] => {
-  if (!selectedDate) return timeSlots;
+  const allTimeSlots = generateTimeSlots(); // Generate time slots dynamically
+  
+  if (!selectedDate) return allTimeSlots;
   
   // If date is blocked by holidays, return empty array
   if (isDateBlocked(selectedDate)) {
@@ -1368,7 +1378,7 @@ const getAvailableTimeSlots = (selectedDate: string): string[] => {
     )
     .map(apt => apt.time);
   
-  return timeSlots.filter(slot => !bookedSlots.includes(slot));
+  return allTimeSlots.filter(slot => !bookedSlots.includes(slot));
 };
 
 
@@ -1516,6 +1526,10 @@ const closeModal = (): void => {
   });
 };
 
+const closeSidebar = () => {
+  setSidebarOpen(false);
+};
+
 // Enhanced time slot generation based on availability
 const generateTimeSlots = (): string[] => {
   const slots: string[] = [];
@@ -1555,7 +1569,54 @@ const generateTimeSlots = (): string[] => {
 };
 
 // Replace the static timeSlots array with dynamic generation
-const timeSlots = generateTimeSlots();
+const selectStyles = {
+  control: (base: any) => ({
+    ...base,
+    minHeight: '38px',
+    fontSize: '0.9rem',
+    borderRadius: '0.375rem',
+    borderColor: '#dee2e6',
+  }),
+  menu: (base: any) => ({
+    ...base,
+    zIndex: 9999,
+    fontSize: '0.9rem',
+  }),
+  menuPortal: (base: any) => ({
+    ...base,
+    zIndex: 9999,
+  }),
+  option: (base: any, state: any) => ({
+    ...base,
+    fontSize: '0.9rem',
+    padding: '8px 12px',
+    backgroundColor: state.isSelected 
+      ? universityTheme.primary 
+      : state.isFocused 
+      ? universityTheme.light 
+      : 'white',
+    color: state.isSelected ? 'white' : '#212529',
+    cursor: 'pointer',
+  }),
+  singleValue: (base: any) => ({
+    ...base,
+    color: '#212529',
+  }),
+  placeholder: (base: any) => ({
+    ...base,
+    color: '#6c757d',
+  }),
+};
+
+const selectTheme = (theme: any) => ({
+  ...theme,
+  colors: {
+    ...theme.colors,
+    primary: universityTheme.primary,
+    primary25: universityTheme.light,
+    primary50: universityTheme.light,
+  },
+});
 
 // Function to validate appointment conflicts
 const validateAppointmentTime = (date: string, time: string, patientId: string): string | null => {
@@ -2051,6 +2112,17 @@ useEffect(() => {
 }, []);
 
 useEffect(() => {
+  const handleResize = () => {
+    if (window.innerWidth >= 992) {
+      setSidebarOpen(false); // Close sidebar on desktop
+    }
+  };
+  
+  window.addEventListener('resize', handleResize);
+  return () => window.removeEventListener('resize', handleResize);
+}, []);
+
+useEffect(() => {
   const connectWebSocket = () => {
     try {
       websocketService.tryConnect();
@@ -2232,46 +2304,31 @@ const HolidayWarning = ({ selectedDate }: { selectedDate: string }) => {
 
   const DashboardOverview = () => (
   <div className="row g-3 g-md-4">
-    {/* Welcome Card - Mobile responsive */}
+    {/* Welcome Card */}
     <div className="col-12">
       <div className="card shadow-sm border-0" style={{ borderRadius: '1rem', background: universityTheme.gradient }}>
         <div className="card-body p-3 p-md-4 text-white">
           <div className="row align-items-center">
             <div className="col-12 col-md-8 text-center text-md-start">
               <h3 className="mb-2" style={{ fontSize: 'clamp(1.2rem, 4vw, 1.5rem)' }}>
-                {t('dashboard.welcome_doctor', { name: user.name })}
+                {t('doctor.welcome', { name: user.name })}
               </h3>
               <p className="mb-1 opacity-90 small">{user.email}</p>
-              <p className="mb-0 opacity-75 small">{t('dashboard.specialization')}: {user.specialization}</p>
-            </div> {/*
-            <div className="col-12 col-md-4 text-center text-md-end mt-3 mt-md-0">
-              {doctorProfile.avatar_url ? (
-                <img 
-                  src={doctorProfile.avatar_url}
-                  alt="Profile" 
-                  style={{
-                    width: 'clamp(60px, 15vw, 80px)', // Responsive avatar size
-                    height: 'clamp(60px, 15vw, 80px)',
-                    borderRadius: '50%',
-                    objectFit: 'cover',
-                    border: '3px solid rgba(255,255,255,0.3)'
-                  }}
-                />
-              ) : (
-                <User size={60} className="opacity-75" />
-              )}
-            </div> */}
+              <p className="mb-0 opacity-75 small">
+                {t('doctor.specialization')}: {user.specialization}
+              </p>
+            </div>
           </div>
         </div>
       </div>
     </div>
 
-      {/* Statistics Cards - Better mobile layout */}
+      {/* Statistics Cards */}
     {[
-      { icon: Calendar, color: universityTheme.primary, value: stats.total, label: t('dashboard.total_appointments'), extra: `Today: ${stats.today}` },
-      { icon: Users, color: universityTheme.secondary, value: stats.patients, label: t('dashboard.total_patients') },
-      { icon: Pill, color: '#ffc107', value: stats.prescriptions, label: t('dashboard.prescriptions') },
-      { icon: CheckCircle, color: universityTheme.accent, value: stats.completed, label: t('dashboard.completed') }
+      { icon: Calendar, color: universityTheme.primary, value: stats.total, label: t('doctor.total_appointments'), extra: `${t('doctor.today')}: ${stats.today}` },
+      { icon: Users, color: universityTheme.secondary, value: stats.patients, label: t('doctor.total_patients') },
+      { icon: Pill, color: '#ffc107', value: stats.prescriptions, label: t('doctor.active_prescriptions') },
+      { icon: CheckCircle, color: universityTheme.accent, value: stats.completed, label: t('doctor.completed_sessions') }
     ].map((stat, index) => (
       <div key={index} className="col-6 col-lg-3">
         <div className="card border-0 shadow-sm h-100" style={{ borderRadius: '1rem' }}>
@@ -2297,13 +2354,13 @@ const HolidayWarning = ({ selectedDate }: { selectedDate: string }) => {
       </div>
     ))}
 
-      {/* Charts - Mobile responsive stacking */}
+    {/* Charts */}
     <div className="col-12">
       <div className="row g-3 g-md-4">
         {[
-          { title: "Weekly Appointments", data: weeklyStats.appointments, color: universityTheme.primary },
-          { title: "Patients Seen", data: weeklyStats.patients, color: universityTheme.secondary },
-          { title: "Completed Sessions", data: weeklyStats.completed, color: universityTheme.accent }
+          { title: t('doctor.weekly_appointments'), data: weeklyStats.appointments, color: universityTheme.primary },
+          { title: t('doctor.patients_seen'), data: weeklyStats.patients, color: universityTheme.secondary },
+          { title: t('doctor.completed_sessions_chart'), data: weeklyStats.completed, color: universityTheme.accent }
         ].map((chart, index) => (
           <div key={index} className="col-12 col-md-6 col-lg-4">
             <ChartCard 
@@ -2543,10 +2600,10 @@ const AppointmentsTab = () => (
       <div className="d-flex flex-wrap gap-1 mb-3">
         {/* Status Filters */}
         {[
-          { value: 'all', label: 'All', count: appointments.length },
-          { value: 'scheduled', label: 'Scheduled', count: appointments.filter(a => a.status === 'scheduled').length },
-          { value: 'confirmed', label: 'Confirmed', count: appointments.filter(a => a.status === 'confirmed').length },
-          { value: 'completed', label: 'Completed', count: appointments.filter(a => a.status === 'completed').length }
+          { value: 'all', label: t('doctor.all'), count: appointments.length },
+          { value: 'scheduled', label: t('status.scheduled'), count: appointments.filter(a => a.status === 'scheduled').length },
+          { value: 'confirmed', label: t('status.confirmed'), count: appointments.filter(a => a.status === 'confirmed').length },
+          { value: 'completed', label: t('status.completed'), count: appointments.filter(a => a.status === 'completed').length }
         ].map(filter => (
           <button
             key={filter.value}
@@ -2642,7 +2699,7 @@ const AppointmentsTab = () => (
                   onClick={() => viewAppointmentDetails(appointment)}
                 >
                   <Eye size={14} className="me-1" />
-                  View
+                  {t('doctor.view_details')}
                 </button>
                 {appointment.status === 'scheduled' && (
                   <button 
@@ -2650,7 +2707,7 @@ const AppointmentsTab = () => (
                     onClick={() => handleAppointmentAction(appointment, 'confirm')}
                   >
                     <Check size={14} className="me-1" />
-                    Confirm
+                    {t('doctor.confirm')}
                   </button>
                 )}
                 {appointment.status === 'confirmed' && (
@@ -2659,7 +2716,7 @@ const AppointmentsTab = () => (
                     onClick={() => handleAppointmentAction(appointment, 'complete')}
                   >
                     <CheckCircle size={14} className="me-1" />
-                    Complete
+                    {t('doctor.complete')}
                   </button>
                 )}
               </div>
@@ -2674,13 +2731,13 @@ const AppointmentsTab = () => (
           <table className="table table-hover align-middle">
             <thead>
               <tr>
-                <th style={{ width: '25%' }}>{t('common.patient')}</th>
-                <th style={{ width: '12%' }}>Date</th>
-                <th style={{ width: '10%' }}>Time</th>
-                <th style={{ width: '20%' }}>{t('appointments.reason')}</th>
-                <th style={{ width: '10%' }}>Priority</th>
-                <th style={{ width: '13%' }}>{t('common.status')}</th>
-                <th style={{ width: '10%' }} className="text-center">{t('common.actions')}</th>
+                <th style={{ width: '25%' }}>{t('doctor.patient')}</th>
+                  <th style={{ width: '12%' }}>{t('doctor.date')}</th>
+                  <th style={{ width: '10%' }}>{t('doctor.time')}</th>
+                  <th style={{ width: '20%' }}>{t('doctor.reason')}</th>
+                  <th style={{ width: '10%' }}>{t('doctor.priority')}</th>
+                  <th style={{ width: '13%' }}>{t('doctor.status')}</th>
+                  <th style={{ width: '10%' }} className="text-center">{t('doctor.actions')}</th>
               </tr>
             </thead>
             <tbody>
@@ -2791,7 +2848,10 @@ const AppointmentsTab = () => (
       <div className="d-flex justify-content-between align-items-center flex-wrap gap-2">
         <h3 className="card-title text-white mb-0 d-flex align-items-center">
           <Users size={24} className="me-2" />
-          Patients ({filteredPatients.length} total, {selectedPatients.size} selected)
+          {t('doctor.total_patients_count', { 
+            total: filteredPatients.length, 
+            selected: selectedPatients.size 
+          })}
         </h3>
         <div className="d-flex gap-2 align-items-center flex-wrap">
           {/* Archive Toggle Button */}
@@ -2801,7 +2861,7 @@ const AppointmentsTab = () => (
               const newShowArchived = !showArchivedPatients;
               setShowArchivedPatients(newShowArchived);
               fetchPatients(newShowArchived);
-              setSelectedPatients(new Set()); // Clear selections when switching views
+              setSelectedPatients(new Set());
             }}
             style={{ 
               minWidth: '140px',
@@ -2809,28 +2869,28 @@ const AppointmentsTab = () => (
             }}
           >
             <Archive size={16} className="me-1" />
-            {showArchivedPatients ? 'Show Active' : 'Show Archived'}
+            {showArchivedPatients ? t('doctor.show_active') : t('doctor.show_archived')}
           </button>
 
-          {/* Archive Selected Button - Only show when patients are selected and viewing active */}
+          {/* Archive Selected Button */}
           {selectedPatients.size > 0 && !showArchivedPatients && (
             <button
               onClick={archiveSelectedPatients}
               className="btn btn-warning btn-sm"
             >
               <Archive size={16} className="me-1" />
-              Archive ({selectedPatients.size})
+              {t('doctor.archive_selected', { count: selectedPatients.size })}
             </button>
           )}
 
-          {/* Unarchive Selected Button - Only show when patients are selected and viewing archived */}
+          {/* Unarchive Selected Button */}
           {selectedPatients.size > 0 && showArchivedPatients && (
             <button
               onClick={unarchiveSelectedPatients}
               className="btn btn-success btn-sm"
             >
               <Archive size={16} className="me-1" />
-              Unarchive ({selectedPatients.size})
+              {t('doctor.unarchive_selected', { count: selectedPatients.size })}
             </button>
           )}
           
@@ -2841,7 +2901,7 @@ const AppointmentsTab = () => (
             </span>
             <input
               type="text"
-              placeholder="Search by name or ID..."
+              placeholder={t('doctor.search_patients')}
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="form-control form-control-sm border-start-0"
@@ -2855,15 +2915,15 @@ const AppointmentsTab = () => (
       {loading ? (
         <div className="text-center py-5">
           <div className="spinner-border text-primary mb-3" role="status">
-            <span className="visually-hidden">Loading...</span>
+            <span className="visually-hidden">{t('doctor.loading_patients')}</span>
           </div>
-          <p className="text-muted">Loading patients...</p>
+          <p className="text-muted">{t('doctor.loading_patients')}</p>
         </div>
       ) : filteredPatients.length === 0 ? (
         <div className="text-center py-5">
           <Users size={48} className="text-muted mb-3" />
           <p className="text-muted">
-            {searchTerm ? `No patients found matching "${searchTerm}"` : 'No patients found'}
+            {searchTerm ? t('doctor.filtered_by', { search: searchTerm }) : t('doctor.no_patients')}
           </p>
         </div>
       ) : (
@@ -2878,7 +2938,7 @@ const AppointmentsTab = () => (
                 onChange={toggleSelectAllPatients}
               />
               <label className="form-check-label fw-semibold">
-                Select All ({filteredPatients.length} patients)
+                {t('doctor.select_all', { count: filteredPatients.length })}
               </label>
             </div>
           </div>
@@ -2889,14 +2949,14 @@ const AppointmentsTab = () => (
               <thead className="table-light">
                 <tr>
                   <th style={{ width: "50px" }} className="border-0">
-                    <span className="visually-hidden">Select</span>
+                    <span className="visually-hidden">{t('doctor.select')}</span>
                   </th>
-                  <th className="border-0 fw-semibold">Patient</th>
-                  <th className="border-0 fw-semibold">ID</th>
-                  <th className="border-0 fw-semibold">Contact</th>
-                  <th className="border-0 fw-semibold">Department</th>
-                  <th className="border-0 fw-semibold">Role</th>
-                  <th className="border-0 fw-semibold text-center">Actions</th>
+                  <th className="border-0 fw-semibold">{t('doctor.patient')}</th>
+                  <th className="border-0 fw-semibold">{t('doctor.patient_id')}</th>
+                  <th className="border-0 fw-semibold">{t('doctor.contact')}</th>
+                  <th className="border-0 fw-semibold">{t('doctor.department')}</th>
+                  <th className="border-0 fw-semibold">{t('doctor.role')}</th>
+                  <th className="border-0 fw-semibold text-center">{t('doctor.actions')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -2935,21 +2995,23 @@ const AppointmentsTab = () => (
                         </div>
                         <div>
                           <div className="fw-semibold text-dark">{patient.name}</div>
-                          <small className="text-muted">Patient #{patient.id}</small>
+                          <small className="text-muted">
+                            {t('doctor.patient')} #{patient.id}
+                          </small>
                         </div>
                       </div>
                     </td>
                     
                     <td className="align-middle">
                       <span className="badge bg-light text-dark border">
-                        {patient.student_id || patient.staff_no || 'N/A'}  {/* Changed from staff_id */}
+                        {patient.student_id || patient.staff_no || 'N/A'}
                       </span>
                     </td>
                     
                     <td className="align-middle">
                       <div>
                         <div className="fw-medium">{patient.email}</div>
-                        <small className="text-muted">Email</small>
+                        <small className="text-muted">{t('doctor.email')}</small>
                       </div>
                     </td>
                     
@@ -2974,17 +3036,10 @@ const AppointmentsTab = () => (
                         <button 
                           onClick={() => {setSelectedPatient(patient); setShowModal('viewPatient');}}
                           className="btn btn-sm btn-outline-primary"
-                          title="View Details"
+                          title={t('doctor.view_details')}
                         >
                           <Eye size={16} />
                         </button>
-                        {/*<button 
-                          onClick={() => {setSelectedPatient(patient); setShowModal('medicalRecord');}}
-                          className="btn btn-sm btn-outline-success"
-                          title="Add Medical Record"
-                        >
-                          <FileText size={16} />
-                        </button>*/}
                       </div>
                     </td>
                   </tr>
@@ -2997,14 +3052,17 @@ const AppointmentsTab = () => (
           <div className="p-3 bg-light border-top">
             <div className="d-flex justify-content-between align-items-center">
               <small className="text-muted">
-                Showing {filteredPatients.length} of {patients.length} patients
-                {searchTerm && ` (filtered by "${searchTerm}")`}
-                {showArchivedPatients && ' - Archived Patients'}
-                {!showArchivedPatients && ' - Active Patients'}
+                {t('doctor.showing_patients', { 
+                  filtered: filteredPatients.length, 
+                  total: patients.length 
+                })}
+                {searchTerm && ` (${t('doctor.filtered_by', { search: searchTerm })})`}
+                {showArchivedPatients && ` - ${t('doctor.archived_patients')}`}
+                {!showArchivedPatients && ` - ${t('doctor.active_patients')}`}
               </small>
               {selectedPatients.size > 0 && (
                 <small className="text-primary fw-semibold">
-                  {selectedPatients.size} patient{selectedPatients.size !== 1 ? 's' : ''} selected
+                  {t('doctor.selected_count', { count: selectedPatients.size })}
                 </small>
               )}
             </div>
@@ -3021,7 +3079,7 @@ const AppointmentsTab = () => (
       <div className="d-flex justify-content-between align-items-center">
         <h3 className="card-title text-white mb-0 d-flex align-items-center">
           <Pill size={24} className="me-2" />
-          Prescriptions ({prescriptions.length})
+          {t('doctor.total_prescriptions', { count: prescriptions.length })}
         </h3>
         <button
           onClick={() => setShowModal('prescription')}
@@ -3029,7 +3087,7 @@ const AppointmentsTab = () => (
           style={{ borderRadius: '0.5rem' }}
         >
           <Plus size={16} className="me-1" />
-          New Prescription
+          {t('doctor.new_prescription')}
         </button>
       </div>
     </div>
@@ -3038,25 +3096,25 @@ const AppointmentsTab = () => (
       {loading ? (
         <div className="text-center py-5">
           <div className="spinner-border text-primary mb-3" role="status">
-            <span className="visually-hidden">Loading...</span>
+            <span className="visually-hidden">{t('doctor.loading_prescriptions')}</span>
           </div>
-          <p className="text-muted">Loading prescriptions...</p>
+          <p className="text-muted">{t('doctor.loading_prescriptions')}</p>
         </div>
       ) : prescriptions.length === 0 ? (
         <div className="text-center py-5">
           <Pill size={48} className="text-muted mb-3" />
-          <p className="text-muted">No prescriptions found</p>
+          <p className="text-muted">{t('doctor.no_prescriptions')}</p>
         </div>
       ) : (
         <div className="table-responsive">
           <table className="table table-hover">
             <thead>
               <tr>
-                <th>Patient</th>
-                <th>Date</th>
-                <th>Medications</th>
-                <th>Status</th>
-                <th>Actions</th>
+                <th>{t('doctor.patient')}</th>
+                <th>{t('doctor.issued_date')}</th>
+                <th>{t('doctor.medications')}</th>
+                <th>{t('doctor.status')}</th>
+                <th>{t('doctor.actions')}</th>
               </tr>
             </thead>
             <tbody>
@@ -3081,7 +3139,9 @@ const AppointmentsTab = () => (
                   </td>
                   <td>
                     <div>
-                      <div className="fw-semibold">{prescription.medications?.length || 0} medications</div>
+                      <div className="fw-semibold">
+                        {t('doctor.medication_count', { count: prescription.medications?.length || 0 })}
+                      </div>
                       {prescription.medications?.slice(0, 2).map((med, index) => (
                         <div key={index} className="small text-muted">
                           {med.name} - {med.dosage}
@@ -3089,7 +3149,7 @@ const AppointmentsTab = () => (
                       ))}
                       {(prescription.medications?.length || 0) > 2 && (
                         <small className="text-muted">
-                          +{(prescription.medications?.length || 0) - 2} more
+                          {t('doctor.more_medications', { count: (prescription.medications?.length || 0) - 2 })}
                         </small>
                       )}
                     </div>
@@ -3103,7 +3163,7 @@ const AppointmentsTab = () => (
                     <button 
                       className="btn btn-sm btn-outline-primary" 
                       onClick={() => viewPrescriptionDetails(prescription)}
-                      title="View Details"
+                      title={t('doctor.view_details')}
                     >
                       <Eye size={16} />
                     </button>
@@ -3146,6 +3206,32 @@ const Sidebar = () => {
 
   // Check if mobile
   const isMobile = window.innerWidth < 768;
+
+  {/* Mobile Header with Hamburger Menu */}
+<div className="mobile-header">
+  <button 
+    className="hamburger-btn"
+    onClick={() => setSidebarOpen(true)}
+    aria-label="Open menu"
+  >
+    <Menu size={24} />
+  </button>
+  
+  <div className="d-flex align-items-center">
+    <Stethoscope size={24} className="me-2" />
+    <span className="fw-bold">UniHealth</span>
+  </div>
+  
+  <LanguageSwitcher />
+</div>
+
+{/* Sidebar Overlay for Mobile */}
+{sidebarOpen && (
+  <div 
+    className="sidebar-overlay" 
+    onClick={closeSidebar}
+  />
+)}
 
   return (
     <>
@@ -3242,7 +3328,7 @@ const Sidebar = () => {
                     fontWeight: 500,
                   }}
                 >
-                  Doctor Portal
+                  {t('doctor.doctor_portal')}
                 </small>
               </div>
             </div>
@@ -3314,7 +3400,7 @@ const Sidebar = () => {
             // MOBILE: flexShrink:0 with no overflow (compact, no scroll)
             flex: isMobile ? 'none' : 1,
             flexShrink: isMobile ? 0 : 1,
-            overflowY: isMobile ? 'visible' : 'auto',
+            overflowY: 'visible',
             overflowX: 'hidden',
             padding: sidebarCollapsed && !isMobile ? '12px 8px' : isMobile ? '6px 10px' : '16px 12px',
             minHeight: isMobile ? 'auto' : 0,
@@ -3333,7 +3419,7 @@ const Sidebar = () => {
                 paddingLeft: isMobile ? '8px' : '12px',
               }}
             >
-              Main Menu
+              {t('doctor.main_menu')}
             </div>
           )}
 
@@ -3498,7 +3584,7 @@ const Sidebar = () => {
                     paddingLeft: '4px',
                   }}
                 >
-                  Language
+                  {t('doctor.language')}
                 </div>
 
                 <div style={{ display: 'flex', gap: isMobile ? '4px' : '6px' }}>
@@ -3586,7 +3672,7 @@ const Sidebar = () => {
                 }}
               >
                 <LogOut size={isMobile ? 14 : 16} style={{ marginRight: isMobile ? '6px' : '8px' }} />
-                Logout
+                {t('doctor.logout')}
               </button>
             </div>
           ) : (
@@ -3667,7 +3753,7 @@ const Sidebar = () => {
         top: 0,
         left: 0,
         right: 0,
-        height: '60px',
+        height: '80px',
         background: 'white',
         boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
         display: window.innerWidth < 768 ? 'flex' : 'none',
@@ -3689,55 +3775,55 @@ const Sidebar = () => {
       >
         ☰
       </button>
-      <h6 style={{ margin: 0, marginLeft: '15px', fontWeight: 600 }}>
+      <h6 style={{ margin: 0, marginLeft: '15px', fontWeight: 600, }}>
         FIU Medical
       </h6>
     </div>
 
     {/* Main Content Wrapper */}
     <div
-      style={{
-        flex: 1,
-        marginLeft: window.innerWidth >= 768 ? (sidebarCollapsed ? '85px' : '280px') : '0',
-        paddingTop: window.innerWidth < 768 ? '60px' : '0',
-        transition: 'margin-left 0.3s ease',
-      }}
-    >
+  style={{
+    flex: 1,
+    marginLeft: window.innerWidth >= 768 ? (sidebarCollapsed ? '85px' : '280px') : '0',
+    paddingTop: window.innerWidth < 768 ? '80px' : '24px',  // CHANGED: Added top padding for desktop too
+    transition: 'margin-left 0.3s ease',
+  }}
+>
 
       {/* URGENT CASES ALERT BANNER */}
       {urgentRequests.length > 0 && (
-        <div className="container-fluid px-4 mb-3">
-          <div 
-            className="alert alert-danger d-flex align-items-center shadow-sm" 
-            role="alert"
-            style={{ borderRadius: '1rem', border: '2px solid #dc3545' }}
-          >
-            <AlertTriangle size={32} className="me-3 flex-shrink-0" />
-            <div className="flex-grow-1">
-              <h5 className="alert-heading mb-1 fw-bold">
-                ⚠️ URGENT: {urgentRequests.length} case{urgentRequests.length > 1 ? 's' : ''} need immediate attention
-              </h5>
-              <p className="mb-2">
-                These urgent requests should be processed before scheduled appointments.
-              </p>
-              <small className="text-muted">
-                {urgentRequests.map(req => req.patient_name).join(', ')}
-              </small>
-            </div>
-            <button 
-              className="btn btn-danger"
-              onClick={() => {
-                setActiveTab('appointments');
-                setAppointmentFilter({ status: 'all', priority: 'urgent' });
-              }}
-              style={{ borderRadius: '0.5rem' }}
-            >
-              <AlertTriangle size={16} className="me-2" />
-              Process Now
-            </button>
-          </div>
-        </div>
-      )}
+  <div className="container-fluid px-4 mb-3">
+    <div 
+      className="alert alert-danger d-flex align-items-center shadow-sm" 
+      role="alert"
+      style={{ borderRadius: '1rem', border: '2px solid #dc3545' }}
+    >
+      <AlertTriangle size={32} className="me-3 flex-shrink-0" />
+      <div className="flex-grow-1">
+        <h5 className="alert-heading mb-1 fw-bold">
+          ⚠️ {t('doctor.urgent_cases', { count: urgentRequests.length })}
+        </h5>
+        <p className="mb-2">
+          {t('doctor.urgent_warning')}
+        </p>
+        <small className="text-muted">
+          {urgentRequests.map(req => req.patient_name).join(', ')}
+        </small>
+      </div>
+      <button 
+        className="btn btn-danger"
+        onClick={() => {
+          setActiveTab('appointments');
+          setAppointmentFilter({ status: 'all', priority: 'urgent' });
+        }}
+        style={{ borderRadius: '0.5rem' }}
+      >
+        <AlertTriangle size={16} className="me-2" />
+        {t('doctor.process_now')}
+      </button>
+    </div>
+  </div>
+)}
 
       {/* Walk-in Alerts */}
     {walkInAlerts.map((alert) => (
@@ -3758,7 +3844,7 @@ const Sidebar = () => {
       />
     ))}
       
-      <div className="container-fluid px-4">
+      <div className="container-fluid px-4 pt-3"> 
         <MessageAlert />
         
         {activeTab === 'dashboard' && <DashboardOverview />}
@@ -3770,7 +3856,7 @@ const Sidebar = () => {
     <div className="card-header" style={{ background: universityTheme.gradient }}>
       <h3 className="card-title text-white mb-0 d-flex align-items-center">
         <Settings size={24} className="me-2" />
-        Doctor Profile
+        {t('doctor.profile_title')}
       </h3>
     </div>
     <div className="card-body p-4">
@@ -3802,6 +3888,7 @@ const Sidebar = () => {
               htmlFor="avatarInput" 
               className="btn btn-sm btn-primary position-absolute bottom-0 end-0 rounded-circle p-2"
               style={{ cursor: 'pointer' }}
+              title={t('doctor.upload_photo')}
             >
               <Camera size={16} />
             </label>
@@ -3820,15 +3907,29 @@ const Sidebar = () => {
                 className="btn btn-sm btn-outline-danger"
                 onClick={handlePhotoRemove}
               >
-                Remove Photo
+                {t('doctor.remove_photo')}
               </button>
             </div>
           )}
+          
+          {/* Photo Guidelines */}
+          <div className="mt-3">
+            <small className="text-muted">
+              <strong>{t('doctor.photo_guidelines')}:</strong><br />
+              {t('doctor.file_types')} {t('doctor.file_types_desc')}<br />
+              {t('doctor.file_size')} {t('doctor.file_size_desc')}
+            </small>
+          </div>
+        </div>
+
+        {/* Personal Information Section */}
+        <div className="col-12">
+          <h5 className="fw-bold mb-3">{t('doctor.personal_info')}</h5>
         </div>
 
         {/* Full Name */}
         <div className="col-md-6">
-          <label className="form-label fw-semibold">Full Name</label>
+          <label className="form-label fw-semibold">{t('doctor.full_name')}</label>
           <input
             type="text"
             className="form-control"
@@ -3839,7 +3940,7 @@ const Sidebar = () => {
 
         {/* Email */}
         <div className="col-md-6">
-          <label className="form-label fw-semibold">Email</label>
+          <label className="form-label fw-semibold">{t('doctor.email')}</label>
           <input
             type="email"
             className="form-control"
@@ -3850,12 +3951,12 @@ const Sidebar = () => {
 
         {/* Phone Number */}
         <div className="col-12 col-md-6">
-          <label className="form-label fw-semibold">Phone Number</label>
+          <label className="form-label fw-semibold">{t('doctor.phone')}</label>
           <PhoneInput
             country={'tr'}
             value={doctorProfile.phone || ''}
             onChange={(phone: string) => setDoctorProfile(prev => ({ ...prev, phone }))}
-            placeholder="Enter your phone number"
+            placeholder={t('doctor.phone')}
             inputProps={{
               className: 'form-control',
               required: false
@@ -3869,7 +3970,7 @@ const Sidebar = () => {
 
         {/* Department */}
         <div className="col-md-6">
-          <label className="form-label fw-semibold">Department</label>
+          <label className="form-label fw-semibold">{t('doctor.department')}</label>
           <input
             type="text"
             className="form-control"
@@ -3881,19 +3982,19 @@ const Sidebar = () => {
 
         {/* Address */}
         <div className="col-12">
-          <label className="form-label fw-semibold">Address</label>
+          <label className="form-label fw-semibold">{t('doctor.address')}</label>
           <textarea
             className="form-control"
             rows={2}
             value={doctorProfile.address || ''}
             onChange={(e) => setDoctorProfile(prev => ({ ...prev, address: e.target.value }))}
-            placeholder="Enter your full address..."
+            placeholder={t('doctor.address')}
           />
         </div>
 
         {/* Specialization */}
         <div className="col-md-6">
-          <label className="form-label fw-semibold">Specialization</label>
+          <label className="form-label fw-semibold">{t('doctor.specialization')}</label>
           <input
             type="text"
             className="form-control"
@@ -3904,7 +4005,7 @@ const Sidebar = () => {
 
         {/* Medical License Number */}
         <div className="col-md-6">
-          <label className="form-label fw-semibold">Medical License Number</label>
+          <label className="form-label fw-semibold">{t('doctor.medical_license_number')}</label>
           <input
             type="text"
             className="form-control"
@@ -3921,11 +4022,16 @@ const Sidebar = () => {
             disabled={loading}
           >
             {loading ? (
-              <span className="spinner-border spinner-border-sm me-2" />
+              <>
+                <span className="spinner-border spinner-border-sm me-2" />
+                {t('doctor.saving')}
+              </>
             ) : (
-              <Save size={18} className="me-2" />
+              <>
+                <Save size={18} className="me-2" />
+                {t('doctor.save_profile')}
+              </>
             )}
-            Save Profile
           </button>
         </div>
       </div>
@@ -3944,9 +4050,9 @@ const Sidebar = () => {
           <>
             <div className="modal-header" style={{ background: universityTheme.gradient }}>
               <h5 className="modal-title text-white">
-                <Clock size={20} className="me-2" />
-                Set Availability
-              </h5>
+  <Clock size={20} className="me-2" />
+  {t('doctor.set_availability_title')}
+</h5>
               <button
                 type="button"
                 className="btn-close btn-close-white"
@@ -4077,9 +4183,9 @@ const Sidebar = () => {
           <>
             <div className="modal-header" style={{ background: universityTheme.gradient }}>
               <h5 className="modal-title text-white">
-                <Plus size={20} className="me-2" />
-                New Appointment
-              </h5>
+  <Plus size={20} className="me-2" />
+  {t('doctor.new_appointment_title')}
+</h5>
               <button
                 type="button"
                 className="btn-close btn-close-white"
@@ -4089,34 +4195,37 @@ const Sidebar = () => {
 
             <div className="modal-body p-4">
               {/* Patient Selection */}
-              <div className="mb-3">
-                <label className="form-label fw-semibold">
-                  Patient <span className="text-danger">*</span>
-                </label>
-                <select
-                  className="form-select"
-                  value={appointmentForm.patient_id}
-                  onChange={(e) =>
-                    setAppointmentForm((prev) => ({
-                      ...prev,
-                      patient_id: e.target.value,
-                    }))
-                  }
-                  required
-                >
-                  <option value="">Select a patient</option>
-                  {patients.map((patient) => (
-                    <option key={patient.id} value={patient.id}>
-                      {patient.name} - {patient.student_id || patient.staff_no}
-                    </option>
-                  ))}
-                </select>
-                {!appointmentForm.patient_id && (
-                  <div className="form-text text-danger fst-italic small">
-                    Please select a patient
-                  </div>
-                )}
-              </div>
+<div className="mb-3">
+  <label className="form-label fw-semibold">
+    Patient <span className="text-danger">*</span>
+  </label>
+  <Select
+    options={patients.map(patient => ({
+      value: patient.id.toString(),
+      label: `${patient.name} - ${patient.student_id || patient.staff_no}`
+    }))}
+    value={appointmentForm.patient_id ? {
+      value: appointmentForm.patient_id,
+      label: patients.find(p => p.id.toString() === appointmentForm.patient_id)?.name || ''
+    } : null}
+    onChange={(option) => setAppointmentForm(prev => ({
+      ...prev,
+      patient_id: option?.value || ''
+    }))}
+    placeholder="Select a patient"
+    isClearable
+    isSearchable
+    styles={selectStyles}
+    theme={selectTheme}
+    menuPortalTarget={document.body}
+    menuPosition="fixed"
+  />
+  {!appointmentForm.patient_id && (
+    <div className="form-text text-danger fst-italic small">
+      Please select a patient
+    </div>
+  )}
+</div>
 
               <div className="row">
                 {/* Date Selection */}
@@ -4143,35 +4252,38 @@ const Sidebar = () => {
                 </div>
 
                 {/* Time Selection */}
-                <div className="col-md-6 mb-3">
-                  <label className="form-label fw-semibold">
-                    Time <span className="text-danger">*</span>
-                  </label>
-                  <select
-                    className="form-select"
-                    value={appointmentForm.time}
-                    onChange={(e) =>
-                      setAppointmentForm((prev) => ({
-                        ...prev,
-                        time: e.target.value,
-                      }))
-                    }
-                    required
-                    disabled={!appointmentForm.date || isDateBlocked(appointmentForm.date)}
-                  >
-                    <option value="">Select time</option>
-                    {getAvailableTimeSlots(appointmentForm.date).map((slot) => (
-                      <option key={slot} value={slot}>
-                        {slot}
-                      </option>
-                    ))}
-                  </select>
-                  {!appointmentForm.time && (
-                    <div className="form-text text-danger fst-italic small">
-                      Please select a time
-                    </div>
-                  )}
-                </div>
+<div className="col-md-6 mb-3">
+  <label className="form-label fw-semibold">
+    Time <span className="text-danger">*</span>
+  </label>
+  <Select
+    options={getAvailableTimeSlots(appointmentForm.date).map(slot => ({
+      value: slot,
+      label: slot
+    }))}
+    value={appointmentForm.time ? {
+      value: appointmentForm.time,
+      label: appointmentForm.time
+    } : null}
+    onChange={(option) => setAppointmentForm(prev => ({
+      ...prev,
+      time: option?.value || ''
+    }))}
+    placeholder="Select time"
+    isClearable
+    isSearchable={false}
+    isDisabled={!appointmentForm.date || isDateBlocked(appointmentForm.date)}
+    styles={selectStyles}
+    theme={selectTheme}
+    menuPortalTarget={document.body}
+    menuPosition="fixed"
+  />
+  {!appointmentForm.time && (
+    <div className="form-text text-danger fst-italic small">
+      Please select a time
+    </div>
+  )}
+</div>
               </div>
 
               {/* Reason for Visit */}
@@ -4255,9 +4367,9 @@ const Sidebar = () => {
           <>
             <div className="modal-header" style={{ background: universityTheme.gradient }}>
               <h5 className="modal-title text-white">
-                <Eye size={20} className="me-2" />
-                Appointment Details
-              </h5>
+  <Eye size={20} className="me-2" />
+  {t('doctor.appointment_details')}
+</h5>
               <button
                 type="button"
                 className="btn-close btn-close-white"
@@ -4554,54 +4666,54 @@ const Sidebar = () => {
         {/* ADD THE VIEW PATIENT DETAILS MODAL HERE */}
         {/* Enhanced View Patient Details Modal */}
         {showModal === 'viewPatient' && selectedPatient && (
-          <>
-            <div className="modal-header" style={{ background: universityTheme.gradient }}>
-              <h5 className="modal-title text-white">
-                <User size={20} className="me-2" />
-                Patient Details - {selectedPatient.name}
-              </h5>
-              <button
-                type="button"
-                className="btn-close btn-close-white"
-                onClick={() => {
-                  setShowModal('');
-                  setShowPatientHistory(false);
-                  setPatientMedicalRecords([]);
-                  setPatientPrescriptions([]);
-                }}
-              ></button>
-            </div>
-            <div className="modal-body p-4" style={{ maxHeight: '80vh', overflowY: 'auto' }}>
-              {/* Basic Patient Information */}
-              <div className="row mb-4">
-                <div className="col-md-6 mb-3">
-                  <label className="form-label fw-semibold text-muted small">NAME</label>
-                  <div className="fw-semibold">{selectedPatient.name}</div>
-                </div>
-                <div className="col-md-6 mb-3">
-                  <label className="form-label fw-semibold text-muted small">ID</label>
-                  <div className="fw-semibold">{selectedPatient.student_id || selectedPatient.staff_no}</div>
-                </div>
-              </div>
+  <>
+    <div className="modal-header" style={{ background: universityTheme.gradient }}>
+      <h5 className="modal-title text-white">
+        <User size={20} className="me-2" />
+        {t('doctor.patient_details')} - {selectedPatient.name}
+      </h5>
+      <button
+        type="button"
+        className="btn-close btn-close-white"
+        onClick={() => {
+          setShowModal('');
+          setShowPatientHistory(false);
+          setPatientMedicalRecords([]);
+          setPatientPrescriptions([]);
+        }}
+      ></button>
+    </div>
+    <div className="modal-body p-4" style={{ maxHeight: '80vh', overflowY: 'auto' }}>
+      {/* Basic Patient Information */}
+      <div className="row mb-4">
+        <div className="col-md-6 mb-3">
+          <label className="form-label fw-semibold text-muted small">{t('doctor.name')}</label>
+          <div className="fw-semibold">{selectedPatient.name}</div>
+        </div>
+        <div className="col-md-6 mb-3">
+          <label className="form-label fw-semibold text-muted small">{t('doctor.id')}</label>
+          <div className="fw-semibold">{selectedPatient.student_id || selectedPatient.staff_no}</div>
+        </div>
+      </div>
               
               <div className="row mb-4">
                 <div className="col-md-6 mb-3">
-                  <label className="form-label fw-semibold text-muted small">EMAIL</label>
+                  <label className="form-label fw-semibold text-muted small">{t('doctor.email')}</label>
                   <div className="fw-semibold">{selectedPatient.email}</div>
                 </div>
                 <div className="col-md-6 mb-3">
-                  <label className="form-label fw-semibold text-muted small">PHONE</label>
+                  <label className="form-label fw-semibold text-muted small">{t('doctor.phone')}</label>
                   <div className="fw-semibold">{selectedPatient.phone || 'Not provided'}</div>
                 </div>
               </div>
               
               <div className="row mb-4">
                 <div className="col-md-6 mb-3">
-                  <label className="form-label fw-semibold text-muted small">ROLE</label>
+                  <label className="form-label fw-semibold text-muted small">{t('doctor.role')}</label>
                   <div className="fw-semibold">{selectedPatient.role}</div>
                 </div>
                 <div className="col-md-6 mb-3">
-                  <label className="form-label fw-semibold text-muted small">DEPARTMENT</label>
+                  <label className="form-label fw-semibold text-muted small">{t('doctor.department')}</label>
                   <div className="fw-semibold">{selectedPatient.department}</div>
                 </div>
               </div>
@@ -4612,7 +4724,7 @@ const Sidebar = () => {
               <div className="mb-4">
                 <h6 className="fw-bold mb-3">
                   <FileText size={18} className="me-2" />
-                  Recent Medical History (Last 3 visits)
+                  {t('doctor.recent_history')}
                 </h6>
                 
                 {!showPatientHistory ? (
@@ -4626,14 +4738,14 @@ const Sidebar = () => {
                       }}
                     >
                       <Eye size={16} className="me-1" />
-                      Load Medical History
+                      {t('doctor.load_history')}
                     </button>
-                    <p className="text-muted small">Click to load patient's medical records and prescriptions</p>
+                    <p className="text-muted small">{t('doctor.load_history')}</p>
                   </div>
                 ) : loading ? (
                   <div className="text-center py-3">
                     <div className="spinner-border spinner-border-sm text-primary" />
-                    <p className="mt-2 text-muted">Loading medical history...</p>
+                    <p className="mt-2 text-muted">{t('doctor.loading_history')}</p>
                   </div>
                 ) : (
                   <div className="row">
@@ -4641,12 +4753,12 @@ const Sidebar = () => {
                     <div className="col-md-6">
                       <h6 className="text-primary mb-3">
                         <Stethoscope size={16} className="me-1" />
-                        Recent Visits
+                        {t('doctor.recent_visits')}
                       </h6>
                       {patientMedicalRecords.length === 0 ? (
                         <div className="text-center py-3 bg-light rounded">
                           <FileText size={24} className="text-muted mb-2" />
-                          <p className="text-muted mb-0 small">No medical records found</p>
+                          <p className="text-muted mb-0 small">{t('doctor.no_records')}</p>
                         </div>
                       ) : (
                         <div>
@@ -4684,7 +4796,7 @@ const Sidebar = () => {
                               className="btn btn-sm btn-outline-info w-100 mt-2"
                               onClick={() => setShowPatientHistory(true)}
                             >
-                              View All {patientMedicalRecords.length} Records
+                              {t('doctor.view_all_prescriptions', { count: patientPrescriptions.length })}
                             </button>
                           )}
                         </div>
@@ -4754,7 +4866,7 @@ const Sidebar = () => {
                 className="btn btn-secondary"
                 onClick={() => setShowModal('')}
               >
-                Close
+                {t('doctor.close')}
               </button>
               <button
                 type="button"
@@ -4765,7 +4877,7 @@ const Sidebar = () => {
                 style={{ background: universityTheme.gradient, border: 'none' }}
               >
                 <Plus size={16} className="me-1" />
-                Add Medical Record
+                {t('doctor.add_medical_record')}
               </button>
             </div>
           </>
@@ -4777,7 +4889,7 @@ const Sidebar = () => {
                     <div className="modal-header" style={{ background: universityTheme.gradient }}>
                       <h5 className="modal-title text-white">
                         <Pill size={20} className="me-2" />
-                        Create Prescription
+                        {t('doctor.create_prescription_title')}
                       </h5>
                       <button
                         type="button"
@@ -4788,40 +4900,43 @@ const Sidebar = () => {
 
                     <div className="modal-body p-4" style={{ maxHeight: '70vh', overflowY: 'auto' }}>
                       {/* Patient Selection */}
-                      <div className="mb-3">
-                        <label className="form-label fw-semibold">
-                          Patient <span className="text-danger">*</span>
-                        </label>
-                        <select
-                          className="form-select"
-                          value={prescriptionForm.patient_id}
-                          onChange={(e) =>
-                            setPrescriptionForm((prev) => ({
-                              ...prev,
-                              patient_id: e.target.value,
-                            }))
-                          }
-                          required
-                        >
-                          <option value="">Select a patient</option>
-                          {patients.map((patient) => (
-                            <option key={patient.id} value={patient.id}>
-                              {patient.name} - {patient.student_id || patient.staff_no}
-                            </option>
-                          ))}
-                        </select>
-                        {!prescriptionForm.patient_id && (
-                          <div className="form-text text-danger fst-italic small">
-                            Please select a patient
-                          </div>
-                        )}
-                      </div>
+<div className="mb-3">
+  <label className="form-label fw-semibold">
+    {t('doctor.patient')} <span className="text-danger">*</span>
+  </label>
+  <Select
+    options={patients.map(patient => ({
+      value: patient.id.toString(),
+      label: `${patient.name} - ${patient.student_id || patient.staff_no}`
+    }))}
+    value={prescriptionForm.patient_id ? {
+      value: prescriptionForm.patient_id,
+      label: patients.find(p => p.id.toString() === prescriptionForm.patient_id)?.name || ''
+    } : null}
+    onChange={(option) => setPrescriptionForm(prev => ({
+      ...prev,
+      patient_id: option?.value || ''
+    }))}
+    placeholder="Select a patient"
+    isClearable
+    isSearchable
+    styles={selectStyles}
+    theme={selectTheme}
+    menuPortalTarget={document.body}
+    menuPosition="fixed"
+  />
+  {!prescriptionForm.patient_id && (
+    <div className="form-text text-danger fst-italic small">
+      {t('doctor.select_patient')}
+    </div>
+  )}
+</div>
 
                       {/* Medications */}
                       <div className="mb-3">
                         <div className="d-flex justify-content-between align-items-center mb-2">
                           <label className="form-label fw-semibold">
-                            Medications <span className="text-danger">*</span>
+                            {t('doctor.medications')} <span className="text-danger">*</span>
                           </label>
                           <button
                             type="button"
@@ -4829,7 +4944,7 @@ const Sidebar = () => {
                             onClick={addMedication}
                           >
                             <Plus size={16} className="me-1" />
-                            Add Medication
+                            {t('doctor.add_medication')}
                           </button>
                         </div>
 
@@ -4854,7 +4969,7 @@ const Sidebar = () => {
                                   <input
                                     type="text"
                                     className="form-control form-control-sm"
-                                    placeholder="Medication name *"
+                                    placeholder={t('doctor.medication_name') + ' *'}
                                     value={medication.name}
                                     onChange={(e) => {
                                       const newMedications = [...prescriptionForm.medications];
@@ -4867,7 +4982,7 @@ const Sidebar = () => {
                                   />
                                   {!medication.name.trim() && (
                                     <div className="form-text text-danger small fst-italic">
-                                      Please enter medication name
+                                      {t('doctor.medication_name_required')}
                                     </div>
                                   )}
                                 </div>
@@ -4876,7 +4991,7 @@ const Sidebar = () => {
                                   <input
                                     type="text"
                                     className="form-control form-control-sm"
-                                    placeholder="Dosage *"
+                                    placeholder={t('doctor.dosage') + ' *'}
                                     value={medication.dosage}
                                     onChange={(e) => {
                                       const newMedications = [...prescriptionForm.medications];
@@ -4889,36 +5004,34 @@ const Sidebar = () => {
                                   />
                                   {!medication.dosage.trim() && (
                                     <div className="form-text text-danger small fst-italic">
-                                      Please specify dosage
+                                      {t('doctor.dosage_required')}
                                     </div>
                                   )}
                                 </div>
                               </div>
 
                               <div className="mb-2">
-                                <input
-                                  type="text"
-                                  className="form-control form-control-sm"
-                                  placeholder="Instructions *"
-                                  value={medication.instructions}
-                                  onChange={(e) => {
-                                    const newMedications = [...prescriptionForm.medications];
-                                    newMedications[index].instructions = e.target.value;
-                                    setPrescriptionForm((prev) => ({
-                                      ...prev,
-                                      medications: newMedications,
-                                    }));
-                                  }}
-                                />
-                                {!medication.instructions.trim() && (
-                                  <div className="form-text text-danger small fst-italic">
-                                    Please provide instructions
-                                  </div>
-                                )}
-                              </div>
+                              <input
+                                type="text"
+                                className="form-control form-control-sm"
+                                placeholder={t('doctor.instructions') + ' *'}
+                                value={medication.instructions}
+                                onChange={(e) => {
+                                  const newMedications = [...prescriptionForm.medications];
+                                  newMedications[index].instructions = e.target.value;
+                                  setPrescriptionForm(prev => ({ ...prev, medications: newMedications }));
+                                }}
+                              />
+                              {!medication.instructions.trim() && (
+                                <div className="form-text text-danger small fst-italic">
+                                  {t('doctor.instructions_required')}
+                                </div>
+                              )}
+                            </div>
 
                               <div className="row">
                                 <div className="col-md-6 mb-2">
+                                  <label className="form-label small">{t('doctor.start_date')}</label>
                                   <input
                                     type="date"
                                     className="form-control form-control-sm"
@@ -4926,15 +5039,13 @@ const Sidebar = () => {
                                     onChange={(e) => {
                                       const newMedications = [...prescriptionForm.medications];
                                       newMedications[index].start_date = e.target.value;
-                                      setPrescriptionForm((prev) => ({
-                                        ...prev,
-                                        medications: newMedications,
-                                      }));
+                                      setPrescriptionForm(prev => ({ ...prev, medications: newMedications }));
                                     }}
                                   />
                                 </div>
 
                                 <div className="col-md-6 mb-2">
+                                  <label className="form-label small">{t('doctor.end_date')}</label>
                                   <input
                                     type="date"
                                     className="form-control form-control-sm"
@@ -4942,33 +5053,36 @@ const Sidebar = () => {
                                     onChange={(e) => {
                                       const newMedications = [...prescriptionForm.medications];
                                       newMedications[index].end_date = e.target.value;
-                                      setPrescriptionForm((prev) => ({
-                                        ...prev,
-                                        medications: newMedications,
-                                      }));
+                                      setPrescriptionForm(prev => ({ ...prev, medications: newMedications }));
                                     }}
                                   />
                                 </div>
 
                                 <div className="col-md-4 mb-2">
-                                  <select
-                                    className="form-control form-control-sm"
-                                    value={medication.frequency || 'daily'}
-                                    onChange={(e) => {
-                                      const newMedications = [...prescriptionForm.medications];
-                                      newMedications[index].frequency = e.target.value;
-                                      setPrescriptionForm((prev) => ({
-                                        ...prev,
-                                        medications: newMedications,
-                                      }));
-                                    }}
-                                  >
-                                    <option value="daily">Daily</option>
-                                    <option value="twice_daily">Twice Daily</option>
-                                    <option value="weekly">Weekly</option>
-                                    <option value="as_needed">As Needed</option>
-                                  </select>
-                                </div>
+  <label className="form-label small">{t('doctor.frequency')}</label>
+  <Select
+    options={[
+      { value: 'daily', label: t('doctor.daily') },
+      { value: 'twice_daily', label: t('doctor.twice_daily') },
+      { value: 'weekly', label: t('doctor.weekly') },
+      { value: 'as_needed', label: t('doctor.as_needed') }
+    ]}
+    value={{
+      value: medication.frequency || 'daily',
+      label: t(`doctor.${medication.frequency || 'daily'}`)
+    }}
+    onChange={(option) => {
+      const newMedications = [...prescriptionForm.medications];
+      newMedications[index].frequency = option?.value || 'daily';
+      setPrescriptionForm(prev => ({ ...prev, medications: newMedications }));
+    }}
+    styles={selectStyles}
+    theme={selectTheme}
+    menuPortalTarget={document.body}
+    menuPosition="fixed"
+    isSearchable={false}
+  />
+</div>
                               </div>
                             </div>
                           </div>
@@ -4977,48 +5091,33 @@ const Sidebar = () => {
 
                       {/* Additional Notes */}
                       <div className="mb-3">
-                        <label className="form-label fw-semibold">Additional Notes</label>
+                        <label className="form-label fw-semibold">{t('doctor.prescription_notes')}</label>
                         <textarea
                           className="form-control"
                           rows={3}
                           value={prescriptionForm.notes}
-                          onChange={(e) =>
-                            setPrescriptionForm((prev) => ({
-                              ...prev,
-                              notes: e.target.value,
-                            }))
-                          }
-                          placeholder="Any additional notes or instructions..."
+                          onChange={(e) => setPrescriptionForm(prev => ({ ...prev, notes: e.target.value }))}
+                          placeholder={t('doctor.prescription_notes_placeholder')}
                         />
                       </div>
                     </div>
 
-                    {/* Footer */}
                     <div className="modal-footer">
                       <button
                         type="button"
                         className="btn btn-secondary"
                         onClick={() => setShowModal('')}
                       >
-                        Cancel
+                        {t('doctor.cancel')}
                       </button>
                       <button
                         type="button"
                         className="btn btn-primary"
                         onClick={() => {
-                          if (
-                            !prescriptionForm.patient_id ||
-                            prescriptionForm.medications.some(
-                              (m) =>
-                                !m.name.trim() ||
-                                !m.dosage.trim() ||
-                                !m.instructions.trim()
-                            )
+                          if (!prescriptionForm.patient_id ||
+                              prescriptionForm.medications.some(m => !m.name.trim() || !m.dosage.trim() || !m.instructions.trim())
                           ) {
-                            setMessage({
-                              type: 'error',
-                              text: 'Please fill in all required fields before creating the prescription.',
-                            });
+                            setMessage({ type: 'error', text: t('doctor.fill_medication_fields') });
                             setTimeout(() => setMessage({ type: '', text: '' }), 4000);
                             return;
                           }
@@ -5026,7 +5125,7 @@ const Sidebar = () => {
                         }}
                         style={{ background: universityTheme.gradient, border: 'none' }}
                       >
-                        Create Prescription
+                        {t('doctor.create_prescription')}
                       </button>
                     </div>
                   </>
@@ -5370,23 +5469,30 @@ const Sidebar = () => {
         </div>
         
         <div className="col-md-6 mb-3">
-          <label className="form-label fw-semibold">New Time *</label>
-          <select
-            className="form-select"
-            value={rescheduleForm.new_time}
-            onChange={(e) => setRescheduleForm(prev => ({
-              ...prev,
-              new_time: e.target.value
-            }))}
-            required
-            disabled={!rescheduleForm.new_date || isDateBlocked(rescheduleForm.new_date)}
-          >
-            <option value="">Select time</option>
-            {getAvailableTimeSlots(rescheduleForm.new_date).map(slot => (
-              <option key={slot} value={slot}>{slot}</option>
-            ))}
-          </select>
-        </div>
+  <label className="form-label fw-semibold">New Time *</label>
+  <Select
+    options={getAvailableTimeSlots(rescheduleForm.new_date).map(slot => ({
+      value: slot,
+      label: slot
+    }))}
+    value={rescheduleForm.new_time ? {
+      value: rescheduleForm.new_time,
+      label: rescheduleForm.new_time
+    } : null}
+    onChange={(option) => setRescheduleForm(prev => ({
+      ...prev,
+      new_time: option?.value || ''
+    }))}
+    placeholder="Select time"
+    isClearable
+    isSearchable={false}
+    isDisabled={!rescheduleForm.new_date || isDateBlocked(rescheduleForm.new_date)}
+    styles={selectStyles}
+    theme={selectTheme}
+    menuPortalTarget={document.body}
+    menuPosition="fixed"
+  />
+</div>
       </div>
       
       <div className="mb-3">

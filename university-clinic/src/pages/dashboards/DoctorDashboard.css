@@ -1,0 +1,408 @@
+/* DoctorDashboard Responsive Styles */
+
+/* Mobile-first approach */
+:root {
+  --sidebar-width: 280px;
+  --header-height: 60px;
+}
+
+/* Sidebar Responsive Styles */
+.sidebar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  height: 100vh;
+  width: var(--sidebar-width);
+  background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+  color: white;
+  transition: transform 0.3s ease;
+  z-index: 1050;
+  overflow-y: auto;
+}
+
+/* Mobile date picker fixes */
+@media (max-width: 768px) {
+  input[type="date"] {
+    font-size: 16px !important; /* Prevents zoom on iOS */
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    appearance: none;
+    position: relative;
+    padding: 0.5rem;
+  }
+  
+  input[type="date"]::-webkit-calendar-picker-indicator {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    width: auto;
+    height: auto;
+    color: transparent;
+    background: transparent;
+    cursor: pointer;
+  }
+  
+  input[type="date"]::-webkit-inner-spin-button,
+  input[type="date"]::-webkit-clear-button {
+    display: none;
+  }
+  
+  /* Make date picker modal appear properly on mobile */
+  input[type="date"]::-webkit-datetime-edit {
+    padding: 0;
+    font-size: 16px;
+  }
+}
+
+/* Ensure modal dropdowns don't get cut off */
+.modal-body {
+  overflow: visible !important;
+}
+
+.modal-content {
+  overflow: visible !important;
+}
+
+/* Mobile: Hidden by default */
+@media (max-width: 991px) {
+  .sidebar {
+    transform: translateX(-100%);
+  }
+  
+  .sidebar.open {
+    transform: translateX(0);
+  }
+  
+  .sidebar-overlay {
+    display: block;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.5);
+    z-index: 1040;
+  }
+}
+
+/* Desktop: Always visible */
+@media (min-width: 992px) {
+  .sidebar {
+    transform: translateX(0);
+  }
+  
+  .sidebar-overlay {
+    display: none;
+  }
+  
+  .main-content {
+    margin-left: var(--sidebar-width);
+  }
+}
+
+/* Mobile Header with Hamburger */
+.mobile-header {
+  display: none;
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: var(--header-height);
+  background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+  color: white;
+  padding: 0 1rem;
+  z-index: 1030;
+  align-items: center;
+  justify-content: space-between;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+}
+
+@media (max-width: 991px) {
+  .mobile-header {
+    display: flex;
+  }
+  
+  .main-content {
+    margin-top: var(--header-height);
+    margin-left: 0;
+  }
+}
+
+.hamburger-btn {
+  background: none;
+  border: none;
+  color: white;
+  cursor: pointer;
+  padding: 0.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Responsive Cards */
+.stats-card {
+  margin-bottom: 1rem;
+}
+
+@media (max-width: 767px) {
+  .stats-card {
+    min-height: auto;
+  }
+  
+  .stats-card h3 {
+    font-size: 1.5rem;
+  }
+}
+
+/* Responsive Tables */
+.table-responsive-custom {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+@media (max-width: 767px) {
+  .table-responsive-custom table {
+    font-size: 0.875rem;
+  }
+  
+  .table-responsive-custom th,
+  .table-responsive-custom td {
+    padding: 0.5rem;
+    white-space: nowrap;
+  }
+  
+  /* Hide less important columns on mobile */
+  .hide-mobile {
+    display: none;
+  }
+}
+
+/* Card-based layout for mobile appointments/patients */
+@media (max-width: 767px) {
+  .mobile-card-view {
+    display: block;
+  }
+  
+  .desktop-table-view {
+    display: none;
+  }
+  
+  .appointment-card,
+  .patient-card {
+    border: 1px solid #dee2e6;
+    border-radius: 8px;
+    padding: 1rem;
+    margin-bottom: 1rem;
+    background: white;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+  }
+  
+  .card-row {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 0.5rem;
+    padding-bottom: 0.5rem;
+    border-bottom: 1px solid #f0f0f0;
+  }
+  
+  .card-row:last-child {
+    border-bottom: none;
+    margin-bottom: 0;
+  }
+  
+  .card-label {
+    font-weight: 600;
+    color: #6c757d;
+    font-size: 0.875rem;
+  }
+  
+  .card-value {
+    text-align: right;
+    font-size: 0.875rem;
+  }
+}
+
+@media (min-width: 768px) {
+  .mobile-card-view {
+    display: none;
+  }
+  
+  .desktop-table-view {
+    display: block;
+  }
+}
+
+/* Responsive Modals */
+@media (max-width: 767px) {
+  .modal-dialog {
+    margin: 0;
+    max-width: 100%;
+    height: 100vh;
+  }
+  
+  .modal-content {
+    height: 100vh;
+    border-radius: 0;
+  }
+  
+  .modal-body {
+    overflow-y: auto;
+    max-height: calc(100vh - 120px);
+  }
+  
+  .modal-header {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+  }
+  
+  .modal-footer {
+    position: sticky;
+    bottom: 0;
+    z-index: 1;
+    background: white;
+  }
+}
+
+/* Responsive Buttons */
+@media (max-width: 767px) {
+  .btn {
+    font-size: 0.875rem;
+    padding: 0.5rem 1rem;
+  }
+  
+  .btn-group {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+  
+  .action-buttons {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+  
+  .action-buttons .btn {
+    width: 100%;
+  }
+}
+
+/* Responsive Forms */
+@media (max-width: 767px) {
+  .form-row {
+    flex-direction: column;
+  }
+  
+  .form-row > div {
+    width: 100%;
+    margin-bottom: 1rem;
+  }
+}
+
+/* Responsive Search Bar */
+@media (max-width: 767px) {
+  .search-container {
+    margin-bottom: 1rem;
+  }
+  
+  .search-container input {
+    font-size: 1rem;
+    padding: 0.75rem;
+  }
+}
+
+/* Tab Navigation Responsive */
+@media (max-width: 767px) {
+  .nav-tabs {
+    display: flex;
+    overflow-x: auto;
+    flex-wrap: nowrap;
+    -webkit-overflow-scrolling: touch;
+  }
+  
+  .nav-tabs .nav-link {
+    white-space: nowrap;
+    font-size: 0.875rem;
+    padding: 0.5rem 1rem;
+  }
+}
+
+/* Stat Cards Grid */
+@media (max-width: 575px) {
+  .stats-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (min-width: 576px) and (max-width: 991px) {
+  .stats-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (min-width: 992px) {
+  .stats-grid {
+    grid-template-columns: repeat(4, 1fr);
+  }
+}
+
+/* Patient Profile Responsive */
+@media (max-width: 767px) {
+  .profile-header {
+    flex-direction: column;
+    text-align: center;
+  }
+  
+  .profile-avatar {
+    margin-bottom: 1rem;
+  }
+  
+  .profile-info {
+    text-align: center;
+  }
+}
+
+/* Charts Responsive */
+@media (max-width: 767px) {
+  .chart-container {
+    overflow-x: auto;
+  }
+  
+  canvas {
+    max-width: 100%;
+    height: auto !important;
+  }
+}
+
+/* Utility Classes */
+.text-mobile-center {
+  text-align: left;
+}
+
+@media (max-width: 767px) {
+  .text-mobile-center {
+    text-align: center;
+  }
+}
+
+/* Touch-friendly spacing */
+@media (max-width: 767px) {
+  .touch-spacing {
+    min-height: 44px;
+    padding: 0.75rem;
+  }
+}
+
+/* Responsive Padding */
+@media (max-width: 767px) {
+  .p-4 {
+    padding: 1rem !important;
+  }
+  
+  .p-5 {
+    padding: 1.5rem !important;
+  }
+}

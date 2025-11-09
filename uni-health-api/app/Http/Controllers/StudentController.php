@@ -667,7 +667,7 @@ public function getDoctorAvailability(Request $request): JsonResponse
 }
 
     /**
-     * Reschedule an existing appointment
+     * Reschedule an existing appointment - FIXED VERSION
      */
     public function rescheduleAppointment(Request $request, Appointment $appointment): JsonResponse
     {
@@ -684,28 +684,63 @@ public function getDoctorAvailability(Request $request): JsonResponse
                 'time' => 'required|date_format:H:i',
             ]);
 
-            // Check for conflicts with the new time
-            $existingAppointment = Appointment::where('doctor_id', $appointment->doctor_id)
-                ->where('date', $validated['date'])
-                ->where('time', $validated['time'])
-                ->where('id', '!=', $appointment->id)
-                ->whereIn('status', ['scheduled', 'confirmed'])
-                ->first();
-
-            if ($existingAppointment) {
+            // ✅ NEW: Check if clinic is open on selected date
+            if (!$this->isClinicOpen($validated['date'])) {
                 return response()->json([
-                    'message' => 'Doctor is not available at this time',
-                    'errors' => ['time' => ['This time slot is already booked']]
+                    'message' => $this->getClosureReason($validated['date']),
+                    'errors' => [
+                        'date' => [$this->getClosureReason($validated['date']) . '. Please select a weekday (Monday-Friday).']
+                    ]
                 ], 422);
             }
 
+            // ✅ NEW: Validate time is within clinic hours (9:00 AM - 5:00 PM)
+            $selectedTime = \Carbon\Carbon::parse($validated['time']);
+            $clinicOpen = \Carbon\Carbon::parse('09:00');
+            $clinicClose = \Carbon\Carbon::parse('17:00');
+            
+            if ($selectedTime->lt($clinicOpen) || $selectedTime->gte($clinicClose)) {
+                return response()->json([
+                    'message' => 'Selected time is outside clinic hours',
+                    'errors' => [
+                        'time' => ['Clinic hours are 9:00 AM - 5:00 PM. Please select a time within operating hours.']
+                    ]
+                ], 422);
+            }
+
+            // ✅ FIXED: Only check for conflicts if doctor is assigned
+            if ($appointment->doctor_id) {
+                $existingAppointment = Appointment::where('doctor_id', $appointment->doctor_id)
+                    ->where('date', $validated['date'])
+                    ->where('time', $validated['time'])
+                    ->where('id', '!=', $appointment->id)
+                    ->whereIn('status', ['scheduled', 'confirmed'])
+                    ->first();
+
+                if ($existingAppointment) {
+                    return response()->json([
+                        'message' => 'Doctor is not available at this time',
+                        'errors' => ['time' => ['This time slot is already booked']]
+                    ], 422);
+                }
+            }
+
+            // Update appointment
             $appointment->update([
                 'date' => $validated['date'],
                 'time' => $validated['time'],
-                'status' => 'scheduled'
+                // Keep status as is - don't change to 'scheduled' automatically
+                // Let clinical staff manage the status
             ]);
 
             $appointment->load('doctor');
+
+            // Try to broadcast (don't fail if broadcasting fails)
+            try {
+                broadcast(new \App\Events\AppointmentStatusUpdated($appointment));
+            } catch (\Exception $e) {
+                \Log::warning('Failed to broadcast appointment reschedule: ' . $e->getMessage());
+            }
 
             return response()->json([
                 'message' => 'Appointment rescheduled successfully',
@@ -713,7 +748,7 @@ public function getDoctorAvailability(Request $request): JsonResponse
                     'id' => $appointment->id,
                     'date' => $appointment->date,
                     'time' => $appointment->time,
-                    'doctor' => $appointment->doctor->name,
+                    'doctor' => $appointment->doctor->name ?? 'To be assigned',
                     'status' => $appointment->status
                 ]
             ]);
@@ -725,10 +760,11 @@ public function getDoctorAvailability(Request $request): JsonResponse
             ], 422);
         } catch (\Exception $e) {
             \Log::error('Appointment rescheduling error: ' . $e->getMessage());
+            \Log::error('Error trace: ' . $e->getTraceAsString());
             
             return response()->json([
                 'message' => 'Failed to reschedule appointment',
-                'error' => 'An unexpected error occurred'
+                'error' => 'An unexpected error occurred: ' . $e->getMessage()
             ], 500);
         }
     }

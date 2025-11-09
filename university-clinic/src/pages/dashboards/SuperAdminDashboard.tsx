@@ -23,6 +23,7 @@ import {
 import api from "../../services/api";
 import { useTranslation } from 'react-i18next';
 import i18n from "../../services/i18n";
+import Select from 'react-select';
 import ClinicSettingsManager from '../../components/ClinicSettingsManager';
 
 // Type definitions
@@ -382,6 +383,38 @@ const EnhancedSuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({ user,
     }
   };
 
+  // Custom styles for react-select - matches your red theme
+const customSelectStyles = {
+  control: (provided: any, state: any) => ({
+    ...provided,
+    borderRadius: '0.375rem',
+    borderColor: state.isFocused ? '#dc3545' : '#dee2e6',
+    boxShadow: state.isFocused ? '0 0 0 0.25rem rgba(220, 53, 69, 0.25)' : 'none',
+    '&:hover': {
+      borderColor: '#dc3545',
+    },
+    minHeight: '38px',
+  }),
+  option: (provided: any, state: any) => ({
+    ...provided,
+    backgroundColor: state.isSelected ? '#dc3545' : state.isFocused ? '#fee2e2' : 'white',
+    color: state.isSelected ? 'white' : '#212529',
+    '&:hover': {
+      backgroundColor: state.isSelected ? '#dc3545' : '#fee2e2',
+    },
+  }),
+  menu: (provided: any) => ({
+    ...provided,
+    zIndex: 9999,
+    borderRadius: '0.375rem',
+    boxShadow: '0 0.5rem 1rem rgba(0, 0, 0, 0.15)',
+  }),
+  menuPortal: (provided: any) => ({
+    ...provided,
+    zIndex: 9999,
+  }),
+};
+
   // Delete user
   const deleteUser = async (userId: string | number) => {
     if (!window.confirm(t('superadmin.confirm_delete_user'))) return;
@@ -676,59 +709,65 @@ const DonutChart = ({ data, colors, size = 140 }: { data: number[], colors: stri
 
   // NEW: Chart Data Configurations
   const getChartData = () => {
-    if (!kpiStats || !kpiStats.appointment_trends) return null;
+  if (!kpiStats || !kpiStats.appointment_trends) return null;
 
-    const trendData = {
-      labels: kpiStats.appointment_trends.map((t: any) => t.date),
-      datasets: [
-        {
-          label: 'Completed',
-          data: kpiStats.appointment_trends.map((t: any) => t.completed || 0),
-          borderColor: 'rgb(34, 197, 94)',
-          backgroundColor: 'rgba(34, 197, 94, 0.1)',
-          tension: 0.4,
-        },
-        {
-          label: 'Cancelled',
-          data: kpiStats.appointment_trends.map((t: any) => t.cancelled || 0),
-          borderColor: 'rgb(239, 68, 68)',
-          backgroundColor: 'rgba(239, 68, 68, 0.1)',
-          tension: 0.4,
-        },
-        {
-          label: 'Scheduled',
-          data: kpiStats.appointment_trends.map((t: any) => t.scheduled || 0),
-          borderColor: 'rgb(59, 130, 246)',
-          backgroundColor: 'rgba(59, 130, 246, 0.1)',
-          tension: 0.4,
-        }
-      ]
-    };
-
-    const currentStats = getCurrentStats();
-    const statusData = {
-      labels: ['Completed', 'Scheduled', 'Cancelled', 'No Show', 'In Progress'],
-      datasets: [{
-        data: [
-          currentStats?.completed || 0,
-          currentStats?.scheduled || 0,
-          currentStats?.cancelled || 0,
-          currentStats?.no_show || 0,
-          currentStats?.in_progress || 0
-        ],
-        backgroundColor: [
-          'rgba(34, 197, 94, 0.8)',
-          'rgba(59, 130, 246, 0.8)',
-          'rgba(239, 68, 68, 0.8)',
-          'rgba(249, 115, 22, 0.8)',
-          'rgba(168, 85, 247, 0.8)',
-        ],
-        borderWidth: 2,
-      }]
-    };
-
-    return { trendData, statusData };
+  const trendData = {
+    labels: kpiStats.appointment_trends.map((t: any) => t.date),
+    datasets: [
+      {
+        label: t('superadmin.completed'),
+        data: kpiStats.appointment_trends.map((t: any) => t.completed || 0),
+        borderColor: 'rgb(34, 197, 94)',
+        backgroundColor: 'rgba(34, 197, 94, 0.1)',
+        tension: 0.4,
+      },
+      {
+        label: t('superadmin.cancelled'),
+        data: kpiStats.appointment_trends.map((t: any) => t.cancelled || 0),
+        borderColor: 'rgb(239, 68, 68)',
+        backgroundColor: 'rgba(239, 68, 68, 0.1)',
+        tension: 0.4,
+      },
+      {
+        label: t('superadmin.scheduled'),
+        data: kpiStats.appointment_trends.map((t: any) => t.scheduled || 0),
+        borderColor: 'rgb(59, 130, 246)',
+        backgroundColor: 'rgba(59, 130, 246, 0.1)',
+        tension: 0.4,
+      }
+    ]
   };
+
+  const currentStats = getCurrentStats();
+  const statusData = {
+    labels: [
+      t('superadmin.completed'),
+      t('superadmin.scheduled'),
+      t('superadmin.cancelled'),
+      t('superadmin.no_show'),
+      t('superadmin.in_progress')
+    ],
+    datasets: [{
+      data: [
+        currentStats?.completed || 0,
+        currentStats?.scheduled || 0,
+        currentStats?.cancelled || 0,
+        currentStats?.no_show || 0,
+        currentStats?.in_progress || 0
+      ],
+      backgroundColor: [
+        'rgba(34, 197, 94, 0.8)',
+        'rgba(59, 130, 246, 0.8)',
+        'rgba(239, 68, 68, 0.8)',
+        'rgba(249, 115, 22, 0.8)',
+        'rgba(168, 85, 247, 0.8)',
+      ],
+      borderWidth: 2,
+    }]
+  };
+
+  return { trendData, statusData };
+};
 
   const chartOptions = {
     responsive: true,
@@ -1148,7 +1187,7 @@ const Sidebar = () => {
       style={{
         flex: 1,
         marginLeft: window.innerWidth >= 768 ? (sidebarCollapsed ? '85px' : '280px') : '0',
-        paddingTop: window.innerWidth < 768 ? '60px' : '0',
+        paddingTop: window.innerWidth < 768 ? '80px' : '40px',
         transition: 'margin-left 0.3s ease',
       }}
     >
@@ -1175,513 +1214,278 @@ const Sidebar = () => {
         {activeTab === 'dashboard' && (
           <>
             {/* Date & Timeframe Selectors */}
-            <div className="row mb-4">
-              <div className="col-12">
-                <div className="card shadow-sm border-0" style={{ borderRadius: '1rem' }}>
-                  <div className="card-body">
-                    <div className="row g-3 align-items-center">
-                      <div className="col-md-3">
-                        <label className="form-label fw-semibold">Select Date</label>
-                        <input
-                          type="date"
-                          className="form-control"
-                          value={selectedDate}
-                          onChange={(e) => setSelectedDate(e.target.value)}
-                        />
-                      </div>
-                      <div className="col-md-2">
-                        <label className="form-label fw-semibold">Month</label>
-                        <select
-                          className="form-select"
-                          value={selectedMonth}
-                          onChange={(e) => setSelectedMonth(parseInt(e.target.value))}
-                        >
-                          {Array.from({ length: 12 }, (_, i) => (
-                            <option key={i + 1} value={i + 1}>
-                              {new Date(2024, i).toLocaleString('default', { month: 'long' })}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                      <div className="col-md-2">
-                        <label className="form-label fw-semibold">Year</label>
-                        <select
-                          className="form-select"
-                          value={selectedYear}
-                          onChange={(e) => setSelectedYear(parseInt(e.target.value))}
-                        >
-                          {Array.from({ length: 5 }, (_, i) => {
-                            const year = new Date().getFullYear() - 2 + i;
-                            return <option key={year} value={year}>{year}</option>;
-                          })}
-                        </select>
-                      </div>
-                      <div className="col-md-5">
-                        <label className="form-label fw-semibold">View By</label>
-                        <div className="btn-group w-100" role="group">
-                          <button
-                            className={`btn ${timeframe === 'today' ? 'btn-primary' : 'btn-outline-primary'}`}
-                            onClick={() => setTimeframe('today')}
-                          >
-                            Today
-                          </button>
-                          <button
-                            className={`btn ${timeframe === 'week' ? 'btn-primary' : 'btn-outline-primary'}`}
-                            onClick={() => setTimeframe('week')}
-                          >
-                            This Week
-                          </button>
-                          <button
-                            className={`btn ${timeframe === 'month' ? 'btn-primary' : 'btn-outline-primary'}`}
-                            onClick={() => setTimeframe('month')}
-                          >
-                            This Month
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
+<div className="row mb-4">
+  <div className="col-12">
+    <div className="card shadow-sm border-0" style={{ borderRadius: '1rem' }}>
+      <div className="card-body">
+        <div className="row g-3 align-items-center">
+          <div className="col-md-3">
+            <label className="form-label fw-semibold">{t('superadmin.select_date')}</label>
+            <input
+              type="date"
+              className="form-control"
+              value={selectedDate}
+              onChange={(e) => setSelectedDate(e.target.value)}
+            />
+          </div>
+          <div className="col-md-2">
+  <label className="form-label fw-semibold">{t('superadmin.month')}</label>
+  <Select
+    options={Array.from({ length: 12 }, (_, i) => ({
+      value: i + 1,
+      label: new Date(2024, i).toLocaleString(i18n.language, { month: 'long' })
+    }))}
+    value={{
+      value: selectedMonth,
+      label: new Date(2024, selectedMonth - 1).toLocaleString(i18n.language, { month: 'long' })
+    }}
+    onChange={(option) => option && setSelectedMonth(option.value)}
+    styles={customSelectStyles}
+    menuPortalTarget={document.body}
+    placeholder={t('superadmin.select_month')}
+  />
+</div>
+<div className="col-md-2">
+  <label className="form-label fw-semibold">{t('superadmin.year')}</label>
+  <Select
+    options={Array.from({ length: 5 }, (_, i) => {
+      const year = new Date().getFullYear() - 2 + i;
+      return { value: year, label: year.toString() };
+    })}
+    value={{
+      value: selectedYear,
+      label: selectedYear.toString()
+    }}
+    onChange={(option) => option && setSelectedYear(option.value)}
+    styles={customSelectStyles}
+    menuPortalTarget={document.body}
+    placeholder={t('superadmin.select_year')}
+  />
+</div>
+          <div className="col-md-5">
+            <label className="form-label fw-semibold">{t('superadmin.view_by')}</label>
+            <div className="btn-group w-100" role="group">
+              <button
+                className={`btn ${timeframe === 'today' ? 'btn-primary' : 'btn-outline-primary'}`}
+                onClick={() => setTimeframe('today')}
+              >
+                {t('superadmin.today')}
+              </button>
+              <button
+                className={`btn ${timeframe === 'week' ? 'btn-primary' : 'btn-outline-primary'}`}
+                onClick={() => setTimeframe('week')}
+              >
+                {t('superadmin.this_week')}
+              </button>
+              <button
+                className={`btn ${timeframe === 'month' ? 'btn-primary' : 'btn-outline-primary'}`}
+                onClick={() => setTimeframe('month')}
+              >
+                {t('superadmin.this_month')}
+              </button>
             </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
 
             {kpiLoading ? (
-              <div className="text-center py-5">
-                <div className="spinner-border text-primary" role="status">
-                  <span className="visually-hidden">Loading statistics...</span>
-                </div>
-              </div>
-            ) : kpiStats && currentStats ? (
-              <>
-                {/* Main KPI Cards */}
-                {/* Main KPI Cards with Charts */}
-<div className="row g-4 mb-4">
-  {/* Total Appointments Card with Bar Chart */}
-  <div className="col-md-3">
-    <div className="card border-0 shadow-sm h-100" style={{ borderRadius: '16px' }}>
-      <div className="card-body" style={{ position: 'relative', overflow: 'hidden' }}>
-        <div style={{
-          position: 'absolute',
-          top: 0,
-          right: 0,
-          width: '120px',
-          height: '120px',
-          background: 'linear-gradient(135deg, #3b82f615, transparent)',
-          borderRadius: '0 16px 0 100%'
-        }} />
-        <div style={{ position: 'relative', zIndex: 1 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '16px' }}>
-            <div style={{
-              width: '48px',
-              height: '48px',
-              borderRadius: '12px',
-              background: 'linear-gradient(135deg, #3b82f615, #3b82f625)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center'
-            }}>
-              <Calendar size={24} style={{ color: '#3b82f6' }} />
-            </div>
-            <div style={{
-              fontSize: '36px',
-              fontWeight: '700',
-              color: '#1f2937'
-            }}>
-              {currentStats?.total_appointments || 0}
-            </div>
-          </div>
-          <div style={{ fontSize: '14px', fontWeight: '600', color: '#6b7280', marginBottom: '12px' }}>
-  Total Appointments
-</div>
-{kpiStats?.trends?.appointments && kpiStats.trends.appointments.length > 0 ? (
+  <div className="text-center py-5">
+    <div className="spinner-border text-primary" role="status">
+      <span className="visually-hidden">{t('superadmin.loading_statistics')}</span>
+    </div>
+  </div>
+) : kpiStats && currentStats ? (
   <>
-    <MiniBarChart data={kpiStats.trends.appointments} color="#3b82f6" />
-    <div style={{ fontSize: '12px', color: '#3b82f6', fontWeight: '600', marginTop: '8px' }}>
-      7-day trend
-    </div>
-  </>
-) : (
-  <div style={{ fontSize: '12px', color: '#9ca3af', fontStyle: 'italic' }}>
-    No trend data available
-  </div>
-)}
-        </div>
-      </div>
-    </div>
-  </div>
-
-  {/* Completed with Line Chart */}
-  <div className="col-md-3">
-    <div className="card border-0 shadow-sm h-100" style={{ borderRadius: '16px' }}>
-      <div className="card-body" style={{ position: 'relative', overflow: 'hidden' }}>
-        <div style={{
-          position: 'absolute',
-          top: 0,
-          right: 0,
-          width: '120px',
-          height: '120px',
-          background: 'linear-gradient(135deg, #10b98115, transparent)',
-          borderRadius: '0 16px 0 100%'
-        }} />
-        <div style={{ position: 'relative', zIndex: 1 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '16px' }}>
-            <div style={{
-              width: '48px',
-              height: '48px',
-              borderRadius: '12px',
-              background: 'linear-gradient(135deg, #10b98115, #10b98125)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center'
-            }}>
-              <CheckCircle size={24} style={{ color: '#10b981' }} />
-            </div>
-            <div style={{
-              fontSize: '36px',
-              fontWeight: '700',
-              color: '#1f2937'
-            }}>
-              {currentStats?.completed || 0}
-            </div>
-          </div>
-          <div style={{ fontSize: '14px', fontWeight: '600', color: '#6b7280', marginBottom: '12px' }}>
-  Completed
-</div>
-{kpiStats?.trends?.completions && kpiStats.trends.completions.length > 0 ? (
-  <>
-    <LineSparkline data={kpiStats.trends.completions} color="#10b981" width={120} height={40} />
-    <div style={{ fontSize: '12px', color: '#10b981', fontWeight: '600', marginTop: '8px' }}>
-      {currentStats?.completion_rate || 0}% completion rate
-    </div>
-  </>
-) : (
-  <div style={{ fontSize: '12px', color: '#10b981', fontWeight: '600' }}>
-    {currentStats?.completion_rate || 0}% completion rate
-  </div>
-)}
-        </div>
-      </div>
-    </div>
-  </div>
-
-  {/* Cancelled with Bar Chart */}
-  <div className="col-md-3">
-    <div className="card border-0 shadow-sm h-100" style={{ borderRadius: '16px' }}>
-      <div className="card-body" style={{ position: 'relative', overflow: 'hidden' }}>
-        <div style={{
-          position: 'absolute',
-          top: 0,
-          right: 0,
-          width: '120px',
-          height: '120px',
-          background: 'linear-gradient(135deg, #ef444415, transparent)',
-          borderRadius: '0 16px 0 100%'
-        }} />
-        <div style={{ position: 'relative', zIndex: 1 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '16px' }}>
-            <div style={{
-              width: '48px',
-              height: '48px',
-              borderRadius: '12px',
-              background: 'linear-gradient(135deg, #ef444415, #ef444425)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center'
-            }}>
-              <X size={24} style={{ color: '#ef4444' }} />
-            </div>
-            <div style={{
-              fontSize: '36px',
-              fontWeight: '700',
-              color: '#1f2937'
-            }}>
-              {currentStats?.cancelled || 0}
-            </div>
-          </div>
-          <div style={{ fontSize: '14px', fontWeight: '600', color: '#6b7280', marginBottom: '12px' }}>
-  Cancelled
-</div>
-{kpiStats?.trends?.cancellations && kpiStats.trends.cancellations.length > 0 ? (
-  <>
-    <MiniBarChart data={kpiStats.trends.cancellations} color="#ef4444" />
-    <div style={{ fontSize: '12px', color: '#ef4444', fontWeight: '600', marginTop: '8px' }}>
-      {currentStats?.cancellation_rate?.toFixed(1) || 0}% cancellation rate
-    </div>
-  </>
-) : (
-  <div style={{ fontSize: '12px', color: '#ef4444', fontWeight: '600' }}>
-    {currentStats?.cancellation_rate?.toFixed(1) || 0}% cancellation rate
-  </div>
-)}
-        </div>
-      </div>
-    </div>
-  </div>
-
-  {/* Active Sessions */}
-  <div className="col-md-3">
-    <div className="card border-0 shadow-sm h-100" style={{ borderRadius: '16px' }}>
-      <div className="card-body text-center" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
-        <div style={{
-          width: '48px',
-          height: '48px',
-          borderRadius: '12px',
-          background: 'linear-gradient(135deg, #8b5cf615, #8b5cf625)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          marginBottom: '12px'
-        }}>
-          <Activity size={24} style={{ color: '#8b5cf6' }} />
-        </div>
-        <div style={{ fontSize: '36px', fontWeight: '700', color: '#1f2937', marginBottom: '4px' }}>
-          {currentStats?.sessions_today || currentStats?.in_progress || 0}
-        </div>
-        <div style={{ fontSize: '14px', fontWeight: '600', color: '#6b7280', marginBottom: '16px' }}>
-          Active Sessions
-        </div>
-        <div style={{ fontSize: '12px', color: '#8b5cf6', fontWeight: '600' }}>
-          Currently in progress
-        </div>
-      </div>
-    </div>
-  </div>
-</div>
-
-                {/* Status Breakdown Cards */}
-                <div className="row g-4 mb-4">
-                  <div className="col-md-2">
-                    <div className="card border-0 shadow-sm">
-                      <div className="card-body text-center py-3">
-                        <Clock size={24} className="text-warning mb-2" />
-                        <h5 className="fw-bold mb-0">{currentStats.scheduled || 0}</h5>
-                        <small className="text-muted">Scheduled</small>
-                      </div>
-                    </div>
-                  </div>
-                  <div className="col-md-2">
-                    <div className="card border-0 shadow-sm">
-                      <div className="card-body text-center py-3">
-                        <CheckCircle size={24} className="text-primary mb-2" />
-                        <h5 className="fw-bold mb-0">{currentStats.confirmed || 0}</h5>
-                        <small className="text-muted">Confirmed</small>
-                      </div>
-                    </div>
-                  </div> {/*
-                  <div className="col-md-2">
-                    <div className="card border-0 shadow-sm">
-                      <div className="card-body text-center py-3">
-                        <Activity size={24} className="text-purple mb-2" />
-                        <h5 className="fw-bold mb-0">{currentStats.in_progress || 0}</h5>
-                        <small className="text-muted">In Progress</small>
-                      </div>
-                    </div>
-                  </div>
-                  <div className="col-md-2">
-                    <div className="card border-0 shadow-sm">
-                      <div className="card-body text-center py-3">
-                        <AlertTriangle size={24} className="text-danger mb-2" />
-                        <h5 className="fw-bold mb-0">{currentStats.pending || 0}</h5>
-                        <small className="text-muted">Pending</small>
-                      </div>
-                    </div>
-                  </div>
-                  <div className="col-md-2">
-                    <div className="card border-0 shadow-sm">
-                      <div className="card-body text-center py-3">
-                        <X size={24} className="text-secondary mb-2" />
-                        <h5 className="fw-bold mb-0">{currentStats.no_show || 0}</h5>
-                        <small className="text-muted">No Show</small>
-                      </div>
-                    </div>
-                  </div>*/}
-                  <div className="col-md-2">
-                    <div className="card border-0 shadow-sm">
-                      <div className="card-body text-center py-3">
-                        <TrendingUp size={24} className="text-success mb-2" />
-                        <h5 className="fw-bold mb-0">{currentStats.completion_rate || 0}%</h5>
-                        <small className="text-muted">Success Rate</small>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Status Distribution Donut Chart
-<div className="row mb-4">
-  <div className="col-md-6 offset-md-3">
-    <div className="card shadow-sm border-0" style={{ borderRadius: '16px' }}>
-      <div className="card-header bg-white border-0">
-        <h6 className="fw-bold mb-0 text-center">Status Distribution</h6>
-      </div>
-      <div className="card-body text-center">
-        <DonutChart 
-          data={[
-            currentStats?.completed || 0,
-            currentStats?.scheduled || 0,
-            currentStats?.cancelled || 0,
-            currentStats?.no_show || 0,
-            currentStats?.in_progress || 0
-          ]}
-          colors={['#10b981', '#3b82f6', '#ef4444', '#6b7280', '#8b5cf6']}
-          size={200}
-        />
-        <div style={{ marginTop: '20px' }}>
-          {[
-            { label: 'Completed', color: '#10b981', value: currentStats?.completed || 0 },
-            { label: 'Scheduled', color: '#3b82f6', value: currentStats?.scheduled || 0 },
-            { label: 'Cancelled', color: '#ef4444', value: currentStats?.cancelled || 0 },
-            { label: 'No Show', color: '#6b7280', value: currentStats?.no_show || 0 },
-            { label: 'In Progress', color: '#8b5cf6', value: currentStats?.in_progress || 0 }
-          ].map((item, index) => (
-            <div key={index} style={{ 
-              display: 'flex', 
-              alignItems: 'center', 
-              justifyContent: 'space-between',
-              padding: '8px 0',
-              borderBottom: index < 4 ? '1px solid #f3f4f6' : 'none'
-            }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+    {/* Main KPI Cards */}
+    <div className="row g-4 mb-4">
+      {/* Total Appointments Card */}
+      <div className="col-md-3">
+        <div className="card border-0 shadow-sm h-100" style={{ borderRadius: '16px' }}>
+          <div className="card-body" style={{ position: 'relative', overflow: 'hidden' }}>
+            {/* ... gradient background ... */}
+            <div style={{ position: 'relative', zIndex: 1 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '16px' }}>
                 <div style={{
-                  width: '12px', height: '12px',
-                  borderRadius: '3px', background: item.color
-                }} />
-                <span style={{ fontSize: '14px', color: '#6b7280', fontWeight: '500' }}>
-                  {item.label}
-                </span>
+                  width: '48px',
+                  height: '48px',
+                  borderRadius: '12px',
+                  background: 'linear-gradient(135deg, #3b82f615, #3b82f625)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center'
+                }}>
+                  <Calendar size={24} style={{ color: '#3b82f6' }} />
+                </div>
+                <div style={{
+                  fontSize: '36px',
+                  fontWeight: '700',
+                  color: '#1f2937'
+                }}>
+                  {currentStats?.total_appointments || 0}
+                </div>
               </div>
-              <span style={{ fontSize: '16px', fontWeight: '700', color: '#1f2937' }}>
-                {item.value}
-              </span>
+              <div style={{ fontSize: '14px', fontWeight: '600', color: '#6b7280', marginBottom: '12px' }}>
+                {t('superadmin.total_appointments')}
+              </div>
+              {kpiStats?.trends?.appointments && kpiStats.trends.appointments.length > 0 ? (
+                <>
+                  <MiniBarChart data={kpiStats.trends.appointments} color="#3b82f6" />
+                  <div style={{ fontSize: '12px', color: '#3b82f6', fontWeight: '600', marginTop: '8px' }}>
+                    {t('superadmin.7_day_trend')}
+                  </div>
+                </>
+              ) : (
+                <div style={{ fontSize: '12px', color: '#9ca3af', fontStyle: 'italic' }}>
+                  {t('superadmin.no_trend_data')}
+                </div>
+              )}
             </div>
-          ))}
+          </div>
+        </div>
+      </div>
+
+      {/* Completed Card */}
+      <div className="col-md-3">
+        <div className="card border-0 shadow-sm h-100" style={{ borderRadius: '16px' }}>
+          <div className="card-body" style={{ position: 'relative', overflow: 'hidden' }}>
+            {/* ... */}
+            <div style={{ fontSize: '14px', fontWeight: '600', color: '#6b7280', marginBottom: '12px' }}>
+              {t('superadmin.completed')}
+            </div>
+            {/* ... */}
+            <div style={{ fontSize: '12px', color: '#10b981', fontWeight: '600', marginTop: '8px' }}>
+              {currentStats?.completion_rate || 0}% {t('superadmin.completion_rate')}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Cancelled Card */}
+      <div className="col-md-3">
+        <div className="card border-0 shadow-sm h-100" style={{ borderRadius: '16px' }}>
+          <div className="card-body" style={{ position: 'relative', overflow: 'hidden' }}>
+            {/* ... */}
+            <div style={{ fontSize: '14px', fontWeight: '600', color: '#6b7280', marginBottom: '12px' }}>
+              {t('superadmin.cancelled')}
+            </div>
+            {/* ... */}
+            <div style={{ fontSize: '12px', color: '#ef4444', fontWeight: '600', marginTop: '8px' }}>
+              {currentStats?.cancellation_rate?.toFixed(1) || 0}% {t('superadmin.cancellation_rate')}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Active Sessions */}
+      <div className="col-md-3">
+        <div className="card border-0 shadow-sm h-100" style={{ borderRadius: '16px' }}>
+          <div className="card-body text-center" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
+            {/* ... */}
+            <div style={{ fontSize: '14px', fontWeight: '600', color: '#6b7280', marginBottom: '16px' }}>
+              {t('superadmin.active_sessions')}
+            </div>
+            <div style={{ fontSize: '12px', color: '#8b5cf6', fontWeight: '600' }}>
+              {t('superadmin.currently_in_progress')}
+            </div>
+          </div>
         </div>
       </div>
     </div>
-  </div>
-</div>*/}
 
-                {/* Prescription Stats */}
-                {/* Prescription Stats with Charts */}
-{kpiStats?.prescription_stats && (
-  <div className="row mb-4">
-    <div className="col-12">
-      <div className="card shadow-sm border-0" style={{ borderRadius: '16px' }}>
-        <div className="card-header bg-white border-0" style={{ borderRadius: '16px 16px 0 0' }}>
-          <h6 className="fw-bold mb-0">Prescription Activity</h6>
+    {/* Status Breakdown Cards */}
+    <div className="row g-4 mb-4">
+      <div className="col-md-2">
+        <div className="card border-0 shadow-sm">
+          <div className="card-body text-center py-3">
+            <Clock size={24} className="text-warning mb-2" />
+            <h5 className="fw-bold mb-0">{currentStats.scheduled || 0}</h5>
+            <small className="text-muted">{t('superadmin.scheduled')}</small>
+          </div>
         </div>
-        <div className="card-body">
-          <div className="row g-3">
-            {/* Today */}
-            <div className="col-md-3">
-              <div style={{
-                background: 'linear-gradient(135deg, #fef3c7, #fde68a)',
-                borderRadius: '12px',
-                padding: '20px',
-                border: '2px solid #fbbf24'
-              }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '12px' }}>
-                  <FileText size={28} style={{ color: '#d97706' }} />
-                  <div style={{ fontSize: '32px', fontWeight: '700', color: '#78350f' }}>
-                    {kpiStats.prescription_stats.today || 0}
-                  </div>
-                </div>
-                <div style={{ fontSize: '13px', fontWeight: '600', color: '#92400e', marginBottom: '12px' }}>
-                  Today
-                </div>
-                {kpiStats?.trends?.prescriptions && kpiStats.trends.prescriptions.length > 0 && (
-  <div style={{ height: '40px', background: 'rgba(255,255,255,0.5)', borderRadius: '6px', padding: '8px' }}>
-    <MiniBarChart data={kpiStats.trends.prescriptions} color="#d97706" />
-  </div>
-)}
-              </div>
-            </div>
+      </div>
+      <div className="col-md-2">
+        <div className="card border-0 shadow-sm">
+          <div className="card-body text-center py-3">
+            <CheckCircle size={24} className="text-primary mb-2" />
+            <h5 className="fw-bold mb-0">{currentStats.confirmed || 0}</h5>
+            <small className="text-muted">{t('superadmin.confirmed')}</small>
+          </div>
+        </div>
+      </div>
+      <div className="col-md-2">
+        <div className="card border-0 shadow-sm">
+          <div className="card-body text-center py-3">
+            <TrendingUp size={24} className="text-success mb-2" />
+            <h5 className="fw-bold mb-0">{currentStats.completion_rate || 0}%</h5>
+            <small className="text-muted">{t('superadmin.success_rate')}</small>
+          </div>
+        </div>
+      </div>
+    </div>
 
-            {/* This Week */}
-            <div className="col-md-3">
-              <div style={{
-                background: 'linear-gradient(135deg, #dbeafe, #bfdbfe)',
-                borderRadius: '12px',
-                padding: '20px',
-                border: '2px solid #60a5fa'
-              }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '12px' }}>
-                  <FileText size={28} style={{ color: '#2563eb' }} />
-                  <div style={{ fontSize: '32px', fontWeight: '700', color: '#1e3a8a' }}>
-                    {kpiStats.prescription_stats.this_week || 0}
-                  </div>
-                </div>
-                <div style={{ fontSize: '13px', fontWeight: '600', color: '#1e40af', marginBottom: '12px' }}>
-                  This Week
-                </div>
-                {kpiStats?.trends?.prescriptions && kpiStats.trends.prescriptions.length > 0 && (
-  <div style={{ height: '40px', background: 'rgba(255,255,255,0.5)', borderRadius: '6px', padding: '8px', display: 'flex', alignItems: 'center' }}>
-    <LineSparkline data={kpiStats.trends.prescriptions} color="#2563eb" width={140} height={35} />
-  </div>
-)}
-              </div>
+    {/* Prescription Activity */}
+    {kpiStats?.prescription_stats && (
+      <div className="row mb-4">
+        <div className="col-12">
+          <div className="card shadow-sm border-0" style={{ borderRadius: '16px' }}>
+            <div className="card-header bg-white border-0" style={{ borderRadius: '16px 16px 0 0' }}>
+              <h6 className="fw-bold mb-0">{t('superadmin.prescription_activity')}</h6>
             </div>
-
-            {/* This Month */}
-            <div className="col-md-3">
-              <div style={{
-                background: 'linear-gradient(135deg, #d1fae5, #a7f3d0)',
-                borderRadius: '12px',
-                padding: '20px',
-                border: '2px solid #34d399'
-              }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '12px' }}>
-                  <FileText size={28} style={{ color: '#059669' }} />
-                  <div style={{ fontSize: '32px', fontWeight: '700', color: '#064e3b' }}>
-                    {kpiStats.prescription_stats.this_month || 0}
+            <div className="card-body">
+              <div className="row g-3">
+                {/* Today */}
+                <div className="col-md-3">
+                  <div style={{/* ... styles ... */}}>
+                    {/* ... */}
+                    <div style={{ fontSize: '13px', fontWeight: '600', color: '#92400e', marginBottom: '12px' }}>
+                      {t('superadmin.today')}
+                    </div>
+                    {/* ... */}
                   </div>
                 </div>
-                <div style={{ fontSize: '13px', fontWeight: '600', color: '#065f46', marginBottom: '12px' }}>
-                  This Month
-                </div>
-                {kpiStats?.trends?.prescriptions && kpiStats.trends.prescriptions.length > 0 && (
-  <div style={{ height: '40px', background: 'rgba(255,255,255,0.5)', borderRadius: '6px', padding: '8px' }}>
-    <MiniBarChart data={kpiStats.trends.prescriptions} color="#059669" />
-  </div>
-)}
-              </div>
-            </div>
 
-            {/* Total */}
-            <div className="col-md-3">
-              <div style={{
-                background: 'linear-gradient(135deg, #e0e7ff, #c7d2fe)',
-                borderRadius: '12px',
-                padding: '20px',
-                border: '2px solid #818cf8',
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'center'
-              }}>
-                <div style={{ width: '100%', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
-                  <Award size={28} style={{ color: '#4f46e5' }} />
-                  <div style={{ fontSize: '32px', fontWeight: '700', color: '#312e81' }}>
-                    {kpiStats.prescription_stats.total || 0}
+                {/* This Week */}
+                <div className="col-md-3">
+                  <div style={{/* ... styles ... */}}>
+                    {/* ... */}
+                    <div style={{ fontSize: '13px', fontWeight: '600', color: '#1e40af', marginBottom: '12px' }}>
+                      {t('superadmin.this_week_prescriptions')}
+                    </div>
+                    {/* ... */}
                   </div>
                 </div>
-                <div style={{ fontSize: '13px', fontWeight: '600', color: '#3730a3', marginBottom: '8px', width: '100%' }}>
-                  Total Prescriptions
+
+                {/* This Month */}
+                <div className="col-md-3">
+                  <div style={{/* ... styles ... */}}>
+                    {/* ... */}
+                    <div style={{ fontSize: '13px', fontWeight: '600', color: '#065f46', marginBottom: '12px' }}>
+                      {t('superadmin.this_month_prescriptions')}
+                    </div>
+                    {/* ... */}
+                  </div>
                 </div>
-                <div style={{ position: 'relative', width: '80px', height: '80px', marginTop: '4px' }}>
-                  <svg width="80" height="80" style={{ transform: 'rotate(-90deg)' }}>
-                    <circle cx="40" cy="40" r="32" fill="none" stroke="rgba(255,255,255,0.5)" strokeWidth="6" />
-                    <circle 
-                      cx="40" cy="40" r="32" fill="none" stroke="#4f46e5" strokeWidth="6"
-                      strokeDasharray={`${((kpiStats.prescription_stats.total || 0) / 10) * 201} 201`}
-                      strokeLinecap="round"
-                    />
-                  </svg>
-                  <div style={{
-                    position: 'absolute', top: '50%', left: '50%',
-                    transform: 'translate(-50%, -50%)',
-                    fontSize: '10px', fontWeight: '700',
-                    color: '#312e81', textAlign: 'center'
-                  }}>
-                    Growth
+
+                {/* Total */}
+                <div className="col-md-3">
+                  <div style={{/* ... styles ... */}}>
+                    {/* ... */}
+                    <div style={{ fontSize: '13px', fontWeight: '600', color: '#3730a3', marginBottom: '8px', width: '100%' }}>
+                      {t('superadmin.total_prescriptions')}
+                    </div>
+                    <div style={{/* ... circle progress styles ... */}}>
+                      <div style={{
+                        position: 'absolute', top: '50%', left: '50%',
+                        transform: 'translate(-50%, -50%)',
+                        fontSize: '10px', fontWeight: '700',
+                        color: '#312e81', textAlign: 'center'
+                      }}>
+                        {t('superadmin.growth')}
+                      </div>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -1689,159 +1493,159 @@ const Sidebar = () => {
           </div>
         </div>
       </div>
-    </div>
-  </div>
-)}
+    )}
 
                 {/* Charts Row */}
-                {chartData && (
-                  <div className="row g-4 mb-4">
-                    {/* Trend Chart */}
-                    <div className="col-md-8">
-                      <div className="card shadow-sm border-0" style={{ borderRadius: '1rem' }}>
-                        <div className="card-header bg-white border-0">
-                          <h6 className="fw-bold mb-0">Appointment Trends - {timeframe === 'month' ? 'Monthly' : 'Daily'} View</h6>
-                        </div>
-                        <div className="card-body">
-                          <div style={{ height: '300px' }}>
-                            <Line data={chartData.trendData} options={chartOptions} />
-                          </div>
-                        </div>
-                      </div>
-                    </div>
+    {chartData && (
+      <div className="row g-4 mb-4">
+        {/* Trend Chart */}
+        <div className="col-md-8">
+          <div className="card shadow-sm border-0" style={{ borderRadius: '1rem' }}>
+            <div className="card-header bg-white border-0">
+              <h6 className="fw-bold mb-0">
+                {t('superadmin.appointment_trends')} - {timeframe === 'month' ? t('superadmin.monthly_view') : t('superadmin.daily_view')}
+              </h6>
+            </div>
+            <div className="card-body">
+              <div style={{ height: '300px' }}>
+                <Line data={chartData.trendData} options={chartOptions} />
+              </div>
+            </div>
+          </div>
+        </div>
 
-                    {/* Status Distribution */}
-                    <div className="col-md-4">
-                      <div className="card shadow-sm border-0" style={{ borderRadius: '1rem' }}>
-                        <div className="card-header bg-white border-0">
-                          <h6 className="fw-bold mb-0">Status Distribution</h6>
-                        </div>
-                        <div className="card-body">
-                          <div style={{ height: '300px' }}>
-                            <Doughnut 
-                              data={chartData.statusData} 
-                              options={{
-                                ...chartOptions,
-                                plugins: {
-                                  legend: {
-                                    position: 'bottom' as const,
-                                  }
-                                }
-                              }} 
-                            />
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                )}
+        {/* Status Distribution */}
+        <div className="col-md-4">
+          <div className="card shadow-sm border-0" style={{ borderRadius: '1rem' }}>
+            <div className="card-header bg-white border-0">
+              <h6 className="fw-bold mb-0">{t('superadmin.status_distribution')}</h6>
+            </div>
+            <div className="card-body">
+              <div style={{ height: '300px' }}>
+                <Doughnut 
+                  data={chartData.statusData} 
+                  options={{
+                    ...chartOptions,
+                    plugins: {
+                      legend: {
+                        position: 'bottom' as const,
+                      }
+                    }
+                  }} 
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    )}
 
                 {/* System Health & Overall Stats */}
-                <div className="row g-4 mb-4">
-                  <div className="col-md-12">
-                    <div className="card shadow-sm border-0" style={{ borderRadius: '1rem', background: universityTheme.gradient }}>
-                      <div className="card-body p-4 text-white">
-                        <h5 className="mb-3">System Overview</h5>
-                        <div className="row">
-                          <div className="col-md-3">
-                            <div className="mb-2">
-                              <Users size={20} className="me-2" />
-                              <strong>Total Users:</strong> {kpiStats.overall_stats?.total_users || 0}
-                            </div>
-                            <div className="mb-2">
-                              <Users size={20} className="me-2" />
-                              <strong>Doctors:</strong> {kpiStats.overall_stats?.doctors || 0}
-                            </div>
-                          </div>
-                          <div className="col-md-3">
-                            <div className="mb-2">
-                              <Users size={20} className="me-2" />
-                              <strong>Clinical Staff:</strong> {kpiStats.overall_stats?.clinical_staff || 0}
-                            </div>
-                            <div className="mb-2">
-                              <Users size={20} className="me-2" />
-                              <strong>Students:</strong> {kpiStats.overall_stats?.students || 0}
-                            </div>
-                          </div>
-                          <div className="col-md-3">
-                            <div className="mb-2">
-                              <Calendar size={20} className="me-2" />
-                              <strong>Total Appointments:</strong> {kpiStats.overall_stats?.total_appointments || 0}
-                            </div>
-                            <div className="mb-2">
-                              <FileText size={20} className="me-2" />
-                              <strong>Total Prescriptions:</strong> {kpiStats.overall_stats?.total_prescriptions || 0}
-                            </div>
-                          </div>
-                          <div className="col-md-3">
-                            <div className="mb-2">
-                              <TrendingUp size={20} className="me-2" />
-                              <strong>Avg. per Day:</strong> {kpiStats.overall_stats?.average_appointments_per_day || 0}
-                            </div>
-                            <div className="mb-2">
-                              <Activity size={20} className="me-2" />
-                              <strong>Busiest Day:</strong> {kpiStats.overall_stats?.busiest_day_of_week || 'N/A'}
-                            </div>
-                          </div>
-                        </div>
-                      </div>
+    <div className="row g-4 mb-4">
+      <div className="col-md-12">
+        <div className="card shadow-sm border-0" style={{ borderRadius: '1rem', background: universityTheme.gradient }}>
+          <div className="card-body p-4 text-white">
+            <h5 className="mb-3">{t('superadmin.system_overview_stats')}</h5>
+            <div className="row">
+              <div className="col-md-3">
+                <div className="mb-2">
+                  <Users size={20} className="me-2" />
+                  <strong>{t('superadmin.total_users')}:</strong> {kpiStats.overall_stats?.total_users || 0}
+                </div>
+                <div className="mb-2">
+                  <Users size={20} className="me-2" />
+                  <strong>{t('superadmin.doctors')}:</strong> {kpiStats.overall_stats?.doctors || 0}
+                </div>
+              </div>
+              <div className="col-md-3">
+                <div className="mb-2">
+                  <Users size={20} className="me-2" />
+                  <strong>{t('superadmin.clinical_staff_count')}:</strong> {kpiStats.overall_stats?.clinical_staff || 0}
+                </div>
+                <div className="mb-2">
+                  <Users size={20} className="me-2" />
+                  <strong>{t('superadmin.students_count')}:</strong> {kpiStats.overall_stats?.students || 0}
+                </div>
+              </div>
+              <div className="col-md-3">
+                <div className="mb-2">
+                  <Calendar size={20} className="me-2" />
+                  <strong>{t('superadmin.total_appointments')}:</strong> {kpiStats.overall_stats?.total_appointments || 0}
+                </div>
+                <div className="mb-2">
+                  <FileText size={20} className="me-2" />
+                  <strong>{t('superadmin.total_prescriptions')}:</strong> {kpiStats.overall_stats?.total_prescriptions || 0}
+                </div>
+              </div>
+              <div className="col-md-3">
+                <div className="mb-2">
+                  <TrendingUp size={20} className="me-2" />
+                  <strong>{t('superadmin.avg_per_day')}:</strong> {kpiStats.overall_stats?.average_appointments_per_day || 0}
+                </div>
+                <div className="mb-2">
+                  <Activity size={20} className="me-2" />
+                  <strong>{t('superadmin.busiest_day')}:</strong> {kpiStats.overall_stats?.busiest_day_of_week || 'N/A'}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+                {/* System Health Indicators */}
+    {kpiStats.system_health && (
+      <div className="row g-4">
+        <div className="col-md-12">
+          <div className="card shadow-sm border-0" style={{ borderRadius: '1rem' }}>
+            <div className="card-header bg-white border-0">
+              <h6 className="fw-bold mb-0">{t('superadmin.system_health_indicators')}</h6>
+            </div>
+            <div className="card-body">
+              <div className="row g-3">
+                <div className="col-md-3">
+                  <div className="d-flex align-items-center">
+                    <Calendar size={24} className="text-primary me-3" />
+                    <div>
+                      <div className="fw-bold">{kpiStats.system_health.appointments_today || 0}</div>
+                      <small className="text-muted">{t('superadmin.appointments_today')}</small>
                     </div>
                   </div>
                 </div>
-
-                {/* System Health Indicators */}
-                {kpiStats.system_health && (
-                  <div className="row g-4">
-                    <div className="col-md-12">
-                      <div className="card shadow-sm border-0" style={{ borderRadius: '1rem' }}>
-                        <div className="card-header bg-white border-0">
-                          <h6 className="fw-bold mb-0">System Health Indicators</h6>
-                        </div>
-                        <div className="card-body">
-                          <div className="row g-3">
-                            <div className="col-md-3">
-                              <div className="d-flex align-items-center">
-                                <Calendar size={24} className="text-primary me-3" />
-                                <div>
-                                  <div className="fw-bold">{kpiStats.system_health.appointments_today || 0}</div>
-                                  <small className="text-muted">Appointments Today</small>
-                                </div>
-                              </div>
-                            </div>
-                            <div className="col-md-3">
-                              <div className="d-flex align-items-center">
-                                <Clock size={24} className="text-warning me-3" />
-                                <div>
-                                  <div className="fw-bold">{kpiStats.system_health.upcoming_appointments || 0}</div>
-                                  <small className="text-muted">Upcoming Appointments</small>
-                                </div>
-                              </div>
-                            </div>
-                            <div className="col-md-3">
-                              <div className="d-flex align-items-center">
-                                <AlertTriangle size={24} className="text-danger me-3" />
-                                <div>
-                                  <div className="fw-bold">{kpiStats.system_health.overdue_appointments || 0}</div>
-                                  <small className="text-muted">Overdue Appointments</small>
-                                </div>
-                              </div>
-                            </div>
-                            <div className="col-md-3">
-                              <div className="d-flex align-items-center">
-                                <Users size={24} className="text-success me-3" />
-                                <div>
-                                  <div className="fw-bold">{kpiStats.system_health.active_doctors || 0}</div>
-                                  <small className="text-muted">Active Doctors</small>
-                                </div>
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
+                <div className="col-md-3">
+                  <div className="d-flex align-items-center">
+                    <Clock size={24} className="text-warning me-3" />
+                    <div>
+                      <div className="fw-bold">{kpiStats.system_health.upcoming_appointments || 0}</div>
+                      <small className="text-muted">{t('superadmin.upcoming_appointments')}</small>
                     </div>
                   </div>
-                )}
-              </>
+                </div>
+                <div className="col-md-3">
+                  <div className="d-flex align-items-center">
+                    <AlertTriangle size={24} className="text-danger me-3" />
+                    <div>
+                      <div className="fw-bold">{kpiStats.system_health.overdue_appointments || 0}</div>
+                      <small className="text-muted">{t('superadmin.overdue_appointments')}</small>
+                    </div>
+                  </div>
+                </div>
+                <div className="col-md-3">
+                  <div className="d-flex align-items-center">
+                    <Users size={24} className="text-success me-3" />
+                    <div>
+                      <div className="fw-bold">{kpiStats.system_health.active_doctors || 0}</div>
+                      <small className="text-muted">{t('superadmin.active_doctors')}</small>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    )}
+  </>
             ) : (
               // Fallback to old dashboard if no KPI data
               <>
@@ -1959,33 +1763,51 @@ const Sidebar = () => {
                           />
                         </div>
                         <div className="col-md-4">
-                          <label className="form-label fw-semibold">{t('superadmin.role')} *</label>
-                          <select
-                            className="form-select"
-                            value={userForm.role}
-                            onChange={(event) => setUserForm({...userForm, role: event.target.value})}
-                            disabled={loading}
-                          >
-                            <option value="doctor">{t('superadmin.doctor')}</option>
-                            <option value="admin">{t('superadmin.admin')}</option>
-                            <option value="clinical_staff">{t('superadmin.clinical_staff')}</option>
-                            <option value="academic_staff">{t('superadmin.academic_staff')}</option>
-                          </select>
-                        </div>
+  <label className="form-label fw-semibold">{t('superadmin.role')} *</label>
+  <Select
+    options={[
+      { value: 'doctor', label: t('superadmin.doctor') },
+      { value: 'admin', label: t('superadmin.admin') },
+      { value: 'clinical_staff', label: t('superadmin.clinical_staff') },
+      { value: 'academic_staff', label: t('superadmin.academic_staff') },
+    ]}
+    value={{
+      value: userForm.role,
+      label: t(`superadmin.${userForm.role.replace('_', '')}`)
+    }}
+    onChange={(option) => option && setUserForm({...userForm, role: option.value})}
+    styles={customSelectStyles}
+    menuPortalTarget={document.body}
+    isDisabled={loading}
+    placeholder={t('superadmin.select_role')}
+  />
+</div>
                         <div className="col-md-4">
-                          <label className="form-label fw-semibold">{t('superadmin.department')}</label>
-                          <select
-                            className="form-select"
-                            value={userForm.department_id}
-                            onChange={(event) => setUserForm({...userForm, department_id: event.target.value})}
-                            disabled={loading}
-                          >
-                            <option value="">{t('superadmin.select_department')}</option>
-                            {departments?.map((dept: Department) => (
-                              <option key={dept.id} value={dept.id}>{dept.name}</option>
-                            ))}
-                          </select>
-                        </div>
+  <label className="form-label fw-semibold">{t('superadmin.department')}</label>
+  <Select
+    options={[
+      { value: '', label: t('superadmin.select_department') },
+      ...departments?.map((dept: Department) => ({
+        value: dept.id.toString(),
+        label: dept.name
+      })) || []
+    ]}
+    value={
+      userForm.department_id
+        ? {
+            value: userForm.department_id,
+            label: departments?.find((d: Department) => d.id.toString() === userForm.department_id)?.name || ''
+          }
+        : { value: '', label: t('superadmin.select_department') }
+    }
+    onChange={(option) => option && setUserForm({...userForm, department_id: option.value})}
+    styles={customSelectStyles}
+    menuPortalTarget={document.body}
+    isDisabled={loading}
+    placeholder={t('superadmin.select_department')}
+    isClearable
+  />
+</div>
                       </div>
                       <button
                         type="submit"
@@ -2112,18 +1934,24 @@ const Sidebar = () => {
                           />
                         </div>
                         <div className="col-md-3">
-                          <label className="form-label fw-semibold">{t('superadmin.type')} *</label>
-                          <select
-                            className="form-select"
-                            value={departmentForm.type}
-                            onChange={(e) => setDepartmentForm({...departmentForm, type: e.target.value})}
-                            disabled={loading}
-                          >
-                            <option value="medical">{t('superadmin.medical')}</option>
-                            <option value="academic">{t('superadmin.academic')}</option>
-                            <option value="administrative">{t('superadmin.administrative')}</option>
-                          </select>
-                        </div>
+  <label className="form-label fw-semibold">{t('superadmin.type')} *</label>
+  <Select
+    options={[
+      { value: 'medical', label: t('superadmin.medical') },
+      { value: 'academic', label: t('superadmin.academic') },
+      { value: 'administrative', label: t('superadmin.administrative') },
+    ]}
+    value={{
+      value: departmentForm.type,
+      label: t(`superadmin.${departmentForm.type}`)
+    }}
+    onChange={(option) => option && setDepartmentForm({...departmentForm, type: option.value})}
+    styles={customSelectStyles}
+    menuPortalTarget={document.body}
+    isDisabled={loading}
+    placeholder={t('superadmin.select_type')}
+  />
+</div>
                         <div className="col-12">
                           <label className="form-label fw-semibold">{t('superadmin.description')}</label>
                           <textarea
@@ -2210,27 +2038,33 @@ const Sidebar = () => {
                                 </td>
                                 <td>
                                   {editingDepartment?.id === dept.id ? (
-                                    <select
-                                      className="form-select form-select-sm"
-                                      value={editingDepartment.type}
-                                      onChange={(e) => setEditingDepartment({
-                                        ...editingDepartment,
-                                        type: e.target.value
-                                      })}
-                                    >
-                                      <option value="medical">{t('superadmin.medical')}</option>
-                                      <option value="academic">{t('superadmin.academic')}</option>
-                                      <option value="administrative">{t('superadmin.administrative')}</option>
-                                    </select>
-                                  ) : (
-                                    <span className={`badge ${
-                                      dept.type === 'medical' ? 'bg-danger' :
-                                      dept.type === 'academic' ? 'bg-primary' :
-                                      'bg-secondary'
-                                    }`}>
-                                      {t(`superadmin.${dept.type}`)}
-                                    </span>
-                                  )}
+  <Select
+    options={[
+      { value: 'medical', label: t('superadmin.medical') },
+      { value: 'academic', label: t('superadmin.academic') },
+      { value: 'administrative', label: t('superadmin.administrative') },
+    ]}
+    value={{
+      value: editingDepartment.type,
+      label: t(`superadmin.${editingDepartment.type}`)
+    }}
+    onChange={(option) => option && setEditingDepartment({
+      ...editingDepartment,
+      type: option.value
+    })}
+    styles={customSelectStyles}
+    menuPortalTarget={document.body}
+    placeholder={t('superadmin.select_type')}
+  />
+) : (
+  <span className={`badge ${
+    dept.type === 'medical' ? 'bg-danger' :
+    dept.type === 'academic' ? 'bg-primary' :
+    'bg-secondary'
+  }`}>
+    {t(`superadmin.${dept.type}`)}
+  </span>
+)}
                                 </td>
                                 <td>{dept.staff_count || 0}</td>
                                 <td>
@@ -2329,21 +2163,27 @@ const Sidebar = () => {
                           />
                         </div>
                         <div className="col-md-6">
-                          <label className="form-label fw-semibold">{t('superadmin.type')} *</label>
-                          <select
-                            className="form-select"
-                            value={holidayForm.type}
-                            onChange={(e) => setHolidayForm({...holidayForm, type: e.target.value})}
-                            disabled={loading}
-                          >
-                            <option value="semester_break">{t('superadmin.semester_break')}</option>
-                            <option value="exam_period">{t('superadmin.exam_period')}</option>
-                            <option value="registration_period">{t('superadmin.registration_period')}</option>
-                            <option value="national_holiday">{t('superadmin.national_holiday')}</option>
-                            <option value="university_closure">{t('superadmin.university_closure')}</option>
-                            <option value="maintenance">{t('superadmin.maintenance')}</option>
-                          </select>
-                        </div>
+  <label className="form-label fw-semibold">{t('superadmin.type')} *</label>
+  <Select
+    options={[
+      { value: 'semester_break', label: t('superadmin.semester_break') },
+      { value: 'exam_period', label: t('superadmin.exam_period') },
+      { value: 'registration_period', label: t('superadmin.registration_period') },
+      { value: 'national_holiday', label: t('superadmin.national_holiday') },
+      { value: 'university_closure', label: t('superadmin.university_closure') },
+      { value: 'maintenance', label: t('superadmin.maintenance') },
+    ]}
+    value={{
+      value: holidayForm.type,
+      label: t(`superadmin.${holidayForm.type.replace('_', '')}`)
+    }}
+    onChange={(option) => option && setHolidayForm({...holidayForm, type: option.value})}
+    styles={customSelectStyles}
+    menuPortalTarget={document.body}
+    isDisabled={loading}
+    placeholder={t('superadmin.select_type')}
+  />
+</div>
                         <div className="col-md-6">
                           <label className="form-label fw-semibold">{t('superadmin.start_date')} *</label>
                           <input
@@ -2367,19 +2207,25 @@ const Sidebar = () => {
                           />
                         </div>
                         <div className="col-md-6">
-                          <label className="form-label fw-semibold">{t('superadmin.affects_staff_type')} *</label>
-                          <select
-                            className="form-select"
-                            value={holidayForm.affects_staff_type}
-                            onChange={(e) => setHolidayForm({...holidayForm, affects_staff_type: e.target.value})}
-                            disabled={loading}
-                          >
-                            <option value="all">{t('superadmin.all_staff')}</option>
-                            <option value="academic">{t('superadmin.academic_staff_only')}</option>
-                            <option value="clinical">{t('superadmin.clinical_staff_only')}</option>
-                            <option value="none">{t('superadmin.no_staff_general_holiday')}</option>
-                          </select>
-                        </div>
+  <label className="form-label fw-semibold">{t('superadmin.affects_staff_type')} *</label>
+  <Select
+    options={[
+      { value: 'all', label: t('superadmin.all_staff') },
+      { value: 'academic', label: t('superadmin.academic_staff_only') },
+      { value: 'clinical', label: t('superadmin.clinical_staff_only') },
+      { value: 'none', label: t('superadmin.no_staff_general_holiday') },
+    ]}
+    value={{
+      value: holidayForm.affects_staff_type,
+      label: t(`superadmin.${holidayForm.affects_staff_type}_staff${holidayForm.affects_staff_type !== 'all' && holidayForm.affects_staff_type !== 'none' ? '_only' : ''}`)
+    }}
+    onChange={(option) => option && setHolidayForm({...holidayForm, affects_staff_type: option.value})}
+    styles={customSelectStyles}
+    menuPortalTarget={document.body}
+    isDisabled={loading}
+    placeholder={t('superadmin.select_staff_type')}
+  />
+</div>
                         <div className="col-md-6">
                           <div className="form-check mt-4">
                             <input

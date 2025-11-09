@@ -4,6 +4,7 @@ import {
   Stethoscope, Heart, Plus, Calendar
 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
+import Select from 'react-select';
 
 interface WalkInPatient {
   id: string;
@@ -22,8 +23,8 @@ interface WalkInPatient {
   status: 'waiting' | 'scheduled' | 'confirmed' | 'in_progress' | 'completed' | 'called';
   has_walked_in?: boolean;
   appointment_id?: string;
-  approved_time?: string;  // Add this line
-  created_at?: string;     // Add this line
+  approved_time?: string;
+  created_at?: string;
 }
 
 interface WalkInPatientManagementProps {
@@ -57,9 +58,41 @@ const WalkInPatientManagement: React.FC<WalkInPatientManagementProps> = ({
   const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://127.0.0.1:8000";
   const AUTH_TOKEN = localStorage.getItem('auth_token') || '16|iTGQGrMabQfgjprXw6xM01KTAmJc7AQ78qglIs4xd5fa9378';
 
-  // Helper function to format date
+  // Options for react-select
+  const urgencyOptions = [
+    { value: 'normal', label: t('walkin.normal', 'Normal') },
+    { value: 'urgent', label: t('walkin.urgent', 'Urgent') },
+    { value: 'emergency', label: t('walkin.emergency', 'Emergency') }
+  ];
+
+  const statusFilterOptions = [
+    { value: 'all', label: t('walkin.all_status', 'All Status') },
+    { value: 'scheduled', label: t('walkin.awaiting_walkin', 'Awaiting Walk-in') },
+    { value: 'confirmed', label: t('walkin.walked_in', 'Walked In') },
+    { value: 'waiting', label: t('walkin.waiting', 'Waiting') },
+    { value: 'called', label: t('walkin.called', 'Called') },
+    { value: 'in_progress', label: t('walkin.in_progress', 'In Progress') },
+    { value: 'completed', label: t('walkin.completed', 'Completed') }
+  ];
+
+  // Custom styles for react-select
+  const customSelectStyles = {
+    control: (base: any) => ({
+      ...base,
+      minHeight: '38px',
+      borderColor: '#dee2e6',
+      '&:hover': {
+        borderColor: '#adb5bd'
+      }
+    }),
+    menu: (base: any) => ({
+      ...base,
+      zIndex: 9999
+    })
+  };
+
   const formatDate = (dateString?: string): string => {
-    if (!dateString) return 'Not set';
+    if (!dateString) return t('walkin.not_set', 'Not set');
     
     try {
       const date = new Date(dateString);
@@ -71,48 +104,45 @@ const WalkInPatientManagement: React.FC<WalkInPatientManagementProps> = ({
       });
     } catch (error) {
       console.error('Error formatting date:', error);
-      return 'Invalid date';
+      return t('common.invalid_date', 'Invalid date');
     }
   };
 
-// Helper function to format time
-const formatTime = (timeString?: string): string => {
-  if (!timeString) return 'Not set';
-  try {
-    if (timeString.includes('T')) {
-      const date = new Date(timeString);
-      if (isNaN(date.getTime())) return 'Invalid time';
-      return date.toLocaleTimeString('en-US', {
-        hour: 'numeric',
-        minute: '2-digit',
-        hour12: true
-      });
+  const formatTime = (timeString?: string): string => {
+    if (!timeString) return t('walkin.not_set', 'Not set');
+    try {
+      if (timeString.includes('T')) {
+        const date = new Date(timeString);
+        if (isNaN(date.getTime())) return t('common.invalid_time', 'Invalid time');
+        return date.toLocaleTimeString('en-US', {
+          hour: 'numeric',
+          minute: '2-digit',
+          hour12: true
+        });
+      }
+      
+      if (timeString.includes(':')) {
+        const [hours, minutes] = timeString.split(':');
+        const hour = parseInt(hours, 10);
+        if (hour < 0 || hour > 23 || isNaN(hour)) return t('common.invalid_time', 'Invalid time');
+        const ampm = hour >= 12 ? 'PM' : 'AM';
+        const displayHour = hour % 12 || 12;
+        return `${displayHour}:${minutes} ${ampm}`;
+      }
+      
+      return t('common.invalid_time', 'Invalid time');
+    } catch (error) {
+      return t('common.invalid_time', 'Invalid time');
     }
-    
-    if (timeString.includes(':')) {
-      const [hours, minutes] = timeString.split(':');
-      const hour = parseInt(hours, 10);
-      if (hour < 0 || hour > 23 || isNaN(hour)) return 'Invalid time';
-      const ampm = hour >= 12 ? 'PM' : 'AM';
-      const displayHour = hour % 12 || 12;
-      return `${displayHour}:${minutes} ${ampm}`;
+  };
+
+  const getApprovedTime = (patient: WalkInPatient): string => {
+    if (patient.type === 'approved_request') {
+      return patient.approved_time || patient.created_at || patient.walk_in_time;
     }
-    
-    return 'Invalid time';
-  } catch (error) {
-    return 'Invalid time';
-  }
-};
+    return patient.walk_in_time;
+  };
 
-// Helper function to get correct approved time
-const getApprovedTime = (patient: WalkInPatient): string => {
-  if (patient.type === 'approved_request') {
-    return patient.approved_time || patient.created_at || patient.walk_in_time;
-  }
-  return patient.walk_in_time;
-};
-
-  // Helper function to format datetime
   const formatDateTime = (dateTimeString: string): string => {
     try {
       const date = new Date(dateTimeString);
@@ -125,10 +155,9 @@ const getApprovedTime = (patient: WalkInPatient): string => {
       });
     } catch (error) {
       console.error('Error formatting datetime:', error);
-      return 'Invalid date/time';
+      return t('common.invalid_date', 'Invalid date/time');
     }
   };
-  
 
   const fetchWalkInPatients = async () => {
     try {
@@ -151,18 +180,17 @@ const getApprovedTime = (patient: WalkInPatient): string => {
         console.log('Patients count:', data.patients?.length);
         console.log('Walk-in patients:', data.walk_in_patients?.length);
         
-        // Try both possible response structures
         const patientsArray = data.patients || data.walk_in_patients || [];
         console.log('Using patients array with length:', patientsArray.length);
         setPatients(patientsArray);
       } else {
         const errorText = await response.text();
         console.error('Error response:', errorText);
-        setMessage({ type: 'error', text: 'Failed to load walk-in patients' });
+        setMessage({ type: 'error', text: t('walkin.failed_to_load', 'Failed to load walk-in patients') });
       }
     } catch (error) {
       console.error('Error fetching walk-in patients:', error);
-      setMessage({ type: 'error', text: 'Network error loading patients' });
+      setMessage({ type: 'error', text: t('error.network', 'Network error loading patients') });
     } finally {
       setLoading(false);
       setTimeout(() => setMessage({ type: '', text: '' }), 5000);
@@ -192,7 +220,7 @@ const getApprovedTime = (patient: WalkInPatient): string => {
 
       if (response.ok) {
         const data = await response.json();
-        setMessage({ type: 'success', text: data.message || 'Walk-in patient registered successfully!' });
+        setMessage({ type: 'success', text: data.message || t('walkin.register_success', 'Walk-in patient registered successfully!') });
         fetchWalkInPatients();
         setShowForm(false);
         setFormData({
@@ -204,11 +232,11 @@ const getApprovedTime = (patient: WalkInPatient): string => {
         });
       } else {
         const errorData = await response.json();
-        setMessage({ type: 'error', text: errorData.message || 'Registration failed' });
+        setMessage({ type: 'error', text: errorData.message || t('walkin.register_failed', 'Registration failed') });
       }
     } catch (error) {
       console.error('Error registering walk-in patient:', error);
-      setMessage({ type: 'error', text: 'Network error during registration' });
+      setMessage({ type: 'error', text: t('error.network', 'Network error during registration') });
     } finally {
       setLoading(false);
       setTimeout(() => setMessage({ type: '', text: '' }), 5000);
@@ -230,28 +258,26 @@ const getApprovedTime = (patient: WalkInPatient): string => {
       if (response.ok) {
         const data = await response.json();
         
-        // Show success message with different text based on status
         if (status === 'confirmed') {
           setMessage({ 
             type: 'success', 
-            text: 'Patient arrival confirmed! Doctor has been notified.' 
+            text: t('walkin.confirm_arrival_desc', 'Patient arrival confirmed! Doctor has been notified.')
           });
         } else {
-          setMessage({ type: 'success', text: 'Patient status updated successfully' });
+          setMessage({ type: 'success', text: t('walkin.status_updated', 'Patient status updated successfully') });
         }
         
         fetchWalkInPatients();
         
-        // Log the notification being sent
         if (status === 'confirmed' && data.alert_sent) {
           console.log('Walk-in alert sent to doctor:', data.appointment?.doctor_id);
         }
       } else {
-        setMessage({ type: 'error', text: 'Failed to update patient status' });
+        setMessage({ type: 'error', text: t('walkin.status_update_failed', 'Failed to update patient status') });
       }
     } catch (error) {
       console.error('Error updating patient status:', error);
-      setMessage({ type: 'error', text: 'Network error updating status' });
+      setMessage({ type: 'error', text: t('error.network', 'Network error updating status') });
     } finally {
       setTimeout(() => setMessage({ type: '', text: '' }), 5000);
     }
@@ -338,7 +364,7 @@ const getApprovedTime = (patient: WalkInPatient): string => {
           <div className="d-flex justify-content-between align-items-center">
             <h3 className="card-title text-white mb-0 d-flex align-items-center">
               <UserPlus size={24} className="me-2" />
-              {t('walkin.title', 'Walk-in Patient Management')}
+              {t('walkin.title')}
             </h3>
             {canRegisterPatients && (
               <button 
@@ -347,7 +373,7 @@ const getApprovedTime = (patient: WalkInPatient): string => {
                 style={{ borderRadius: '0.5rem' }}
               >
                 <Plus size={16} className="me-1" />
-                Register Walk-in
+                {t('walkin.register_walkin')}
               </button>
             )}
           </div>
@@ -362,7 +388,7 @@ const getApprovedTime = (patient: WalkInPatient): string => {
                 </span>
                 <input
                   type="text"
-                  placeholder="Search by name or student ID..."
+                  placeholder={t('walkin.search_placeholder')}
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                   className="form-control"
@@ -370,37 +396,31 @@ const getApprovedTime = (patient: WalkInPatient): string => {
               </div>
             </div>
             <div className="col-md-3">
-              <select
-                value={filterStatus}
-                onChange={(e) => setFilterStatus(e.target.value)}
-                className="form-select"
-              >
-                <option value="all">All Status</option>
-                <option value="scheduled">Awaiting Walk-in</option>
-                <option value="confirmed">Walked In</option>
-                <option value="waiting">Waiting</option>
-                <option value="called">Called</option>
-                <option value="in_progress">In Progress</option>
-                <option value="completed">Completed</option>
-              </select>
+              <Select
+                options={statusFilterOptions}
+                value={statusFilterOptions.find(opt => opt.value === filterStatus)}
+                onChange={(option) => setFilterStatus(option?.value || 'all')}
+                styles={customSelectStyles}
+                isSearchable={false}
+              />
             </div>
           </div>
 
           {loading ? (
             <div className="text-center py-5">
               <div className="spinner-border text-primary" role="status">
-                <span className="visually-hidden">Loading...</span>
+                <span className="visually-hidden">{t('common.loading')}</span>
               </div>
-              <p className="text-muted mt-2">Loading patients...</p>
+              <p className="text-muted mt-2">{t('walkin.loading')}</p>
             </div>
           ) : filteredPatients.length === 0 ? (
             <div className="text-center py-5">
               <Users size={48} className="text-muted mb-3" />
-              <p className="text-muted">No patients found</p>
+              <p className="text-muted">{t('walkin.no_patients')}</p>
               <small className="text-muted">
                 {filterStatus === 'scheduled' 
-                  ? 'No patients awaiting walk-in' 
-                  : 'Patients will appear here when they check in or are approved'}
+                  ? t('walkin.no_patients_awaiting')
+                  : t('walkin.patients_appear')}
               </small>
             </div>
           ) : (
@@ -408,14 +428,14 @@ const getApprovedTime = (patient: WalkInPatient): string => {
               <table className="table table-hover align-middle">
                 <thead>
                   <tr>
-                    <th>Queue #</th>
-                    <th>Patient</th>
-                    <th>Doctor</th>
-                    <th>Schedule Info</th>
-                    <th>Urgency</th>
-                    <th>Status</th>
-                    <th>Wait Time</th>
-                    <th>Actions</th>
+                    <th>{t('walkin.queue_number')}</th>
+                    <th>{t('walkin.patient')}</th>
+                    <th>{t('walkin.doctor')}</th>
+                    <th>{t('walkin.schedule_info')}</th>
+                    <th>{t('walkin.urgency')}</th>
+                    <th>{t('walkin.status')}</th>
+                    <th>{t('walkin.wait_time')}</th>
+                    <th>{t('walkin.actions')}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -446,14 +466,14 @@ const getApprovedTime = (patient: WalkInPatient): string => {
                             <small>{patient.doctor_name}</small>
                           </div>
                         ) : (
-                          <small className="text-muted">Unassigned</small>
+                          <small className="text-muted">{t('walkin.unassigned')}</small>
                         )}
                       </td>
                       <td>
                         {patient.type === 'approved_request' ? (
                           <div>
                             <span className="badge bg-info mb-1" style={{ fontSize: '0.7rem' }}>
-                              Pre-Scheduled
+                              {t('walkin.pre_scheduled')}
                             </span>
                             <div className="d-flex align-items-center">
                               <Calendar size={14} className="text-primary me-1" />
@@ -467,13 +487,13 @@ const getApprovedTime = (patient: WalkInPatient): string => {
                               </div>
                             </div>
                             <small className="text-muted">
-                              Approved: {formatTime(getApprovedTime(patient))}
+                              {t('walkin.approved')}: {formatTime(getApprovedTime(patient))}
                             </small>
                           </div>
                         ) : (
                           <div>
                             <span className="badge bg-secondary mb-1" style={{ fontSize: '0.7rem' }}>
-                              Walk-in
+                              {t('walkin.walkin')}
                             </span>
                             <div className="d-flex align-items-center">
                               <Clock size={14} className="text-muted me-1" />
@@ -487,33 +507,32 @@ const getApprovedTime = (patient: WalkInPatient): string => {
                               </div>
                             </div>
                             <small className="text-muted">
-                              Checked in: {formatTime(patient.walk_in_time)}
+                              {t('walkin.checked_in')}: {formatTime(patient.walk_in_time)}
                             </small>
                           </div>
                         )}
                       </td>
                       <td>
                         <span className={getUrgencyBadge(patient.urgency)}>
-                          {patient.urgency.charAt(0).toUpperCase() + patient.urgency.slice(1)}
+                          {t(`walkin.${patient.urgency}`)}
                         </span>
                       </td>
                       <td>
                         <span className={getStatusBadge(patient.status, patient.type)}>
                           {patient.type === 'approved_request' && patient.status === 'scheduled' 
-                            ? 'Awaiting Walk-in'
+                            ? t('walkin.awaiting_walkin')
                             : patient.status === 'confirmed'
-                            ? 'Walked In'
-                            : patient.status.replace('_', ' ').charAt(0).toUpperCase() + patient.status.replace('_', ' ').slice(1)
-                          }
+                            ? t('walkin.walked_in')
+                            : t(`walkin.${patient.status}`)}
                         </span>
                       </td>
-                      <td>{patient.estimated_wait_time} min</td>
+                      <td>{patient.estimated_wait_time} {t('walkin.minutes')}</td>
                       <td>
                         <div className="btn-group" role="group">
                           <button 
                             onClick={() => setSelectedPatient(patient)}
                             className="btn btn-sm btn-outline-primary"
-                            title="View Details"
+                            title={t('walkin.view_details')}
                           >
                             <Eye size={16} />
                           </button>
@@ -522,9 +541,9 @@ const getApprovedTime = (patient: WalkInPatient): string => {
                             <button
                               onClick={() => updatePatientStatus(patient.id, 'confirmed')}
                               className="btn btn-sm btn-success"
-                              title="Confirm Walk-in - Patient has arrived"
+                              title={t('walkin.confirm_arrival')}
                             >
-                              <CheckCircle size={16} /> Confirm Arrival
+                              <CheckCircle size={16} /> {t('walkin.confirm_arrival')}
                             </button>
                           )}
                           
@@ -532,7 +551,7 @@ const getApprovedTime = (patient: WalkInPatient): string => {
                             <button
                               onClick={() => updatePatientStatus(patient.id, 'called')}
                               className="btn btn-sm btn-outline-info"
-                              title="Call Patient"
+                              title={t('walkin.call_patient')}
                             >
                               <CheckCircle size={16} />
                             </button>
@@ -542,7 +561,7 @@ const getApprovedTime = (patient: WalkInPatient): string => {
                             <button
                               onClick={() => updatePatientStatus(patient.id, 'in_progress')}
                               className="btn btn-sm btn-outline-warning"
-                              title="Start Treatment"
+                              title={t('walkin.start_treatment')}
                             >
                               <Stethoscope size={16} />
                             </button>
@@ -552,15 +571,15 @@ const getApprovedTime = (patient: WalkInPatient): string => {
                             <button
                               onClick={() => updatePatientStatus(patient.id, 'in_progress')}
                               className="btn btn-sm btn-warning"
-                              title="Start Treatment"
+                              title={t('walkin.start_treatment')}
                             >
-                              <Stethoscope size={16} /> Start
+                              <Stethoscope size={16} /> {t('walkin.start')}
                             </button>
                           )}
                           
                           {patient.status === 'in_progress' && (
                             <span className="badge bg-info">
-                              With Doctor
+                              {t('walkin.with_doctor')}
                             </span>
                           )}
                         </div>
@@ -579,7 +598,7 @@ const getApprovedTime = (patient: WalkInPatient): string => {
           <div className="modal-dialog modal-lg modal-dialog-centered">
             <div className="modal-content" style={{ borderRadius: '1rem' }}>
               <div className="modal-header border-0 pb-0">
-                <h5 className="modal-title fw-bold">Register Walk-in Patient</h5>
+                <h5 className="modal-title fw-bold">{t('walkin.register_patient')}</h5>
                 <button
                   type="button"
                   className="btn-close"
@@ -589,7 +608,7 @@ const getApprovedTime = (patient: WalkInPatient): string => {
               <div className="modal-body pt-0">
                 <div className="row g-3">
                   <div className="col-md-6">
-                    <label className="form-label">Student ID *</label>
+                    <label className="form-label">{t('walkin.student_id')} *</label>
                     <input
                       type="text"
                       className="form-control"
@@ -598,45 +617,43 @@ const getApprovedTime = (patient: WalkInPatient): string => {
                     />
                   </div>
                   <div className="col-md-6">
-                    <label className="form-label">Patient Name</label>
+                    <label className="form-label">{t('walkin.patient_name')}</label>
                     <input
                       type="text"
                       className="form-control"
                       value={formData.patient_name}
                       onChange={(e) => setFormData(prev => ({ ...prev, patient_name: e.target.value }))}
-                      placeholder="Leave empty to auto-populate"
+                      placeholder={t('walkin.leave_empty')}
                     />
                   </div>
                   <div className="col-md-6">
-                    <label className="form-label">Urgency Level *</label>
-                    <select
-                      className="form-select"
-                      value={formData.urgency}
-                      onChange={(e) => setFormData(prev => ({ ...prev, urgency: e.target.value }))}
-                    >
-                      <option value="normal">Normal</option>
-                      <option value="urgent">Urgent</option>
-                      <option value="emergency">Emergency</option>
-                    </select>
+                    <label className="form-label">{t('walkin.urgency_level')} *</label>
+                    <Select
+                      options={urgencyOptions}
+                      value={urgencyOptions.find(opt => opt.value === formData.urgency)}
+                      onChange={(option) => setFormData(prev => ({ ...prev, urgency: option?.value || 'normal' }))}
+                      styles={customSelectStyles}
+                      isSearchable={false}
+                    />
                   </div>
                   <div className="col-12">
-                    <label className="form-label">Chief Complaints *</label>
+                    <label className="form-label">{t('walkin.chief_complaints')} *</label>
                     <textarea
                       className="form-control"
                       rows={3}
                       value={formData.complaints}
                       onChange={(e) => setFormData(prev => ({ ...prev, complaints: e.target.value }))}
-                      placeholder="Describe the patient's main symptoms or concerns..."
+                      placeholder={t('walkin.describe_symptoms')}
                     />
                   </div>
                   <div className="col-12">
-                    <label className="form-label">Additional Notes</label>
+                    <label className="form-label">{t('walkin.additional_notes')}</label>
                     <textarea
                       className="form-control"
                       rows={2}
                       value={formData.notes}
                       onChange={(e) => setFormData(prev => ({ ...prev, notes: e.target.value }))}
-                      placeholder="Any additional observations..."
+                      placeholder={t('walkin.observations')}
                     />
                   </div>
                 </div>
@@ -646,7 +663,7 @@ const getApprovedTime = (patient: WalkInPatient): string => {
                     className="btn btn-outline-secondary" 
                     onClick={() => setShowForm(false)}
                   >
-                    Cancel
+                    {t('walkin.cancel')}
                   </button>
                   <button 
                     type="button"
@@ -655,7 +672,7 @@ const getApprovedTime = (patient: WalkInPatient): string => {
                     disabled={loading || !formData.student_id || !formData.complaints}
                   >
                     {loading && <div className="spinner-border spinner-border-sm me-2" role="status"></div>}
-                    Register Patient
+                    {loading ? t('walkin.registering') : t('walkin.register_patient')}
                   </button>
                 </div>
               </div>
@@ -669,7 +686,7 @@ const getApprovedTime = (patient: WalkInPatient): string => {
           <div className="modal-dialog modal-lg modal-dialog-centered">
             <div className="modal-content" style={{ borderRadius: '1rem' }}>
               <div className="modal-header border-0 pb-0">
-                <h5 className="modal-title fw-bold">Patient Details</h5>
+                <h5 className="modal-title fw-bold">{t('walkin.patient_details')}</h5>
                 <button
                   type="button"
                   className="btn-close"
@@ -679,23 +696,23 @@ const getApprovedTime = (patient: WalkInPatient): string => {
               <div className="modal-body pt-0">
                 <div className="row g-4">
                   <div className="col-md-6">
-                    <label className="form-label text-muted">Queue Number</label>
+                    <label className="form-label text-muted">{t('walkin.queue_number_label')}</label>
                     <p className="fs-3 fw-bold text-primary">#{selectedPatient.queue_number}</p>
                   </div>
                   <div className="col-md-6">
-                    <label className="form-label text-muted">Patient Name</label>
+                    <label className="form-label text-muted">{t('walkin.patient_name_label')}</label>
                     <p className="fs-5 fw-bold">{selectedPatient.patient_name}</p>
                   </div>
                   <div className="col-md-6">
-                    <label className="form-label text-muted">Student ID</label>
+                    <label className="form-label text-muted">{t('walkin.student_id_label')}</label>
                     <p className="fs-6">{selectedPatient.student_id}</p>
                   </div>
                   {selectedPatient.type === 'approved_request' && selectedPatient.scheduled_time ? (
                     <>
                       <div className="col-md-6">
-                        <label className="form-label text-muted">Scheduled Time</label>
+                        <label className="form-label text-muted">{t('walkin.scheduled_time')}</label>
                         <p className="fs-6">
-                          <span className="badge bg-info me-2">Scheduled Appointment</span>
+                          <span className="badge bg-info me-2">{t('walkin.scheduled_appointment')}</span>
                           <Calendar size={16} className="me-1" />
                           {formatDate(selectedPatient.scheduled_date)} at {formatTime(selectedPatient.scheduled_time)}
                         </p>
@@ -703,13 +720,13 @@ const getApprovedTime = (patient: WalkInPatient): string => {
                     </>
                   ) : (
                     <div className="col-md-6">
-                      <label className="form-label text-muted">Check-in Time</label>
+                      <label className="form-label text-muted">{t('walkin.checkin_time')}</label>
                       <p className="fs-6">{formatDateTime(selectedPatient.walk_in_time)}</p>
                     </div>
                   )}
                   
                   <div className="col-12">
-                    <label className="form-label text-muted">Chief Complaints</label>
+                    <label className="form-label text-muted">{t('walkin.chief_complaints_label')}</label>
                     <div className="bg-light p-3 rounded">
                       {selectedPatient.complaints}
                     </div>
@@ -726,7 +743,7 @@ const getApprovedTime = (patient: WalkInPatient): string => {
                       className="btn btn-success flex-fill"
                     >
                       <CheckCircle size={16} className="me-2" />
-                      Confirm Patient Arrival
+                      {t('walkin.confirm_patient_arrival')}
                     </button>
                   )}
                   
@@ -738,7 +755,7 @@ const getApprovedTime = (patient: WalkInPatient): string => {
                       }}
                       className="btn btn-primary flex-fill"
                     >
-                      Call Patient
+                      {t('walkin.call_patient')}
                     </button>
                   )}
                   
@@ -750,7 +767,7 @@ const getApprovedTime = (patient: WalkInPatient): string => {
                       }}
                       className="btn btn-warning flex-fill"
                     >
-                      Start Treatment
+                      {t('walkin.start_treatment')}
                     </button>
                   )}
                   
@@ -762,7 +779,7 @@ const getApprovedTime = (patient: WalkInPatient): string => {
                       }}
                       className="btn btn-warning flex-fill"
                     >
-                      Start Treatment
+                      {t('walkin.start_treatment')}
                     </button>
                   )}
                   
@@ -774,7 +791,7 @@ const getApprovedTime = (patient: WalkInPatient): string => {
                       }}
                       className="btn btn-success flex-fill"
                     >
-                      Complete Treatment
+                      {t('walkin.complete_treatment')}
                     </button>
                   )}
                 </div>
