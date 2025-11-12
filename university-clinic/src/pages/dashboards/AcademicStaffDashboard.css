@@ -1,3 +1,29 @@
+/* Fixed Layout Styles */
+body {
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+}
+
+/* Custom scrollbar for main content */
+div[style*="overflowY: auto"]::-webkit-scrollbar {
+  width: 10px;
+}
+
+div[style*="overflowY: auto"]::-webkit-scrollbar-track {
+  background: #f1f1f1;
+}
+
+div[style*="overflowY: auto"]::-webkit-scrollbar-thumb {
+  background: #888;
+  border-radius: 5px;
+}
+
+div[style*="overflowY: auto"]::-webkit-scrollbar-thumb:hover {
+  background: #555;
+}
+
+/* Date input and overflow handling - KEEP YOUR EXISTING CSS */
 .date-input-wrapper {
   position: relative;
   z-index: 20;
@@ -26,4 +52,17 @@
   overflow: visible !important;
   position: relative;
   z-index: 1;
+}
+
+/* Phone input fixes */
+.phone-input-container {
+  position: relative;
+  z-index: 10;
+}
+
+.phone-input-container .country-list {
+  position: fixed !important;
+  z-index: 9999 !important;
+  max-height: 200px;
+  overflow-y: auto;
 }

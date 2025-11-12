@@ -1255,16 +1255,47 @@ public function createWalkInPatient(Request $request): JsonResponse
 // Add this method to get urgent requests
 public function getUrgentQueue(Request $request): JsonResponse
 {
-    $urgentRequests = Appointment::with(['patient', 'doctor'])
+    \Log::info('🔥 Getting urgent queue...');
+    
+    // Get urgent appointments for today
+    $urgentAppointmentsToday = Appointment::with(['patient', 'doctor'])
         ->where('priority', 'urgent')
-        ->whereIn('status', ['pending', 'under_review', 'confirmed'])
         ->whereDate('date', now()->format('Y-m-d'))
-        ->orderBy('created_at', 'asc')
+        ->whereIn('status', ['scheduled', 'confirmed', 'in_progress', 'assigned'])
         ->get();
+    
+    // Get urgent pending/under review requests (regardless of date)
+    $urgentPendingRequests = Appointment::with(['patient', 'doctor'])
+        ->where('priority', 'urgent')
+        ->whereIn('status', ['pending', 'under_review'])
+        ->get();
+    
+    // Combine both collections
+    $allUrgentRequests = $urgentAppointmentsToday->merge($urgentPendingRequests);
+    
+    // Sort by created_at ascending (oldest first - most critical)
+    $allUrgentRequests = $allUrgentRequests->sortBy('created_at')->values();
+    
+    \Log::info('🔥 Urgent queue result', [
+        'today_appointments' => $urgentAppointmentsToday->count(),
+        'pending_requests' => $urgentPendingRequests->count(),
+        'total_urgent' => $allUrgentRequests->count(),
+        'details' => $allUrgentRequests->map(fn($apt) => [
+            'id' => $apt->id,
+            'patient' => $apt->patient->name ?? 'Unknown',
+            'status' => $apt->status,
+            'date' => $apt->date,
+            'created_at' => $apt->created_at
+        ])
+    ]);
 
     return response()->json([
-        'urgent_requests' => $urgentRequests,
-        'total_urgent' => $urgentRequests->count()
+        'urgent_requests' => $allUrgentRequests,
+        'total_urgent' => $allUrgentRequests->count(),
+        'breakdown' => [
+            'appointments_today' => $urgentAppointmentsToday->count(),
+            'pending_requests' => $urgentPendingRequests->count()
+        ]
     ]);
 }
 

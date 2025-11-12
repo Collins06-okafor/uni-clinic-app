@@ -1146,4 +1146,142 @@
   }
 }
 
+/* ==================== VITALS VIEWER MODAL FIX ==================== */
+
+/* Fix for PatientVitalsViewer scrolling */
+.vitals-viewer-modal .table-responsive {
+  max-height: 500px !important;
+  overflow-y: auto !important;
+  overflow-x: auto !important;
+  -webkit-overflow-scrolling: touch !important;
+}
+
+@media (max-width: 767px) {
+  .vitals-viewer-modal .table-responsive {
+    max-height: 400px !important;
+  }
+}
+
+/* Ensure modal body scrolls properly */
+.vitals-viewer-modal .modal-body {
+  overflow-y: auto !important;
+  -webkit-overflow-scrolling: touch !important;
+}
+
+/* Fix for the table container inside vitals viewer */
+.vitals-viewer-modal .card-body .table-responsive {
+  max-height: 500px !important;
+  overflow-y: auto !important;
+  overflow-x: auto !important;
+}
+
+@media (max-width: 767px) {
+  .vitals-viewer-modal .card-body .table-responsive {
+    max-height: 400px !important;
+  }
+}
+
+/* ==================== MEDICAL CARD VIEWER MODAL FIX ==================== */
+
+/* Fix for EnhancedMedicalCardViewer scrolling */
+.medical-card-modal .modal-content {
+  display: flex !important;
+  flex-direction: column !important;
+  max-height: calc(100vh - 3.5rem) !important;
+  overflow: hidden !important;
+}
+
+.medical-card-modal .modal-header {
+  flex-shrink: 0 !important;
+}
+
+.medical-card-modal .nav-tabs {
+  flex-shrink: 0 !important;
+}
+
+.medical-card-modal .modal-body {
+  flex: 1 !important;
+  min-height: 0 !important;
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
+  -webkit-overflow-scrolling: touch !important;
+}
+
+.medical-card-modal .modal-footer {
+  flex-shrink: 0 !important;
+}
+
+/* Fix for vitals history table in medical card */
+.medical-card-modal .table-responsive {
+  max-height: 500px !important;
+  overflow-y: auto !important;
+  overflow-x: auto !important;
+  -webkit-overflow-scrolling: touch !important;
+}
+
+@media (max-width: 767px) {
+  .medical-card-modal .modal-content {
+    height: 100vh !important;
+    max-height: 100vh !important;
+  }
+
+  .medical-card-modal .table-responsive {
+    max-height: 400px !important;
+  }
+}
+
+/* ==================== MEDICATION MANAGEMENT MODAL FIX ==================== */
+
+/* Fix for MedicationManagement scrolling */
+.medication-management-modal .modal-content {
+  display: flex !important;
+  flex-direction: column !important;
+  max-height: calc(100vh - 3.5rem) !important;
+  overflow: hidden !important;
+}
+
+.medication-management-modal .modal-header {
+  flex-shrink: 0 !important;
+}
+
+.medication-management-modal .nav-tabs {
+  flex-shrink: 0 !important;
+}
+
+.medication-management-modal .modal-body {
+  flex: 1 !important;
+  min-height: 0 !important;
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
+  -webkit-overflow-scrolling: touch !important;
+}
+
+.medication-management-modal .modal-footer {
+  flex-shrink: 0 !important;
+}
+
+/* Fix for medications table */
+.medication-management-modal .table-responsive {
+  max-height: 500px !important;
+  overflow-y: auto !important;
+  overflow-x: auto !important;
+  -webkit-overflow-scrolling: touch !important;
+}
+
+@media (max-width: 767px) {
+  .medication-management-modal .modal-content {
+    height: 100vh !important;
+    max-height: 100vh !important;
+  }
+
+  .medication-management-modal .table-responsive {
+    max-height: 400px !important;
+  }
+  
+  /* Ensure Select dropdowns work properly on mobile */
+  .medication-management-modal .select__menu {
+    position: fixed !important;
+    z-index: 9999 !important;
+  }
+}
 /* ==================== END OF FILE ==================== */

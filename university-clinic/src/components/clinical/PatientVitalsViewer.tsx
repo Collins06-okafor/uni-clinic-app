@@ -304,7 +304,10 @@ const PatientVitalsViewer: React.FC<PatientVitalsViewerProps> = ({
                         marginLeft: isMobile ? '-16px' : '0',
                         marginRight: isMobile ? '-16px' : '0',
                         paddingLeft: isMobile ? '16px' : '0',
-                        paddingRight: isMobile ? '16px' : '0'
+                        paddingRight: isMobile ? '16px' : '0',
+                        maxHeight: isMobile ? '400px' : '500px',
+                        overflowY: 'auto',
+                        overflowX: 'auto'
                       }}
                     >
                       <table 

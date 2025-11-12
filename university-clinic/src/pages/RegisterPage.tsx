@@ -5,6 +5,7 @@ import { register } from '../services/auth';
 import api from '../services/api';
 import PhoneInput from "react-phone-input-2";
 import "react-phone-input-2/lib/style.css";
+import Select from 'react-select';
 import LanguageSwitcher from '../components/LanguageSwitcher';
 import './RegisterPage.css';
 import type { RegisterData } from '../types/user';
@@ -39,6 +40,11 @@ interface Department {
   type: string;
   description?: string;
   is_active: boolean;
+}
+
+interface SelectOption {
+  value: string;
+  label: string;
 }
 
 const RegisterPage: React.FC<RegisterPageProps> = ({ onRegistrationSuccess }) => {
@@ -288,8 +294,130 @@ const RegisterPage: React.FC<RegisterPageProps> = ({ onRegistrationSuccess }) =>
     return icons[role] || 'fa-user';
   };
 
+  // Custom styles for react-select to match existing input styling
+const customSelectStyles = {
+  control: (base: any, state: any) => ({
+    ...base,
+    width: '100%',
+    minHeight: '50px', // Match the height of text inputs (14px padding * 2 + font height)
+    padding: '0',
+    border: state.selectProps.error 
+      ? '2px solid #dc2626' 
+      : state.isFocused 
+      ? '2px solid #dfa7a7' 
+      : '2px solid #e5e7eb',
+    borderRadius: '12px',
+    fontSize: '15px',
+    background: '#ffffff',
+    boxShadow: state.isFocused ? '0 0 0 3px rgba(59, 130, 246, 0.1)' : 'none',
+    transition: 'all 0.3s ease',
+    cursor: 'pointer',
+    '&:hover': {
+      borderColor: state.isFocused ? '#dfa7a7' : '#e5e7eb'
+    }
+  }),
+  valueContainer: (base: any) => ({
+    ...base,
+    padding: '0 18px', // Match the padding of text inputs
+    minHeight: '46px',
+    display: 'flex',
+    alignItems: 'center'
+  }),
+  input: (base: any) => ({
+    ...base,
+    margin: '0',
+    padding: '0',
+    fontSize: '15px',
+    color: '#1f2937'
+  }),
+  placeholder: (base: any) => ({
+    ...base,
+    color: '#9ca3af',
+    fontSize: '15px',
+    margin: '0'
+  }),
+  singleValue: (base: any) => ({
+    ...base,
+    color: '#1f2937',
+    fontSize: '15px',
+    margin: '0'
+  }),
+  indicatorSeparator: () => ({
+    display: 'none' // Remove the separator line
+  }),
+  dropdownIndicator: (base: any, state: any) => ({
+    ...base,
+    color: '#6b7280',
+    padding: '0 18px',
+    transition: 'all 0.3s ease',
+    transform: state.selectProps.menuIsOpen ? 'rotate(180deg)' : 'rotate(0deg)',
+    '&:hover': {
+      color: '#de4545'
+    }
+  }),
+  clearIndicator: (base: any) => ({
+    ...base,
+    color: '#6b7280',
+    padding: '0 8px',
+    cursor: 'pointer',
+    '&:hover': {
+      color: '#dc2626'
+    }
+  }),
+  menu: (base: any) => ({
+    ...base,
+    marginTop: '4px',
+    borderRadius: '12px',
+    border: '2px solid #e5e7eb',
+    boxShadow: '0 10px 25px rgba(0, 0, 0, 0.1)',
+    overflow: 'hidden',
+    zIndex: 9999
+  }),
+  menuList: (base: any) => ({
+    ...base,
+    padding: '8px',
+    maxHeight: '200px'
+  }),
+  option: (base: any, state: any) => ({
+    ...base,
+    backgroundColor: state.isSelected 
+      ? '#dc2626' 
+      : state.isFocused 
+      ? '#fef2f2' 
+      : 'white',
+    color: state.isSelected ? 'white' : '#1f2937',
+    padding: '12px 16px',
+    fontSize: '15px',
+    borderRadius: '8px',
+    marginBottom: '4px',
+    cursor: 'pointer',
+    transition: 'all 0.2s ease',
+    '&:last-child': {
+      marginBottom: '0'
+    },
+    '&:hover': {
+      backgroundColor: state.isSelected ? '#dc2626' : '#fef2f2'
+    },
+    '&:active': {
+      backgroundColor: state.isSelected ? '#b91c1c' : '#fee2e2'
+    }
+  }),
+  noOptionsMessage: (base: any) => ({
+    ...base,
+    fontSize: '15px',
+    color: '#6b7280',
+    padding: '12px 16px'
+  }),
+  loadingMessage: (base: any) => ({
+    ...base,
+    fontSize: '15px',
+    color: '#6b7280',
+    padding: '12px 16px'
+  })
+};
+
   // Updated function to use dynamic departments
-  const getDepartmentOptions = () => {
+  const getDepartmentOptions = (): SelectOption[] => {
     if (departmentsLoading) {
       return [{ value: "", label: t('common.loading') }];
     }
@@ -304,7 +432,12 @@ const RegisterPage: React.FC<RegisterPageProps> = ({ onRegistrationSuccess }) =>
     }));
   };
 
-  const getFacultyOptions = () => [
+  const getRoleOptions = (): SelectOption[] => [
+    { value: "student", label: t('register.student') },
+    { value: "academic_staff", label: t('register.academic_staff') }
+  ];
+
+  const getFacultyOptions = (): SelectOption[] => [
     { value: "Faculty of Medicine", label: t('faculty.medicine') },
     { value: "Faculty of Engineering", label: t('faculty.engineering') },
     { value: "Faculty of Sciences", label: t('faculty.sciences') },
@@ -342,26 +475,28 @@ const RegisterPage: React.FC<RegisterPageProps> = ({ onRegistrationSuccess }) =>
             </div>
             <div className="register-form-group">
               <label className="register-form-label">{t('register.department')}</label>
-              <select
-                name="department"
-                className={`register-form-select ${errors.department ? 'is-invalid' : ''}`}
-                value={form.department}
-                onChange={handleChange}
-                required
-                disabled={departmentsLoading}
-              >
-                <option value="">
-                  {departmentsLoading 
-                    ? t('common.loading') 
-                    : departmentsError 
-                    ? t('error.departments_unavailable')
-                    : t('register.select_department')
+              <Select
+                options={getDepartmentOptions()}
+                value={getDepartmentOptions().find(opt => opt.value === form.department) || null}
+                onChange={(option) => {
+                  setForm({ ...form, department: option?.value || '' });
+                  if (errors.department) {
+                    const newErrors = { ...errors };
+                    delete newErrors.department;
+                    setErrors(newErrors);
                   }
-                </option>
-                {!departmentsLoading && !departmentsError && getDepartmentOptions().map(dept => (
-                  <option key={dept.value} value={dept.value}>{dept.label}</option>
-                ))}
-              </select>
+                }}
+                placeholder={departmentsLoading 
+                  ? t('common.loading') 
+                  : departmentsError 
+                  ? t('error.departments_unavailable')
+                  : t('register.select_department')
+                }
+                isDisabled={departmentsLoading}
+                isSearchable
+                isClearable
+                styles={customSelectStyles}
+              />
               {departmentsError && (
                 <small className="register-form-text" style={{ color: '#dc2626' }}>
                   {departmentsError}
@@ -398,18 +533,22 @@ const RegisterPage: React.FC<RegisterPageProps> = ({ onRegistrationSuccess }) =>
             </div>
             <div className="register-form-group">
               <label className="register-form-label">{t('register.faculty')}</label>
-              <select
-                name="faculty"
-                className={`register-form-select ${errors.faculty ? 'is-invalid' : ''}`}
-                value={form.faculty}
-                onChange={handleChange}
-                required
-              >
-                <option value="">{t('register.select_faculty')}</option>
-                {getFacultyOptions().map(faculty => (
-                  <option key={faculty.value} value={faculty.value}>{faculty.label}</option>
-                ))}
-              </select>
+              <Select
+                options={getFacultyOptions()}
+                value={getFacultyOptions().find(opt => opt.value === form.faculty) || null}
+                onChange={(option) => {
+                  setForm({ ...form, faculty: option?.value || '' });
+                  if (errors.faculty) {
+                    const newErrors = { ...errors };
+                    delete newErrors.faculty;
+                    setErrors(newErrors);
+                  }
+                }}
+                placeholder={t('register.select_faculty')}
+                isSearchable
+                isClearable
+                styles={customSelectStyles}
+              />
               {errors.faculty && (
                 <div className="register-invalid-feedback">
                   {Array.isArray(errors.faculty) ? errors.faculty[0] : errors.faculty}
@@ -418,25 +557,28 @@ const RegisterPage: React.FC<RegisterPageProps> = ({ onRegistrationSuccess }) =>
             </div>
             <div className="register-form-group">
               <label className="register-form-label">{t('register.department_optional')}</label>
-              <select
-                name="department"
-                className={`register-form-select ${errors.department ? 'is-invalid' : ''}`}
-                value={form.department}
-                onChange={handleChange}
-                disabled={departmentsLoading}
-              >
-                <option value="">
-                  {departmentsLoading 
-                    ? t('common.loading') 
-                    : departmentsError 
-                    ? t('error.departments_unavailable')
-                    : t('register.select_department_optional')
+              <Select
+                options={getDepartmentOptions()}
+                value={getDepartmentOptions().find(opt => opt.value === form.department) || null}
+                onChange={(option) => {
+                  setForm({ ...form, department: option?.value || '' });
+                  if (errors.department) {
+                    const newErrors = { ...errors };
+                    delete newErrors.department;
+                    setErrors(newErrors);
                   }
-                </option>
-                {!departmentsLoading && !departmentsError && getDepartmentOptions().map(dept => (
-                  <option key={dept.value} value={dept.value}>{dept.label}</option>
-                ))}
-              </select>
+                }}
+                placeholder={departmentsLoading 
+                  ? t('common.loading') 
+                  : departmentsError 
+                  ? t('error.departments_unavailable')
+                  : t('register.select_department_optional')
+                }
+                isDisabled={departmentsLoading}
+                isSearchable
+                isClearable
+                styles={customSelectStyles}
+              />
               {departmentsError && (
                 <small className="register-form-text" style={{ color: '#dc2626' }}>
                   {departmentsError}
@@ -506,17 +648,22 @@ const RegisterPage: React.FC<RegisterPageProps> = ({ onRegistrationSuccess }) =>
                 <div className="register-form-col">
                   <div className="register-form-group">
                     <label className="register-form-label">{t('register.role')}</label>
-                    <select
-                      name="role"
-                      className={`register-form-select ${errors.role ? 'is-invalid' : ''}`}
-                      value={form.role}
-                      onChange={handleChange}
-                      required
-                    >
-                      <option value="">{t('register.select_role')}</option>
-                      <option value="student">{t('register.student')}</option>
-                      <option value="academic_staff">{t('register.academic_staff')}</option>
-                    </select>
+                    <Select
+                      options={getRoleOptions()}
+                      value={getRoleOptions().find(opt => opt.value === form.role) || null}
+                      onChange={(option) => {
+                        setForm({ ...form, role: option?.value || '' });
+                        if (errors.role) {
+                          const newErrors = { ...errors };
+                          delete newErrors.role;
+                          setErrors(newErrors);
+                        }
+                      }}
+                      placeholder={t('register.select_role')}
+                      isSearchable
+                      isClearable
+                      styles={customSelectStyles}
+                    />
                     {errors.role && (
                       <div className="register-invalid-feedback">
                         {Array.isArray(errors.role) ? errors.role[0] : errors.role}

@@ -555,21 +555,21 @@ const Sidebar = () => {
 
       {/* Sidebar */}
       <div
-        style={{
-          position: 'fixed',
-          top: 0,
-          left: window.innerWidth < 768 ? (sidebarOpen ? 0 : '-300px') : 0,
-          bottom: 0,
-          width: sidebarCollapsed && window.innerWidth >= 768 ? '85px' : '280px',
-          background: '#1a1d29',
-          boxShadow: '4px 0 24px rgba(0, 0, 0, 0.12)',
-          transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-          zIndex: 1050,
-          display: 'flex',
-          flexDirection: 'column',
-          overflow: 'hidden',
-        }}
-      >
+  style={{
+    position: 'fixed',
+    top: 0,
+    left: window.innerWidth < 768 ? (sidebarOpen ? 0 : '-300px') : 0,
+    height: '100vh',  // ← CHANGE THIS LINE
+    width: sidebarCollapsed && window.innerWidth >= 768 ? '85px' : '280px',
+    background: '#1a1d29',
+    boxShadow: '4px 0 24px rgba(0, 0, 0, 0.12)',
+    transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+    zIndex: 1050,
+    display: 'flex',
+    flexDirection: 'column',
+    overflow: 'hidden',
+  }}
+>
         {/* Header */}
         <div
           style={{
@@ -2449,7 +2449,12 @@ const renderUsers = () => {
 
   // ---- Page scaffold ----
    return (
-  <div style={{ minHeight: '100vh', display: 'flex' }}>
+  <div style={{ 
+    display: 'flex', 
+    height: '100vh', 
+    overflow: 'hidden',
+    background: '#f8f9fa'
+  }}>
     {/* Sidebar */}
     <Sidebar />
 
@@ -2484,15 +2489,18 @@ const renderUsers = () => {
     </div>
 
     {/* Main Content Wrapper */}
-    <div
-      style={{
-        flex: 1,
-        marginLeft: window.innerWidth >= 768 ? (sidebarCollapsed ? '85px' : '280px') : '0',
-        paddingTop: window.innerWidth < 768 ? '60px' : '0',
-        transition: 'margin-left 0.3s ease',
-        minHeight: '100vh',
-      }}
-    >
+    {/* Main Content Wrapper */}
+<div
+  style={{
+    flex: 1,
+    marginLeft: window.innerWidth >= 768 ? (sidebarCollapsed ? '85px' : '280px') : '0',
+    paddingTop: window.innerWidth < 768 ? '60px' : '0',
+    transition: 'margin-left 0.3s ease',
+    height: '100vh',           // ← ADD THIS
+    overflowY: 'auto',         // ← ADD THIS
+    overflowX: 'hidden',       // ← ADD THIS
+  }}
+>
       {/* Toasts */}
       <div className="position-fixed top-0 end-0 p-3" style={{ zIndex: 9999, width: 360 }}>
         {notifications.map(n => <NotificationToast key={n.id} notification={n} />)}

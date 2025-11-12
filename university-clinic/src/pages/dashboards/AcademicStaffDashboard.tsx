@@ -291,8 +291,11 @@ const relationshipOptions = [
     case 'neurology':
     case 'brain':
       return <Brain className="text-purple" size={16} />;
+    case 'emergency medicine': // ✅ ADD THIS
+    case 'emergency':
+      return <AlertTriangle className="text-danger" size={16} />;
     default:
-      console.log('Unknown specialization:', specialization); // Debug unknown specializations
+      console.log('Unknown specialization:', specialization);
       return <Stethoscope className="text-danger" size={16} />;
   }
 };
@@ -731,12 +734,30 @@ if (!allowedTypes.includes(file.type)) {
   };
 
   const fetchAvailableSlots = async (doctorId: string, date: string): Promise<void> => {
-  if (!date) return;
+  if (!date) {
+    console.log('⚠️ No date provided, skipping slot fetch');
+    return;
+  }
+  
+  // Validate date format
+  const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
+  if (!dateRegex.test(date)) {
+    console.error('❌ Invalid date format for fetching slots:', date);
+    setAvailableSlots(timeSlots);
+    return;
+  }
   
   try {
-    const url = doctorId 
-      ? `${API_BASE_URL}/api/academic-staff/available-slots?doctor_id=${doctorId}&date=${date}`
-      : `${API_BASE_URL}/api/academic-staff/available-slots?date=${date}`;
+    // ✅ FIX: Ensure doctorId is a string before checking
+    const safeDoctorId = doctorId ? String(doctorId).trim() : '';
+    
+    // Build URL - only add doctor_id param if it's not empty
+    let url = `${API_BASE_URL}/api/academic-staff/available-slots?date=${date}`;
+    if (safeDoctorId && safeDoctorId !== '') {
+      url += `&doctor_id=${safeDoctorId}`;
+    }
+    
+    console.log('📡 Fetching available slots:', { url, date, doctorId: safeDoctorId });
       
     const response = await fetch(url, {
       headers: {
@@ -745,20 +766,35 @@ if (!allowedTypes.includes(file.type)) {
       }
     });
     
+    const data = await response.json();
+    console.log('📥 Slots response:', data);
+    
     if (response.ok) {
-      const data = await response.json();
-      setAvailableSlots(data.available_slots || timeSlots);
+      // Backend returns available_slots array
+      if (data.available_slots && Array.isArray(data.available_slots)) {
+        setAvailableSlots(data.available_slots);
+        console.log('✅ Available slots set:', data.available_slots.length, 'slots');
+      } else {
+        console.warn('⚠️ No available_slots in response, using all slots');
+        setAvailableSlots(timeSlots);
+      }
     } else {
-      // If API fails, use all time slots as fallback
-      console.warn('Failed to fetch available slots, using all slots');
-      setAvailableSlots(timeSlots);
+      // Handle validation errors (like weekend dates)
+      if (response.status === 422 && data.message) {
+        console.warn('⚠️ Date validation issue:', data.message);
+        showMessage('error', data.message);
+        setAvailableSlots([]);
+      } else {
+        console.error('❌ Failed to fetch slots:', response.status, data);
+        setAvailableSlots(timeSlots);
+      }
     }
   } catch (error) {
-    console.error('Error fetching available slots:', error);
-    // On error, use all time slots as fallback
+    console.error('❌ Error fetching available slots:', error);
     setAvailableSlots(timeSlots);
   }
 };
+  
 
   const checkProfileComplete = (profileData = userProfile): boolean => {
   const required: (keyof typeof userProfile)[] = [
@@ -779,73 +815,91 @@ if (!allowedTypes.includes(file.type)) {
 };
 
   const handleScheduleAppointment = async (e: React.FormEvent): Promise<void> => {
-  e.preventDefault();
-  
-  if (!appointmentForm.date || !appointmentForm.time || !appointmentForm.reason) {
-    showMessage('error', t('academic.fill_required_fields'));
-    return;
-  }
-
-  if (!isWeekday(appointmentForm.date)) {
-    showMessage('error', getDateClosureReason(appointmentForm.date) + '. ' + t('academic.select_weekday'));
-    return;
-  }
-
-  setLoading(true);
-
-  try {
-    const response = await fetch(`${API_BASE_URL}/api/academic-staff/schedule-appointment`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${localStorage.getItem('token')}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        ...appointmentForm,
-        urgency: appointmentForm.urgency
-      })
-    });
-
-    const data = await response.json();
-
-    if (response.ok) {
-      // Clear form
-      setAppointmentForm({ 
-        doctor_id: '', 
-        date: '', 
-        time: '', 
-        reason: '',
-        urgency: 'normal'
-      });
-      setAvailableSlots([]);
-      
-      // Show success message
-      showMessage('success', data.message || t('academic.appointment_scheduled'));
-      
-      // Refresh appointments if on that tab
-      if (activeTab === 'appointments') {
-        fetchAppointments();
-      }
-
-      await fetchAppointments();
-  
-  // 🔥 FIX: Switch to appointments tab to show the new appointment
-  setActiveTab('appointments');
-      
-      // Auto-hide success message after 5 seconds
-      setTimeout(() => setMessage({ type: '', text: '' }), 5000);
-    } else {
-      showMessage('error', data.message || t('academic.appointment_schedule_failed'));
-      setTimeout(() => setMessage({ type: '', text: '' }), 5000);
+    e.preventDefault();
+    
+    // Validate required fields
+    if (!appointmentForm.date || !appointmentForm.time || !appointmentForm.reason) {
+      showMessage('error', t('academic.fill_required_fields'));
+      return;
     }
-  } catch (error) {
-    console.error('Error scheduling appointment:', error);
-    showMessage('error', 'Failed to schedule appointment. Please try again.');
-    setTimeout(() => setMessage({ type: '', text: '' }), 5000);
-  } finally {
-    setLoading(false);
-  }
-};
+
+    // Validate weekday
+    if (!isWeekday(appointmentForm.date)) {
+      showMessage('error', getDateClosureReason(appointmentForm.date) + '. ' + t('academic.select_weekday'));
+      return;
+    }
+
+    setLoading(true);
+
+    try {
+      // ✅ FIX: Build payload conditionally - don't include empty doctor_id
+      const payload: Record<string, any> = {
+        date: appointmentForm.date,
+        time: appointmentForm.time,
+        reason: appointmentForm.reason,
+        urgency: appointmentForm.urgency
+      };
+
+      // ✅ CRITICAL: Only add doctor_id if it's actually selected (not empty string)
+      const safeDoctorId = appointmentForm.doctor_id ? String(appointmentForm.doctor_id).trim() : '';
+if (safeDoctorId && safeDoctorId !== '') {
+  payload.doctor_id = safeDoctorId;
+}
+
+      console.log('📤 Sending appointment request:', payload);
+
+      const response = await fetch(`${API_BASE_URL}/api/academic-staff/schedule-appointment`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(payload)
+      });
+
+      const data = await response.json();
+      console.log('📥 Response:', data);
+
+      if (response.ok) {
+        // Clear form
+        setAppointmentForm({ 
+          doctor_id: '', 
+          date: '', 
+          time: '', 
+          reason: '',
+          urgency: 'normal'
+        });
+        setAvailableSlots([]);
+        
+        // Show success message
+        showMessage('success', data.message || t('academic.appointment_scheduled'));
+        
+        // Refresh appointments
+        await fetchAppointments();
+    
+        // Switch to appointments tab to show the new appointment
+        setActiveTab('appointments');
+        
+        // Auto-hide success message after 5 seconds
+        setTimeout(() => setMessage({ type: '', text: '' }), 5000);
+      } else {
+        // Handle validation errors
+        if (data.errors) {
+          const errorMessages = Object.values(data.errors).flat().join(', ');
+          showMessage('error', errorMessages);
+        } else {
+          showMessage('error', data.message || t('academic.appointment_schedule_failed'));
+        }
+        setTimeout(() => setMessage({ type: '', text: '' }), 5000);
+      }
+    } catch (error) {
+      console.error('Error scheduling appointment:', error);
+      showMessage('error', 'Failed to schedule appointment. Please try again.');
+      setTimeout(() => setMessage({ type: '', text: '' }), 5000);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleRescheduleAppointment = async (e: React.FormEvent): Promise<void> => {
     e.preventDefault();
@@ -981,15 +1035,25 @@ const formatTime = (timeString: string): string => {
     }
   };
 
-  const handleAppointmentFormChange = (field: keyof AppointmentForm, value: string): void => {
-    setAppointmentForm(prev => ({ ...prev, [field]: value }));
+ const handleAppointmentFormChange = (field: keyof AppointmentForm, value: string): void => {
+  console.log(`🔄 Form change: ${field} = ${value}`);
+  
+  setAppointmentForm(prev => ({ ...prev, [field]: value }));
+  
+  // ✅ Only fetch slots if we have a valid date
+  if (field === 'doctor_id' || field === 'date') {
+    const doctorId = field === 'doctor_id' ? value : appointmentForm.doctor_id;
+    const date = field === 'date' ? value : appointmentForm.date;
     
-    if (field === 'doctor_id' || field === 'date') {
-      const doctorId = field === 'doctor_id' ? value : appointmentForm.doctor_id;
-      const date = field === 'date' ? value : appointmentForm.date;
+    // ✅ Validate date format before fetching slots
+    const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
+    if (date && dateRegex.test(date)) {
       fetchAvailableSlots(doctorId, date);
+    } else {
+      console.warn('⚠️ Skipping slot fetch - invalid date format:', date);
     }
-  };
+  }
+};
 
   // Helper functions for appointment actions
 const canShowActions = (status: string): boolean => {
@@ -1047,9 +1111,26 @@ const getCancelDisabledReason = (status: string): string => {
 };
 
   const getMinDate = (): string => {
-    const today = new Date();
-    return today.toISOString().split('T')[0];
-  };
+  const today = new Date();
+  // Ensure we're getting YYYY-MM-DD format
+  const year = today.getFullYear();
+  const month = String(today.getMonth() + 1).padStart(2, '0');
+  const day = String(today.getDate()).padStart(2, '0');
+  const formattedDate = `${year}-${month}-${day}`;
+  
+  console.log('📅 Min date calculated:', formattedDate);
+  return formattedDate;
+};
+
+const isValidDateFormat = (dateString: string): boolean => {
+  const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
+  if (!dateRegex.test(dateString)) {
+    return false;
+  }
+  
+  const date = new Date(dateString);
+  return date instanceof Date && !isNaN(date.getTime());
+};
 
   // ==================== SIDEBAR COMPONENT ====================
 const Sidebar = () => {
@@ -1085,7 +1166,7 @@ const Sidebar = () => {
           position: 'fixed',
           top: 0,
           left: isMobile ? (sidebarOpen ? 0 : '-300px') : 0,
-          bottom: 0,
+          height: '100vh',  // ← CHANGE THIS LINE
           width: sidebarCollapsed && !isMobile ? '85px' : '280px',
           background: '#1a1d29',
           boxShadow: '4px 0 24px rgba(0, 0, 0, 0.12)',
@@ -1178,15 +1259,14 @@ const Sidebar = () => {
 
         {/* NAVIGATION */}
         <nav
-          style={{
-            flex: isMobile ? 'none' : 1,
-            flexShrink: isMobile ? 0 : 1,
-            overflowY: 'visible',
-            overflowX: 'hidden',
-            padding: sidebarCollapsed && !isMobile ? '12px 8px' : isMobile ? '6px 10px' : '16px 12px',
-            minHeight: isMobile ? 'auto' : 0,
-          }}
-        >
+  style={{
+    flex: 1,
+    overflowY: 'auto',
+    overflowX: 'hidden',
+    padding: sidebarCollapsed && !isMobile ? '12px 8px' : isMobile ? '6px 10px' : '16px 12px',
+    minHeight: 0,
+  }}
+>
           {!(sidebarCollapsed && !isMobile) && (
             <div
               style={{
@@ -1313,17 +1393,20 @@ const Sidebar = () => {
           </button>
         </nav>
 
-        {/* SPACER - Desktop only */}
-        {!isMobile && <div style={{ flex: 1, minHeight: 0 }} />}
+        {/* SPACER - Desktop only 
+        {!isMobile && <div style={{ flex: 1, minHeight: 0 }} />}*/}
 
         {/* FOOTER */}
         <div
-          style={{
-            padding: sidebarCollapsed && !isMobile ? '16px 12px' : isMobile ? '8px 12px' : '16px',
-            borderTop: '1px solid rgba(255, 255, 255, 0.08)',
-            flexShrink: 0,
-          }}
-        >
+  style={{
+    padding: sidebarCollapsed && !isMobile ? '16px 12px' : isMobile ? '8px 12px' : '16px',
+    borderTop: '1px solid rgba(255, 255, 255, 0.08)',
+    background: 'linear-gradient(180deg, transparent 0%, rgba(0, 0, 0, 0.2) 100%)',
+    flexShrink: 0,
+    flexGrow: 0,
+    minHeight: 'auto',
+  }}
+>
           {!(sidebarCollapsed && !isMobile) ? (
             <div>
               <div
@@ -1521,19 +1604,30 @@ const Sidebar = () => {
   
 
   return (
-  <div style={{ minHeight: '100vh', background: 'linear-gradient(135deg, #ffffffff 0%, #f0fdf4 100%)' }}>
+  <div style={{ 
+    display: 'flex', 
+    height: '100vh', 
+    overflow: 'hidden',
+    background: 'linear-gradient(135deg, #ffffffff 0%, #f0fdf4 100%)' 
+  }}>
     <Sidebar />
     
     <div style={{
-      marginLeft: window.innerWidth < 768 ? 0 : (sidebarCollapsed ? '85px' : '280px'),
-      transition: 'margin-left 0.3s ease',
-      padding: window.innerWidth < 768 ? '20px 16px' : '40px 32px',
-    }}>
+  marginLeft: window.innerWidth < 768 ? 0 : (sidebarCollapsed ? '85px' : '280px'),
+  transition: 'margin-left 0.3s ease',
+  padding: window.innerWidth < 768 ? '20px 16px' : '40px 32px',
+  height: '100vh',           // ← ADD THIS
+  overflowY: 'auto',         // ← ADD THIS
+  overflowX: 'hidden',       // ← ADD THIS
+  flex: 1,                   // ← ADD THIS
+}}>
       {window.innerWidth < 768 && (
         <div
           style={{
             position: 'sticky',
             top: 0,
+            right: 0,
+            left: 0,
             background: 'white',
             boxShadow: '0 2px 8px rgba(0, 0, 0, 0.1)',
             padding: '16px',
@@ -1949,7 +2043,7 @@ const Sidebar = () => {
                   style={{ borderRadius: '0.75rem', border: 'none', backgroundColor: '#fff3cd' }}>
                 <AlertTriangle size={20} className="me-2 flex-shrink-0 mt-1" style={{ color: '#856404' }} />
                 <div>
-                  <strong style={{ color: '#856404' }}>Profile Incomplete:</strong>
+                  <strong style={{ color: '#856404' }}>{t('academic.profile_incomplete')}</strong>
                   <div style={{ color: '#856404', marginTop: '4px' }}>
                     {t('academic.must_complete_profile')}
                     <button 
@@ -2047,46 +2141,94 @@ const Sidebar = () => {
               </div>
 
               {/* Date - with clinic hours validation */}
-<div className="col-md-6 col-overflow-visible">
-  <label className="form-label fw-semibold">
-    {t('academic.date')} <span className="text-danger">*</span>
-  </label>
-  <div className="date-input-wrapper">
-    <input 
-      type="date"
-      className={`form-control form-control-lg ${
-        appointmentForm.date && !isWeekday(appointmentForm.date) ? 'is-invalid' : ''
-      }`}
-      value={appointmentForm.date}
-      onChange={(e) => {
-        const selectedDate = e.target.value;
-        
-        if (selectedDate && !isWeekday(selectedDate)) {
-          showMessage('error', getDateClosureReason(selectedDate) + t('academic.select_weekday'));
-          return;
-        }
-        
-        handleAppointmentFormChange('date', selectedDate);
-      }}
-      min={getMinDate()}
-      required
-      style={{
-        borderRadius: '0.75rem',
-        border: '2px solid #e9ecef',
-        padding: window.innerWidth < 768 ? '0.75rem' : '0.875rem 1rem',
-        fontSize: window.innerWidth < 768 ? '0.9rem' : '1rem'
-      }}
-    />
-  </div>
-  {appointmentForm.date && !isWeekday(appointmentForm.date) && (
-    <div className="invalid-feedback d-block">
-      {getDateClosureReason(appointmentForm.date)}. {t('academic.select_weekday')}
-    </div>
-  )}
-  <small className="form-text text-muted">
-    {t('academic.clinic_operates')}
-  </small>
-</div>
+              {/* Date - with clinic hours validation */}
+              <div className="col-md-6 col-overflow-visible">
+                <label className="form-label fw-semibold">
+                  {t('academic.date')} <span className="text-danger">*</span>
+                </label>
+                <div className="date-input-wrapper">
+                  <input 
+  type="date"
+  className={`form-control form-control-lg ${
+    appointmentForm.date && !isWeekday(appointmentForm.date) ? 'is-invalid' : ''
+  }`}
+  value={appointmentForm.date}
+  onChange={(e) => {
+    const rawValue = e.target.value;
+    console.log('📅 Date input changed:', rawValue);
+    
+    // ✅ FIX: Prevent malformed dates from being processed
+    if (!rawValue) {
+      handleAppointmentFormChange('date', '');
+      return;
+    }
+    
+    // ✅ Strict validation for YYYY-MM-DD format
+    const dateRegex = /^(\d{4})-(\d{2})-(\d{2})$/;
+    const match = rawValue.match(dateRegex);
+    
+    if (!match) {
+      console.error('❌ Invalid date format:', rawValue);
+      showMessage('error', 'Invalid date format. Please use the date picker.');
+      setTimeout(() => setMessage({ type: '', text: '' }), 3000);
+      return;
+    }
+    
+    // ✅ Validate year is reasonable (between 2024-2030)
+    const year = parseInt(match[1]);
+    const month = parseInt(match[2]);
+    const day = parseInt(match[3]);
+    
+    if (year < 2024 || year > 2030) {
+      console.error('❌ Invalid year:', year);
+      showMessage('error', 'Please select a valid date between 2024-2030');
+      setTimeout(() => setMessage({ type: '', text: '' }), 3000);
+      return;
+    }
+    
+    if (month < 1 || month > 12) {
+      console.error('❌ Invalid month:', month);
+      return;
+    }
+    
+    if (day < 1 || day > 31) {
+      console.error('❌ Invalid day:', day);
+      return;
+    }
+    
+    // ✅ Reconstruct the date to ensure format
+    const selectedDate = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+    console.log('✅ Validated date:', selectedDate);
+    
+    // Check if it's a weekday
+    if (!isWeekday(selectedDate)) {
+      showMessage('error', getDateClosureReason(selectedDate) + '. ' + t('academic.select_weekday'));
+      setTimeout(() => setMessage({ type: '', text: '' }), 3000);
+    }
+    
+    // Update the form
+    handleAppointmentFormChange('date', selectedDate);
+  }}
+  min={getMinDate()}
+  max="2030-12-31"
+  required
+  style={{
+    borderRadius: '0.75rem',
+    border: '2px solid #e9ecef',
+    padding: window.innerWidth < 768 ? '0.75rem' : '0.875rem 1rem',
+    fontSize: window.innerWidth < 768 ? '0.9rem' : '1rem'
+  }}
+/>
+                </div>
+                {appointmentForm.date && !isWeekday(appointmentForm.date) && (
+                  <div className="invalid-feedback d-block">
+                    {getDateClosureReason(appointmentForm.date)}. {t('academic.select_weekday')}
+                  </div>
+                )}
+                <small className="form-text text-muted">
+                  {t('academic.clinic_operates')} (Mon-Fri, 9 AM - 5 PM)
+                </small>
+              </div>
 
               <div className="col-md-6">
                 <label className="form-label fw-semibold">

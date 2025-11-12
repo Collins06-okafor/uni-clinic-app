@@ -310,6 +310,12 @@ const resources = {
       "common.view_details": "View Details",
 
   // ... existing translations ...
+
+  "doctor": {
+    "select_department": "Select Department",
+    "loading_departments": "Loading departments...",
+    "no_departments": "No departments available"
+  },
   
   // Doctor Dashboard - Main Navigation & Sidebar
   "doctor.welcome": "Welcome back, Dr. {{name}}!",
@@ -2365,6 +2371,12 @@ const resources = {
   "doctor.friday": "Cuma",
   "doctor.saturday": "Cumartesi",
   "doctor.sunday": "Pazar",
+
+  "doctor": {
+    "select_department": "Bölüm Seçin",
+    "loading_departments": "Bölümler yükleniyor...",
+    "no_departments": "Bölüm bulunamadı"
+  },
   
   // Kan Grupları
   "doctor.blood_type_a_positive": "A+",

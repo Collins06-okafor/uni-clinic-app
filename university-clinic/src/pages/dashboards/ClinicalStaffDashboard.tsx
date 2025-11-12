@@ -763,22 +763,45 @@ const ClinicalStaffDashboard: React.FC<ClinicalStaffDashboardProps> = ({ user, o
     }
   };
 
-  const loadUrgentRequests = async () => {
-    try {
-      const response = await fetch(`${CLINICAL_API_BASE}/urgent-queue`, {
-        headers: { 
-          'Authorization': `Bearer ${AUTH_TOKEN}`,
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-        }
-      });
-      const data = await response.json();
-      setUrgentRequests(data.urgent_requests || []);
-    } catch (error) {
-      console.error('Error loading urgent requests:', error);
-      setUrgentRequests([]);
+  const loadUrgentRequests = async (): Promise<void> => {
+  try {
+    console.log('🔥 Loading urgent requests...');
+    console.log('🔥 API URL:', `${CLINICAL_API_BASE}/urgent-queue`);
+    console.log('🔥 Auth token:', AUTH_TOKEN ? 'EXISTS' : 'MISSING');
+    
+    const response = await fetch(`${CLINICAL_API_BASE}/urgent-queue`, {
+      headers: { 
+        'Authorization': `Bearer ${AUTH_TOKEN}`,
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+      }
+    });
+    
+    console.log('🔥 Response status:', response.status);
+    console.log('🔥 Response headers:', Object.fromEntries(response.headers.entries()));
+    
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('🔥 Error response:', errorText);
+      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
     }
-  };
+    
+    const data = await response.json();
+    console.log('🔥 Raw response data:', data);
+    
+    const requests = data.urgent_requests || data.requests || data.data || [];
+    console.log('🔥 Extracted requests:', requests);
+    console.log('🔥 Requests is array?', Array.isArray(requests));
+    console.log('🔥 Requests length:', requests.length);
+    
+    setUrgentRequests(Array.isArray(requests) ? requests : []);
+    
+    console.log('🔥 Final urgent requests count:', requests.length);
+  } catch (error) {
+    console.error('❌ Error loading urgent requests:', error);
+    setUrgentRequests([]);
+  }
+};
 
 
   // Chart configurations
@@ -1140,6 +1163,8 @@ const formatTime = (timeString: string): string => {
       if (contentType && contentType.includes('application/json')) {
         const data = await response.json();
         console.log('Profile data received:', data);
+        
+        // Update user profile
         setUserProfile({
           staff_no: data.staff_no || '',
           name: data.name || '',
@@ -1150,16 +1175,20 @@ const formatTime = (timeString: string): string => {
           avatar_url: data.avatar_url || null,
           department: data.department || ''
         });
-      } else {
-        const text = await response.text();
-        console.error('Non-JSON response received:', text.substring(0, 500));
-        showMessage('error', 'Server returned invalid response format');
+
+        // ✅ ALSO UPDATE DASHBOARD DATA
+        setDashboardData(prev => ({
+          ...prev,
+          staff_member: {
+            ...prev.staff_member,
+            name: data.name || prev.staff_member.name,
+            staff_no: data.staff_no || prev.staff_member.staff_no,
+            department: data.department || prev.staff_member.department,
+            phone: data.phone || prev.staff_member.phone,
+            email: data.email || prev.staff_member.email
+          }
+        }));
       }
-    } else {
-      console.error('Failed to fetch profile. Status:', response.status);
-      const errorText = await response.text();
-      console.error('Error response:', errorText.substring(0, 500));
-      showMessage('error', `Failed to fetch profile: ${response.status}`);
     }
   } catch (error) {
     console.error('Network error fetching profile:', error);
@@ -1499,6 +1528,7 @@ const saveProfile = async (e?: React.FormEvent): Promise<void> => {
     const loadInitialData = async () => {
       try {
         await Promise.all([
+          fetchProfile(),
           loadDashboardData(),
           loadPatients(),
           loadDoctors(),
@@ -1546,6 +1576,7 @@ useEffect(() => {
         const handleStudentRequestUpdate = () => {
           loadStudentRequests();
           loadDashboardData();
+          loadUrgentRequests();
         };
 
         // Use your service's specific methods
@@ -1649,7 +1680,7 @@ const Sidebar = () => {
           position: 'fixed',
           top: 0,
           left: isMobile ? (sidebarOpen ? 0 : '-280px') : 0,
-          bottom: 0,
+          height: '100vh',
           width: sidebarCollapsed && !isMobile ? '80px' : '280px',
           background: '#1a1d29',
           boxShadow: '4px 0 24px rgba(0, 0, 0, 0.12)',
@@ -2336,50 +2367,38 @@ const DashboardOverview: React.FC = () => {
   <div className="container-fluid py-4">
     <div className="row g-4">
       {/* Welcome Card */}
-      <div className="col-12">
-        <div
-          className="card shadow-sm border-0"
-          style={{
-            borderRadius: '1rem',
-            background: 'linear-gradient(135deg, #E53E3E 0%, #C53030 100%)',
-          }}
-        >
-          <div className="card-body p-4 text-white">
-            <div className="d-flex justify-content-between align-items-center">
-              {/* Left side - Text content */}
-              <div className="flex-grow-1">
-                <h3 className="mb-2">
-                  {t('clinical.welcome', {
-                    name: user?.name || 'Clinical Staff',
-                  })}
-                </h3>
-                <div className="d-flex align-items-center mb-1">
-                  <User size={16} className="me-2 opacity-75" />
-                  <span className="opacity-90">
-                    {t('clinical.staff_no', { staffNo: user?.staff_no || 'N/A' })}
-                  </span>
-                </div>
-                <div className="d-flex align-items-center mb-1">
-                  <Stethoscope size={16} className="me-2 opacity-75" />
-                  <span className="opacity-75">
-                    {t('clinical.department', { department: user?.department || 'General' })}
-                  </span>
-                </div>
-              </div>
-              
-              {/* Right side - Avatar pushed to far right 
-              <div className="flex-shrink-0 ms-4">
-                <AvatarDisplay 
-                  src={userProfile.avatar_url} 
-                  size={80}
-                  fallbackColor="#ffffff"
-                  className="opacity-90"
-                />
-              </div>*/}
-            </div>
+<div className="col-12">
+  <div
+    className="card shadow-sm border-0"
+    style={{
+      borderRadius: '1rem',
+      background: 'linear-gradient(135deg, #E53E3E 0%, #C53030 100%)',
+    }}
+  >
+    <div className="card-body p-4 text-white">
+      <div className="d-flex justify-content-between align-items-center">
+        {/* Left side - Text content */}
+        <div className="flex-grow-1">
+          <h3 className="mb-2">
+            Welcome back, {dashboardData.staff_member?.name || userProfile.name || user?.name || 'Clinical Staff'}
+          </h3>
+          <div className="d-flex align-items-center mb-1">
+            <User size={16} className="me-2 opacity-75" />
+            <span className="opacity-90">
+              Staff No: {dashboardData.staff_member?.staff_no || userProfile.staff_no || user?.staff_no || 'N/A'}
+            </span>
+          </div>
+          <div className="d-flex align-items-center mb-1">
+            <Stethoscope size={16} className="me-2 opacity-75" />
+            <span className="opacity-75">
+              {t('clinical.department')}: {dashboardData.staff_member?.department || userProfile.department || user?.department || 'General'}
+            </span>
           </div>
         </div>
       </div>
+    </div>
+  </div>
+</div>
 
         {/* Enhanced Statistics Cards with click handlers */}
         <div className="col-md-3">
@@ -3930,7 +3949,12 @@ const AppointmentsTab: React.FC = () => {
 );
 
   return (
-  <div style={{ minHeight: '100vh', backgroundColor: '#f8f9fa', display: 'flex' }}>
+  <div style={{ 
+    display: 'flex', 
+    height: '100vh', 
+    overflow: 'hidden',
+    background: 'linear-gradient(135deg, #ffffffff 0%, #f0fdf4 100%)' 
+  }}>
     {/* Sidebar */}
     <Sidebar />
     
@@ -3974,6 +3998,9 @@ const AppointmentsTab: React.FC = () => {
         marginLeft: window.innerWidth >= 768 ? (sidebarCollapsed ? '80px' : '280px') : '0',
         paddingTop: window.innerWidth < 768 ? '60px' : '0',
         transition: 'margin-left 0.3s ease',
+        height: '100vh',           // ← ADD THIS
+        overflowY: 'auto',         // ← ADD THIS
+        overflowX: 'hidden', 
       }}
     >
 
@@ -3991,30 +4018,40 @@ const AppointmentsTab: React.FC = () => {
       )}
 
       {/* ADD THIS URGENT ALERT BANNER HERE */}
-      {urgentRequests.length > 0 && (
-        <div className="container-fluid px-4">
-          <div className="alert alert-danger d-flex align-items-center" role="alert">
-            <AlertTriangle size={24} className="me-3" />
-            <div className="flex-grow-1">
-              <h5 className="alert-heading mb-1">
-                {t('clinical.urgent_alert', { count: urgentRequests.length })}
-              </h5>
-              <p className="mb-0">
-                {t('clinical.urgent_warning')}
-              </p>
-            </div>
-            <button 
-              className="btn btn-danger btn-sm"
-              onClick={() => {
-                setActiveTab('appointments');
-                setFilters({ status: 'all', priority: 'urgent' });
-              }}
-            >
-              {t('clinical.process_urgent_cases')}
-            </button>
-          </div>
-        </div>
-      )}
+      {/* ADD THIS URGENT ALERT BANNER RIGHT AFTER MESSAGE DISPLAY */}
+{urgentRequests.length > 0 && (
+  <div className="container-fluid px-4 mb-3">
+    <div 
+      className="alert alert-danger d-flex align-items-center shadow-sm" 
+      role="alert"
+      style={{ borderRadius: '1rem', border: '2px solid #dc3545' }}
+    >
+      <AlertTriangle size={32} className="me-3 flex-shrink-0" />
+      <div className="flex-grow-1">
+        <h5 className="alert-heading mb-1 fw-bold">
+          ⚠️ {t('clinical.urgent_alert', { count: urgentRequests.length })}
+        </h5>
+        <p className="mb-2">
+          {t('clinical.urgent_warning')}
+        </p>
+        <small className="text-muted">
+          Patients: {urgentRequests.map(req => req.patient?.name || 'Unknown').join(', ')}
+        </small>
+      </div>
+      <button 
+        className="btn btn-danger"
+        onClick={() => {
+          setActiveTab('appointments');
+          setFilters({ status: 'all', priority: 'urgent' });
+        }}
+        style={{ borderRadius: '0.5rem', whiteSpace: 'nowrap' }}
+      >
+        <AlertTriangle size={16} className="me-2" />
+        {t('clinical.process_urgent_cases')}
+      </button>
+    </div>
+  </div>
+)}
 
 
 

@@ -19,6 +19,9 @@ const EnhancedMedicalCardViewer: React.FC<MedicalCardViewerProps> = ({
   const [loading, setLoading] = useState(true);
   const [activeSection, setActiveSection] = useState<'info' | 'vitals' | 'history'>('info');
 
+  // MOBILE: Detect mobile device
+  const isMobile = window.innerWidth < 768;
+
   useEffect(() => {
     loadMedicalCard();
     loadVitalsHistory();
@@ -72,9 +75,29 @@ const EnhancedMedicalCardViewer: React.FC<MedicalCardViewerProps> = ({
 
   if (loading) {
     return (
-      <div className="modal fade show d-block" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
-        <div className="modal-dialog modal-xl modal-dialog-centered">
-          <div className="modal-content">
+      <div 
+        className="modal fade show d-block medical-card-modal" 
+        style={{ backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 1055 }}
+        onClick={(e) => {
+          if (e.target === e.currentTarget) onClose();
+        }}
+      >
+        <div 
+          className="modal-dialog modal-dialog-scrollable"
+          style={{
+            margin: isMobile ? '0' : '1.75rem auto',
+            maxWidth: isMobile ? '100%' : '1140px',
+            height: isMobile ? '100vh' : 'auto',
+            maxHeight: isMobile ? '100vh' : 'calc(100vh - 3.5rem)'
+          }}
+        >
+          <div 
+            className="modal-content" 
+            style={{ 
+              borderRadius: isMobile ? '0' : '1rem',
+              height: isMobile ? '100vh' : 'auto'
+            }}
+          >
             <div className="modal-body text-center py-5">
               <div className="spinner-border text-primary" role="status">
                 <span className="visually-hidden">Loading...</span>
@@ -94,16 +117,53 @@ const EnhancedMedicalCardViewer: React.FC<MedicalCardViewerProps> = ({
   const isStaff = !!medicalCard?.staff;
 
   return (
-    <div className="modal fade show d-block" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
-      <div className="modal-dialog modal-xl modal-dialog-scrollable">
-        <div className="modal-content" style={{ borderRadius: '1rem' }}>
-          <div className="modal-header border-0" style={{ background: 'linear-gradient(135deg, #db5858ff 0%, #e94848ff 100%)' }}>
-            <div className="text-white">
-              <h4 className="modal-title mb-1">
-                <User size={24} className="me-2" />
-                Medical Card - {patient?.name}
+    <div 
+      className="modal fade show d-block medical-card-modal" 
+      style={{ backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 1055 }}
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+    >
+      <div 
+        className="modal-dialog modal-dialog-scrollable"
+        style={{
+          margin: isMobile ? '0' : '1.75rem auto',
+          maxWidth: isMobile ? '100%' : '1140px',
+          height: isMobile ? '100vh' : 'auto',
+          maxHeight: isMobile ? '100vh' : 'calc(100vh - 3.5rem)'
+        }}
+      >
+        <div 
+          className="modal-content" 
+          style={{ 
+            borderRadius: isMobile ? '0' : '1rem',
+            height: isMobile ? '100vh' : 'auto'
+          }}
+        >
+          {/* Header */}
+          <div 
+            className="modal-header border-0" 
+            style={{ 
+              background: 'linear-gradient(135deg, #db5858ff 0%, #e94848ff 100%)',
+              padding: isMobile ? '14px 16px' : '16px 24px',
+              flexShrink: 0
+            }}
+          >
+            <div className="text-white" style={{ flex: 1, minWidth: 0 }}>
+              <h4 
+                className="modal-title mb-1 d-flex align-items-center"
+                style={{ fontSize: isMobile ? '1.1rem' : '1.5rem' }}
+              >
+                <User size={isMobile ? 20 : 24} className="me-2 flex-shrink-0" />
+                <span style={{ 
+                  overflow: 'hidden', 
+                  textOverflow: 'ellipsis', 
+                  whiteSpace: 'nowrap' 
+                }}>
+                  Medical Card - {patient?.name}
+                </span>
               </h4>
-              <small className="opacity-75">
+              <small className="opacity-75" style={{ fontSize: isMobile ? '0.75rem' : '0.875rem' }}>
                 {isStaff 
                   ? `Staff No: ${patient?.staff_no} | Department: ${patient?.department}`
                   : `Student ID: ${patient?.student_id} | Department: ${patient?.department}`
@@ -114,17 +174,30 @@ const EnhancedMedicalCardViewer: React.FC<MedicalCardViewerProps> = ({
               type="button"
               className="btn-close btn-close-white"
               onClick={onClose}
+              style={{
+                width: isMobile ? '36px' : '44px',
+                height: isMobile ? '36px' : '44px',
+                flexShrink: 0
+              }}
             />
           </div>
 
           {/* Navigation Tabs */}
-          <ul className="nav nav-tabs px-3 pt-3 border-0">
+          <ul 
+            className="nav nav-tabs px-3 pt-3 border-0"
+            style={{ 
+              flexShrink: 0,
+              overflowX: 'auto',
+              whiteSpace: 'nowrap'
+            }}
+          >
             <li className="nav-item">
               <button
                 className={`nav-link ${activeSection === 'info' ? 'active' : ''}`}
                 onClick={() => setActiveSection('info')}
+                style={{ fontSize: isMobile ? '0.85rem' : '1rem' }}
               >
-                <User size={16} className="me-1" />
+                <User size={isMobile ? 14 : 16} className="me-1" />
                 Basic Info
               </button>
             </li>
@@ -132,8 +205,9 @@ const EnhancedMedicalCardViewer: React.FC<MedicalCardViewerProps> = ({
               <button
                 className={`nav-link ${activeSection === 'vitals' ? 'active' : ''}`}
                 onClick={() => setActiveSection('vitals')}
+                style={{ fontSize: isMobile ? '0.85rem' : '1rem' }}
               >
-                <Heart size={16} className="me-1" />
+                <Heart size={isMobile ? 14 : 16} className="me-1" />
                 Latest Vitals
               </button>
             </li>
@@ -141,29 +215,48 @@ const EnhancedMedicalCardViewer: React.FC<MedicalCardViewerProps> = ({
               <button
                 className={`nav-link ${activeSection === 'history' ? 'active' : ''}`}
                 onClick={() => setActiveSection('history')}
+                style={{ fontSize: isMobile ? '0.85rem' : '1rem' }}
               >
-                <Clock size={16} className="me-1" />
+                <Clock size={isMobile ? 14 : 16} className="me-1" />
                 Vitals History
               </button>
             </li>
           </ul>
 
-          <div className="modal-body p-4">
+          {/* Body - SCROLLABLE */}
+          <div 
+            className="modal-body" 
+            style={{ 
+              padding: isMobile ? '12px 16px' : '24px',
+              overflowY: 'auto',
+              flex: 1,
+              WebkitOverflowScrolling: 'touch'
+            }}
+          >
             {/* Basic Information Section */}
             {activeSection === 'info' && (
               <div>
                 {/* Patient Demographics */}
-                <div className="card mb-3">
-                  <div className="card-header bg-light">
-                    <h5 className="mb-0">
-                      <User size={20} className="me-2" />
+                <div className="card mb-3 shadow-sm border-0">
+                  <div 
+                    className="card-header bg-light"
+                    style={{ padding: isMobile ? '10px 12px' : '12px 16px' }}
+                  >
+                    <h5 
+                      className="mb-0 d-flex align-items-center"
+                      style={{ fontSize: isMobile ? '0.95rem' : '1.125rem' }}
+                    >
+                      <User size={isMobile ? 16 : 20} className="me-2" />
                       Patient Information
                     </h5>
                   </div>
-                  <div className="card-body">
+                  <div 
+                    className="card-body"
+                    style={{ padding: isMobile ? '12px' : '16px' }}
+                  >
                     <div className="row">
                       <div className="col-md-6">
-                        <dl className="row mb-0">
+                        <dl className="row mb-0" style={{ fontSize: isMobile ? '0.85rem' : '1rem' }}>
                           <dt className="col-sm-5">Full Name:</dt>
                           <dd className="col-sm-7">{patient?.name}</dd>
 
@@ -186,7 +279,7 @@ const EnhancedMedicalCardViewer: React.FC<MedicalCardViewerProps> = ({
                         </dl>
                       </div>
                       <div className="col-md-6">
-                        <dl className="row mb-0">
+                        <dl className="row mb-0" style={{ fontSize: isMobile ? '0.85rem' : '1rem' }}>
                           <dt className="col-sm-5">{isStaff ? 'Staff No:' : 'Student ID:'}</dt>
                           <dd className="col-sm-7">
                             {isStaff ? patient?.staff_no : patient?.student_id}
@@ -207,17 +300,26 @@ const EnhancedMedicalCardViewer: React.FC<MedicalCardViewerProps> = ({
                 </div>
 
                 {/* Emergency Contact */}
-                <div className="card mb-3">
-                  <div className="card-header bg-light">
-                    <h5 className="mb-0">
-                      <AlertCircle size={20} className="me-2 text-danger" />
+                <div className="card mb-3 shadow-sm border-0">
+                  <div 
+                    className="card-header bg-light"
+                    style={{ padding: isMobile ? '10px 12px' : '12px 16px' }}
+                  >
+                    <h5 
+                      className="mb-0 d-flex align-items-center"
+                      style={{ fontSize: isMobile ? '0.95rem' : '1.125rem' }}
+                    >
+                      <AlertCircle size={isMobile ? 16 : 20} className="me-2 text-danger" />
                       Emergency Contact
                     </h5>
                   </div>
-                  <div className="card-body">
+                  <div 
+                    className="card-body"
+                    style={{ padding: isMobile ? '12px' : '16px' }}
+                  >
                     <div className="row">
                       <div className="col-md-6">
-                        <dl className="row mb-0">
+                        <dl className="row mb-0" style={{ fontSize: isMobile ? '0.85rem' : '1rem' }}>
                           <dt className="col-sm-5">Name:</dt>
                           <dd className="col-sm-7">
                             {medicalCard?.medical_card?.emergency_contact?.name || 
@@ -232,7 +334,7 @@ const EnhancedMedicalCardViewer: React.FC<MedicalCardViewerProps> = ({
                         </dl>
                       </div>
                       <div className="col-md-6">
-                        <dl className="row mb-0">
+                        <dl className="row mb-0" style={{ fontSize: isMobile ? '0.85rem' : '1rem' }}>
                           <dt className="col-sm-5">Phone:</dt>
                           <dd className="col-sm-7">
                             {medicalCard?.medical_card?.emergency_contact?.phone ||
@@ -251,40 +353,81 @@ const EnhancedMedicalCardViewer: React.FC<MedicalCardViewerProps> = ({
                 </div>
 
                 {/* Medical History */}
-                <div className="card mb-3">
-                  <div className="card-header bg-light">
-                    <h5 className="mb-0">
-                      <FileText size={20} className="me-2" />
+                <div className="card mb-3 shadow-sm border-0">
+                  <div 
+                    className="card-header bg-light"
+                    style={{ padding: isMobile ? '10px 12px' : '12px 16px' }}
+                  >
+                    <h5 
+                      className="mb-0 d-flex align-items-center"
+                      style={{ fontSize: isMobile ? '0.95rem' : '1.125rem' }}
+                    >
+                      <FileText size={isMobile ? 16 : 20} className="me-2" />
                       Medical History
                     </h5>
                   </div>
-                  <div className="card-body">
+                  <div 
+                    className="card-body"
+                    style={{ padding: isMobile ? '12px' : '16px' }}
+                  >
                     <div className="row">
                       <div className="col-md-6">
-                        <h6 className="text-primary">Allergies</h6>
-                        <p className="text-muted">
+                        <h6 
+                          className="text-primary"
+                          style={{ fontSize: isMobile ? '0.9rem' : '1rem' }}
+                        >
+                          Allergies
+                        </h6>
+                        <p 
+                          className="text-muted"
+                          style={{ fontSize: isMobile ? '0.85rem' : '1rem' }}
+                        >
                           {medicalCard?.medical_card?.allergies?.length > 0
                             ? medicalCard.medical_card.allergies.join(', ')
                             : patient?.allergies || 'No known allergies'}
                         </p>
 
-                        <h6 className="text-primary mt-3">Current Medications</h6>
-                        <p className="text-muted">
+                        <h6 
+                          className="text-primary mt-3"
+                          style={{ fontSize: isMobile ? '0.9rem' : '1rem' }}
+                        >
+                          Current Medications
+                        </h6>
+                        <p 
+                          className="text-muted"
+                          style={{ fontSize: isMobile ? '0.85rem' : '1rem' }}
+                        >
                           {medicalCard?.medical_card?.current_medications?.length > 0
                             ? medicalCard.medical_card.current_medications.join(', ')
                             : 'None'}
                         </p>
                       </div>
                       <div className="col-md-6">
-                        <h6 className="text-primary">Previous Conditions</h6>
-                        <p className="text-muted">
+                        <h6 
+                          className="text-primary"
+                          style={{ fontSize: isMobile ? '0.9rem' : '1rem' }}
+                        >
+                          Previous Conditions
+                        </h6>
+                        <p 
+                          className="text-muted"
+                          style={{ fontSize: isMobile ? '0.85rem' : '1rem' }}
+                        >
                           {medicalCard?.medical_card?.previous_conditions?.length > 0
                             ? medicalCard.medical_card.previous_conditions.join(', ')
                             : patient?.medical_history || 'No previous conditions recorded'}
                         </p>
 
-                        <h6 className="text-primary mt-3">Family History</h6>
-                        <p className="text-muted">
+                        <h6 
+                          className="text-primary mt-3"
+                          style={{ fontSize: isMobile ? '0.9rem' : '1rem' }}
+                        >
+                          Family History
+                        </h6>
+                        <p 
+                          className="text-muted"
+                          style={{ fontSize: isMobile ? '0.85rem' : '1rem' }}
+                        >
                           {medicalCard?.medical_card?.family_history?.length > 0
                             ? medicalCard.medical_card.family_history.join(', ')
                             : 'No family history recorded'}
@@ -294,8 +437,18 @@ const EnhancedMedicalCardViewer: React.FC<MedicalCardViewerProps> = ({
                     
                     {patient?.addictions && (
                       <div className="mt-3">
-                        <h6 className="text-primary">Addictions</h6>
-                        <p className="text-muted">{patient.addictions}</p>
+                        <h6 
+                          className="text-primary"
+                          style={{ fontSize: isMobile ? '0.9rem' : '1rem' }}
+                        >
+                          Addictions
+                        </h6>
+                        <p 
+                          className="text-muted"
+                          style={{ fontSize: isMobile ? '0.85rem' : '1rem' }}
+                        >
+                          {patient.addictions}
+                        </p>
                       </div>
                     )}
                   </div>
@@ -303,15 +456,24 @@ const EnhancedMedicalCardViewer: React.FC<MedicalCardViewerProps> = ({
 
                 {/* Insurance Information */}
                 {medicalCard?.medical_card?.insurance_info && (
-                  <div className="card">
-                    <div className="card-header bg-light">
-                      <h5 className="mb-0">
-                        <FileText size={20} className="me-2" />
+                  <div className="card shadow-sm border-0">
+                    <div 
+                      className="card-header bg-light"
+                      style={{ padding: isMobile ? '10px 12px' : '12px 16px' }}
+                    >
+                      <h5 
+                        className="mb-0 d-flex align-items-center"
+                        style={{ fontSize: isMobile ? '0.95rem' : '1.125rem' }}
+                      >
+                        <FileText size={isMobile ? 16 : 20} className="me-2" />
                         Insurance Information
                       </h5>
                     </div>
-                    <div className="card-body">
-                      <dl className="row mb-0">
+                    <div 
+                      className="card-body"
+                      style={{ padding: isMobile ? '12px' : '16px' }}
+                    >
+                      <dl className="row mb-0" style={{ fontSize: isMobile ? '0.85rem' : '1rem' }}>
                         <dt className="col-sm-3">Provider:</dt>
                         <dd className="col-sm-3">{medicalCard.medical_card.insurance_info.provider || 'N/A'}</dd>
 
@@ -332,8 +494,14 @@ const EnhancedMedicalCardViewer: React.FC<MedicalCardViewerProps> = ({
               <div>
                 {latestVitals ? (
                   <div>
-                    <div className="alert alert-info d-flex align-items-center mb-4">
-                      <Activity size={20} className="me-2" />
+                    <div 
+                      className="alert alert-info d-flex align-items-center mb-4"
+                      style={{ 
+                        padding: isMobile ? '12px' : '16px',
+                        fontSize: isMobile ? '0.85rem' : '1rem'
+                      }}
+                    >
+                      <Activity size={isMobile ? 16 : 20} className="me-2" />
                       <div>
                         <strong>Most Recent Reading</strong>
                         <small className="d-block">
@@ -344,11 +512,24 @@ const EnhancedMedicalCardViewer: React.FC<MedicalCardViewerProps> = ({
 
                     <div className="row g-3">
                       <div className="col-md-6">
-                        <div className="card h-100">
-                          <div className="card-body text-center">
-                            <Heart size={32} className="text-danger mb-2" />
-                            <h3 className="mb-1">{latestVitals.blood_pressure}</h3>
-                            <p className="text-muted mb-0">Blood Pressure (mmHg)</p>
+                        <div className="card h-100 shadow-sm border-0">
+                          <div 
+                            className="card-body text-center"
+                            style={{ padding: isMobile ? '14px' : '20px' }}
+                          >
+                            <Heart size={isMobile ? 28 : 32} className="text-danger mb-2" />
+                            <h3 
+                              className="mb-1"
+                              style={{ fontSize: isMobile ? '1.5rem' : '2rem' }}
+                            >
+                              {latestVitals.blood_pressure}
+                            </h3>
+                            <p 
+                              className="text-muted mb-0"
+                              style={{ fontSize: isMobile ? '0.85rem' : '1rem' }}
+                            >
+                              Blood Pressure (mmHg)
+                            </p>
                             {latestVitals.alerts.some((a: any) => a.type.includes('BLOOD_PRESSURE')) && (
                               <span className="badge bg-warning text-dark mt-2">Abnormal</span>
                             )}
@@ -357,11 +538,24 @@ const EnhancedMedicalCardViewer: React.FC<MedicalCardViewerProps> = ({
                       </div>
 
                       <div className="col-md-6">
-                        <div className="card h-100">
-                          <div className="card-body text-center">
-                            <Activity size={32} className="text-success mb-2" />
-                            <h3 className="mb-1">{latestVitals.heart_rate} bpm</h3>
-                            <p className="text-muted mb-0">Heart Rate</p>
+                        <div className="card h-100 shadow-sm border-0">
+                          <div 
+                            className="card-body text-center"
+                            style={{ padding: isMobile ? '14px' : '20px' }}
+                          >
+                            <Activity size={isMobile ? 28 : 32} className="text-success mb-2" />
+                            <h3 
+                              className="mb-1"
+                              style={{ fontSize: isMobile ? '1.5rem' : '2rem' }}
+                            >
+                              {latestVitals.heart_rate} bpm
+                            </h3>
+                            <p 
+                              className="text-muted mb-0"
+                              style={{ fontSize: isMobile ? '0.85rem' : '1rem' }}
+                            >
+                              Heart Rate
+                            </p>
                             {latestVitals.alerts.some((a: any) => a.type.includes('HEART_RATE')) && (
                               <span className="badge bg-warning text-dark mt-2">Abnormal</span>
                             )}
@@ -370,11 +564,24 @@ const EnhancedMedicalCardViewer: React.FC<MedicalCardViewerProps> = ({
                       </div>
 
                       <div className="col-md-4">
-                        <div className="card h-100">
-                          <div className="card-body text-center">
-                            <TrendingUp size={28} className="text-warning mb-2" />
-                            <h4 className="mb-1">{latestVitals.temperature}</h4>
-                            <p className="text-muted mb-0">Temperature</p>
+                        <div className="card h-100 shadow-sm border-0">
+                          <div 
+                            className="card-body text-center"
+                            style={{ padding: isMobile ? '14px' : '20px' }}
+                          >
+                            <TrendingUp size={isMobile ? 24 : 28} className="text-warning mb-2" />
+                            <h4 
+                              className="mb-1"
+                              style={{ fontSize: isMobile ? '1.25rem' : '1.5rem' }}
+                            >
+                              {latestVitals.temperature}
+                            </h4>
+                            <p 
+                              className="text-muted mb-0"
+                              style={{ fontSize: isMobile ? '0.85rem' : '1rem' }}
+                            >
+                              Temperature
+                            </p>
                             {latestVitals.alerts.some((a: any) => a.type === 'FEVER' || a.type === 'HYPOTHERMIA') && (
                               <span className="badge bg-danger mt-2">Alert</span>
                             )}
@@ -384,11 +591,24 @@ const EnhancedMedicalCardViewer: React.FC<MedicalCardViewerProps> = ({
 
                       {latestVitals.respiratory_rate && (
                         <div className="col-md-4">
-                          <div className="card h-100">
-                            <div className="card-body text-center">
-                              <Activity size={28} className="text-info mb-2" />
-                              <h4 className="mb-1">{latestVitals.respiratory_rate}</h4>
-                              <p className="text-muted mb-0">Resp. Rate (breaths/min)</p>
+                          <div className="card h-100 shadow-sm border-0">
+                            <div 
+                              className="card-body text-center"
+                              style={{ padding: isMobile ? '14px' : '20px' }}
+                            >
+                              <Activity size={isMobile ? 24 : 28} className="text-info mb-2" />
+                              <h4 
+                                className="mb-1"
+                                style={{ fontSize: isMobile ? '1.25rem' : '1.5rem' }}
+                              >
+                                {latestVitals.respiratory_rate}
+                              </h4>
+                              <p 
+                                className="text-muted mb-0"
+                                style={{ fontSize: isMobile ? '0.85rem' : '1rem' }}
+                              >
+                                Resp. Rate (breaths/min)
+                              </p>
                             </div>
                           </div>
                         </div>
@@ -396,11 +616,24 @@ const EnhancedMedicalCardViewer: React.FC<MedicalCardViewerProps> = ({
 
                       {latestVitals.oxygen_saturation && (
                         <div className="col-md-4">
-                          <div className="card h-100">
-                            <div className="card-body text-center">
-                              <Activity size={28} className="text-primary mb-2" />
-                              <h4 className="mb-1">{latestVitals.oxygen_saturation}%</h4>
-                              <p className="text-muted mb-0">Oxygen Saturation</p>
+                          <div className="card h-100 shadow-sm border-0">
+                            <div 
+                              className="card-body text-center"
+                              style={{ padding: isMobile ? '14px' : '20px' }}
+                            >
+                              <Activity size={isMobile ? 24 : 28} className="text-primary mb-2" />
+                              <h4 
+                                className="mb-1"
+                                style={{ fontSize: isMobile ? '1.25rem' : '1.5rem' }}
+                              >
+                                {latestVitals.oxygen_saturation}%
+                              </h4>
+                              <p 
+                                className="text-muted mb-0"
+                                style={{ fontSize: isMobile ? '0.85rem' : '1rem' }}
+                              >
+                                Oxygen Saturation
+                              </p>
                               {latestVitals.alerts.some((a: any) => a.type === 'LOW_OXYGEN') && (
                                 <span className="badge bg-danger mt-2">Critical</span>
                               )}
@@ -411,9 +644,18 @@ const EnhancedMedicalCardViewer: React.FC<MedicalCardViewerProps> = ({
                     </div>
 
                     {latestVitals.alerts.length > 0 && (
-                      <div className="alert alert-warning mt-4">
-                        <h6 className="alert-heading">
-                          <AlertCircle size={20} className="me-2" />
+                      <div 
+                        className="alert alert-warning mt-4"
+                        style={{ 
+                          padding: isMobile ? '12px' : '16px',
+                          fontSize: isMobile ? '0.85rem' : '1rem'
+                        }}
+                      >
+                        <h6 
+                          className="alert-heading"
+                          style={{ fontSize: isMobile ? '0.9rem' : '1rem' }}
+                        >
+                          <AlertCircle size={isMobile ? 16 : 20} className="me-2" />
                           Health Alerts
                         </h6>
                         <ul className="mb-0">
@@ -428,8 +670,10 @@ const EnhancedMedicalCardViewer: React.FC<MedicalCardViewerProps> = ({
                   </div>
                 ) : (
                   <div className="text-center py-5 text-muted">
-                    <Heart size={48} className="mb-3" />
-                    <p>No vital signs recorded yet</p>
+                    <Heart size={isMobile ? 40 : 48} className="mb-3" />
+                    <p style={{ fontSize: isMobile ? '0.9rem' : '1rem' }}>
+                      No vital signs recorded yet
+                    </p>
                   </div>
                 )}
               </div>
@@ -438,84 +682,157 @@ const EnhancedMedicalCardViewer: React.FC<MedicalCardViewerProps> = ({
             {/* Vitals History Section */}
             {activeSection === 'history' && (
               <div>
-                <div className="d-flex justify-content-between align-items-center mb-3">
-                  <h5>
-                    <Clock size={20} className="me-2" />
+                <div 
+                  className="d-flex justify-content-between align-items-center mb-3"
+                  style={{ 
+                    flexDirection: isMobile ? 'column' : 'row',
+                    gap: isMobile ? '10px' : '0',
+                    alignItems: isMobile ? 'flex-start' : 'center'
+                  }}
+                >
+                  <h5 
+                    className="d-flex align-items-center"
+                    style={{ 
+                      fontSize: isMobile ? '1rem' : '1.25rem',
+                      marginBottom: 0
+                    }}
+                  >
+                    <Clock size={isMobile ? 16 : 20} className="me-2" />
                     Vital Signs History (Last 30 Days)
                   </h5>
-                  <span className="badge bg-primary">{vitalsHistory.length} Records</span>
+                  <span className="badge bg-primary">
+                    {vitalsHistory.length} Records
+                  </span>
                 </div>
 
                 {vitalsHistory.length === 0 ? (
                   <div className="text-center py-5 text-muted">
-                    <Calendar size={48} className="mb-3" />
-                    <p>No vitals history available</p>
+                    <Calendar size={isMobile ? 40 : 48} className="mb-3" />
+                    <p style={{ fontSize: isMobile ? '0.9rem' : '1rem' }}>
+                      No vitals history available
+                    </p>
                   </div>
                 ) : (
-                  <div className="table-responsive">
-                    <table className="table table-hover align-middle">
-                      <thead className="table-light">
-                        <tr>
-                          <th>Date & Time</th>
-                          <th>BP</th>
-                          <th>HR</th>
-                          <th>Temp</th>
-                          <th>Resp</th>
-                          <th>SpO2</th>
-                          <th>Recorded By</th>
-                          <th>Status</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {vitalsHistory.map((vital, idx) => (
-                          <tr key={idx}>
-                            <td>
-                              <small>{new Date(vital.date).toLocaleString('en-US', {
-                                month: 'short',
-                                day: 'numeric',
-                                hour: '2-digit',
-                                minute: '2-digit'
-                              })}</small>
-                            </td>
-                            <td>
-                              <Heart size={14} className="me-1 text-danger" />
-                              {vital.blood_pressure}
-                            </td>
-                            <td>
-                              <Activity size={14} className="me-1 text-success" />
-                              {vital.heart_rate}
-                            </td>
-                            <td>
-                              <TrendingUp size={14} className="me-1 text-warning" />
-                              {vital.temperature}
-                            </td>
-                            <td>{vital.respiratory_rate || '-'}</td>
-                            <td>{vital.oxygen_saturation ? `${vital.oxygen_saturation}%` : '-'}</td>
-                            <td>
-                              <small className="text-muted">{vital.recorded_by}</small>
-                            </td>
-                            <td>
-                              {vital.alerts.length > 0 ? (
-                                <span className="badge bg-warning text-dark">
-                                  <AlertCircle size={12} className="me-1" />
-                                  {vital.alerts.length} Alert{vital.alerts.length > 1 ? 's' : ''}
-                                </span>
-                              ) : (
-                                <span className="badge bg-success">Normal</span>
-                              )}
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
+                  <div className="card shadow-sm border-0">
+                    <div className="card-body p-0">
+                      <div 
+                        className="table-responsive"
+                        style={{
+                          marginLeft: isMobile ? '-16px' : '0',
+                          marginRight: isMobile ? '-16px' : '0',
+                          paddingLeft: isMobile ? '16px' : '0',
+                          paddingRight: isMobile ? '16px' : '0',
+                          maxHeight: isMobile ? '400px' : '500px',
+                          overflowY: 'auto',
+                          overflowX: 'auto'
+                        }}
+                      >
+                        <table 
+                          className="table table-hover align-middle mb-0"
+                          style={{
+                            fontSize: isMobile ? '0.75rem' : '0.875rem',
+                            minWidth: isMobile ? '700px' : 'auto'
+                          }}
+                        >
+                          <thead className="table-light">
+                            <tr>
+                              <th style={{ padding: isMobile ? '8px 6px' : '12px' }}>Date & Time</th>
+                              <th style={{ padding: isMobile ? '8px 6px' : '12px' }}>BP</th>
+                              <th style={{ padding: isMobile ? '8px 6px' : '12px' }}>HR</th>
+                              <th style={{ padding: isMobile ? '8px 6px' : '12px' }}>Temp</th>
+                              <th style={{ padding: isMobile ? '8px 6px' : '12px' }}>Resp</th>
+                              <th style={{ padding: isMobile ? '8px 6px' : '12px' }}>SpO2</th>
+                              <th style={{ padding: isMobile ? '8px 6px' : '12px' }}>By</th>
+                              <th style={{ padding: isMobile ? '8px 6px' : '12px' }}>Status</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {vitalsHistory.map((vital, idx) => (
+                              <tr key={idx}>
+                                <td style={{ padding: isMobile ? '8px 6px' : '12px' }}>
+                                  <Clock size={12} className="me-1 text-muted" />
+                                  <small style={{ fontSize: isMobile ? '0.7rem' : '0.8rem' }}>
+                                    {new Date(vital.date).toLocaleString('en-US', {
+                                      month: 'short',
+                                      day: 'numeric',
+                                      hour: '2-digit',
+                                      minute: '2-digit'
+                                    })}
+                                  </small>
+                                </td>
+                                <td style={{ padding: isMobile ? '8px 6px' : '12px' }}>
+                                  <Heart size={12} className="me-1 text-danger" />
+                                  <strong>{vital.blood_pressure}</strong>
+                                </td>
+                                <td style={{ padding: isMobile ? '8px 6px' : '12px' }}>
+                                  <Activity size={12} className="me-1 text-success" />
+                                  <strong>{vital.heart_rate}</strong>
+                                </td>
+                                <td style={{ padding: isMobile ? '8px 6px' : '12px' }}>
+                                  <TrendingUp size={12} className="me-1 text-warning" />
+                                  <strong>{vital.temperature}</strong>
+                                </td>
+                                <td style={{ padding: isMobile ? '8px 6px' : '12px' }}>
+                                  {vital.respiratory_rate || '-'}
+                                </td>
+                                <td style={{ padding: isMobile ? '8px 6px' : '12px' }}>
+                                  {vital.oxygen_saturation ? `${vital.oxygen_saturation}%` : '-'}
+                                </td>
+                                <td style={{ padding: isMobile ? '8px 6px' : '12px' }}>
+                                  <small 
+                                    className="text-muted"
+                                    style={{ fontSize: isMobile ? '0.65rem' : '0.75rem' }}
+                                  >
+                                    {vital.recorded_by}
+                                  </small>
+                                </td>
+                                <td style={{ padding: isMobile ? '8px 6px' : '12px' }}>
+                                  {vital.alerts.length > 0 ? (
+                                    <span 
+                                      className="badge bg-warning text-dark"
+                                      style={{ fontSize: isMobile ? '0.65rem' : '0.7rem' }}
+                                    >
+                                      <AlertCircle size={10} className="me-1" />
+                                      {vital.alerts.length} Alert{vital.alerts.length > 1 ? 's' : ''}
+                                    </span>
+                                  ) : (
+                                    <span 
+                                      className="badge bg-success"
+                                      style={{ fontSize: isMobile ? '0.65rem' : '0.7rem' }}
+                                    >
+                                      Normal
+                                    </span>
+                                  )}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
                   </div>
                 )}
               </div>
             )}
           </div>
 
-          <div className="modal-footer border-0">
-            <button className="btn btn-secondary" onClick={onClose}>
+          {/* Footer */}
+          <div 
+            className="modal-footer border-0 bg-light"
+            style={{ 
+              padding: isMobile ? '10px 16px' : '12px 24px',
+              flexShrink: 0
+            }}
+          >
+            <button 
+              className="btn btn-secondary" 
+              onClick={onClose}
+              style={{
+                fontSize: isMobile ? '0.85rem' : '1rem',
+                padding: isMobile ? '8px 16px' : '10px 20px',
+                minHeight: isMobile ? '38px' : '44px'
+              }}
+            >
               Close
             </button>
           </div>

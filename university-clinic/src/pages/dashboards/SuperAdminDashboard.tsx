@@ -32,7 +32,7 @@ interface User {
   name: string;
   email: string;
   role: string;
-  department?: string;
+  department?: string | Department;
   department_id?: string | number;
   staff_type?: string;
   status?: string;
@@ -738,6 +738,16 @@ const DonutChart = ({ data, colors, size = 140 }: { data: number[], colors: stri
     ]
   };
 
+  /**
+ * Helper function to safely get department name
+ */
+const getDepartmentName = (department: string | Department | undefined): string => {
+  if (!department) return '-';
+  if (typeof department === 'string') return department;
+  if (typeof department === 'object' && department.name) return department.name;
+  return '-';
+};
+
   const currentStats = getCurrentStats();
   const statusData = {
     labels: [
@@ -854,21 +864,21 @@ const Sidebar = () => {
 
       {/* Sidebar */}
       <div
-        style={{
-          position: 'fixed',
-          top: 0,
-          left: window.innerWidth < 768 ? (sidebarOpen ? 0 : '-300px') : 0,
-          bottom: 0,
-          width: sidebarCollapsed && window.innerWidth >= 768 ? '85px' : '280px',
-          background: '#1a1d29',
-          boxShadow: '4px 0 24px rgba(0, 0, 0, 0.12)',
-          transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-          zIndex: 1050,
-          display: 'flex',
-          flexDirection: 'column',
-          overflow: 'hidden',
-        }}
-      >
+  style={{
+    position: 'fixed',
+    top: 0,
+    left: window.innerWidth < 768 ? (sidebarOpen ? 0 : '-300px') : 0,
+    height: '100vh',                      // ← CHANGE: Replace 'bottom: 0' with this
+    width: sidebarCollapsed && window.innerWidth >= 768 ? '85px' : '280px',
+    background: '#1a1d29',
+    boxShadow: '4px 0 24px rgba(0, 0, 0, 0.12)',
+    transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+    zIndex: 1050,
+    display: 'flex',
+    flexDirection: 'column',
+    overflow: 'hidden',                   // ← Keep this! Prevents sidebar scrolling
+  }}
+>
         {/* Header */}
         <div
           style={{
@@ -1145,7 +1155,12 @@ const Sidebar = () => {
   const chartData = getChartData();
 
   return (
-  <div className="min-vh-100" style={{ backgroundColor: '#f8f9fa', display: 'flex' }}>
+  <div style={{ 
+    display: 'flex', 
+    height: '100vh', 
+    overflow: 'hidden',
+    background: '#f8f9fa'
+  }}>
     {/* Sidebar */}
     <Sidebar />
 
@@ -1184,13 +1199,16 @@ const Sidebar = () => {
 
     {/* Main Content Wrapper */}
     <div
-      style={{
-        flex: 1,
-        marginLeft: window.innerWidth >= 768 ? (sidebarCollapsed ? '85px' : '280px') : '0',
-        paddingTop: window.innerWidth < 768 ? '80px' : '40px',
-        transition: 'margin-left 0.3s ease',
-      }}
-    >
+  style={{
+    flex: 1,
+    marginLeft: window.innerWidth >= 768 ? (sidebarCollapsed ? '85px' : '280px') : '0',
+    paddingTop: window.innerWidth < 768 ? '80px' : '40px',
+    transition: 'margin-left 0.3s ease',
+    height: '100vh',              // ← ADD THIS LINE
+    overflowY: 'auto',            // ← ADD THIS LINE
+    overflowX: 'hidden',          // ← ADD THIS LINE (optional, prevents horizontal scroll)
+  }}
+>
       
 
       <div className="container-fluid px-4">
@@ -1843,7 +1861,7 @@ const Sidebar = () => {
                               <th>{t('superadmin.name')}</th>
                               <th>{t('superadmin.email')}</th>
                               <th>{t('superadmin.role')}</th>
-                              <th>{t('superadmin.department')}</th>
+                              <th>{t('superadmin.departments')}</th>
                               <th>{t('common.status')}</th>
                               <th>{t('superadmin.created')}</th>
                               <th>{t('superadmin.actions')}</th>
@@ -1864,7 +1882,11 @@ const Sidebar = () => {
                                     {t(`superadmin.${systemUser.role?.replace('_', '')}`)}
                                   </span>
                                 </td>
-                                <td>{systemUser.department || '-'}</td>
+                                <td>
+  {typeof systemUser.department === 'object' && systemUser.department !== null
+    ? systemUser.department.name
+    : systemUser.department || '-'}
+</td>
                                 <td>
                                   <span className={`badge ${
                                     systemUser.status === 'active' ? 'bg-success' : 'bg-warning'

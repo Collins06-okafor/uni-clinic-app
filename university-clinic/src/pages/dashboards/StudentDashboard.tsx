@@ -185,6 +185,8 @@ const StudentAppointmentSystem: React.FC<Props> = ({
   const [appointmentToCancel, setAppointmentToCancel] = useState<string | null>(null);
 
   const [medicalHistory, setMedicalHistory] = useState<MedicalRecord[]>([]);
+
+  const [profileLoading, setProfileLoading] = useState<boolean>(true);
   
 
   // Profile state
@@ -592,6 +594,7 @@ const safeString = (value: any): string => {
   // 1. Add a new function to fetch user profile from backend
 const fetchUserProfile = async (): Promise<void> => {
   try {
+    setProfileLoading(true); // Start loading
     const token = getAuthToken();
     console.log('🔑 Token:', token ? 'EXISTS' : 'MISSING');
     
@@ -655,6 +658,8 @@ const fetchUserProfile = async (): Promise<void> => {
   } catch (error) {
     console.error('💥 Error fetching user profile:', error);
     setProfileComplete(false);
+  } finally {
+    setProfileLoading(false); // Always stop loading, even if there's an error
   }
 };
 
@@ -1462,7 +1467,7 @@ const Sidebar = () => {
           position: 'fixed',
           top: 0,
           left: isMobile ? (sidebarOpen ? 0 : '-300px') : 0,
-          bottom: 0,
+          height: '100vh',  // ← CHANGE THIS LINE
           width: sidebarCollapsed && !isMobile ? '85px' : '280px',
           background: '#1a1d29',
           boxShadow: '4px 0 24px rgba(0, 0, 0, 0.12)',
@@ -1602,15 +1607,14 @@ const Sidebar = () => {
 
         {/* ===== NAVIGATION ===== */}
         <nav
-          style={{
-            flex: isMobile ? 'none' : 1,
-            flexShrink: isMobile ? 0 : 1,
-            overflowY: 'visible',
-            overflowX: 'hidden',
-            padding: sidebarCollapsed && !isMobile ? '12px 8px' : isMobile ? '6px 10px' : '16px 12px',
-            minHeight: isMobile ? 'auto' : 0,
-          }}
-        >
+  style={{
+    flex: 1,
+    overflowY: 'auto',
+    overflowX: 'hidden',
+    padding: sidebarCollapsed && !isMobile ? '12px 8px' : isMobile ? '6px 10px' : '16px 12px',
+    minHeight: 0,
+  }}
+>
           {/* Menu Section Label */}
           {!(sidebarCollapsed && !isMobile) && (
             <div
@@ -1763,18 +1767,20 @@ const Sidebar = () => {
           </button>
         </nav>
 
-        {/* ===== SPACER (Desktop only) ===== */}
-        {!isMobile && <div style={{ flex: 1, minHeight: 0 }} />}
+        {/* ===== SPACER (Desktop only) ===== 
+        {!isMobile && <div style={{ flex: 1, minHeight: 0 }} />}*/}
 
         {/* ===== FOOTER ===== */}
         <div
-          style={{
-            padding: sidebarCollapsed && !isMobile ? '16px 12px' : isMobile ? '8px 12px' : '16px',
-            borderTop: '1px solid rgba(255, 255, 255, 0.08)',
-            background: 'linear-gradient(180deg, transparent 0%, rgba(0, 0, 0, 0.2) 100%)',
-            flexShrink: 0,
-          }}
-        >
+  style={{
+    padding: sidebarCollapsed && !isMobile ? '16px 12px' : isMobile ? '8px 12px' : '16px',
+    borderTop: '1px solid rgba(255, 255, 255, 0.08)',
+    background: 'linear-gradient(180deg, transparent 0%, rgba(0, 0, 0, 0.2) 100%)',
+    flexShrink: 0,
+    flexGrow: 0,
+    minHeight: 'auto',
+  }}
+>
           {!(sidebarCollapsed && !isMobile) ? (
             <div>
               {/* User Info Display */}
@@ -1994,8 +2000,10 @@ const Sidebar = () => {
   <div 
     className="dashboard-wrapper"
     style={{
-      minHeight: '100vh',
-      background: 'linear-gradient(135deg, #e0f2fe 0%, #f0fdf4 100%)',
+      display: 'flex',
+      height: '100vh',
+      overflow: 'hidden',
+      background: '#ffffff',
       margin: 0,
       padding: 0,
       width: '100%'
@@ -2007,18 +2015,23 @@ const Sidebar = () => {
     {/* Main Content Container */}
     <div 
       style={{
-        // ✅ Use window.innerWidth directly like AcademicStaffDashboard
         marginLeft: window.innerWidth < 768 ? 0 : (sidebarCollapsed ? '85px' : '280px'),
         transition: 'margin-left 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
         padding: window.innerWidth < 768 ? '20px 16px' : '40px 32px',
+        height: '100vh',           // ← ADD THIS
+        overflowY: 'auto',         // ← ADD THIS
+        overflowX: 'hidden',       // ← ADD THIS
+        flex: 1,                   // ← ADD THIS
       }}
     >
       {/* Mobile Header */}
       {window.innerWidth < 768 && (
         <div
           style={{
-            position: 'sticky',
+            position: 'fixed',
             top: 0,
+            left: 0,
+            right: 0,
             background: 'white',
             boxShadow: '0 2px 8px rgba(0, 0, 0, 0.1)',
             padding: '16px',
@@ -2058,10 +2071,10 @@ const Sidebar = () => {
       <div 
         className="student-appointment-container" 
         style={{ 
-          paddingTop: window.innerWidth < 768 ? '70px' : '5px',
+          paddingTop: window.innerWidth < 768 ? '0px' : '5px',
           width: '100%',
           margin: 0,
-          padding: window.innerWidth < 768 ? '70px 15px 15px 15px' : '5px 15px',
+          padding: window.innerWidth < 768 ? '0px 15px 15px 15px' : '5px 0px',
         }}
       >
         {/* Main Content */}
@@ -2069,20 +2082,20 @@ const Sidebar = () => {
           <div className="row justify-content-center" style={{ width: '100%', margin: 0 }}>
             <div className="col-12 col-xl-10">
             {/* Profile Complete Warning */}
-            {!profileComplete && (
-              <div className="alert alert-warning-custom alert-dismissible fade show" role="alert">
-                <div className="d-flex align-items-center">
-                  <AlertTriangle size={20} className="me-2" />
-                  <strong>Profile Incomplete:</strong> Please complete your profile before booking appointments.
-                  <button 
-                    className="btn btn-sm btn-outline-warning ms-auto"
-                    onClick={() => setActiveTab('profile')}
-                  >
-                    Complete Profile
-                  </button>
-                </div>
-              </div>
-            )}
+            {!profileLoading && !profileComplete && (
+  <div className="alert alert-warning-custom alert-dismissible fade show" role="alert">
+    <div className="d-flex align-items-center">
+      <AlertTriangle size={20} className="me-2" />
+      <strong>{t('student.profile_incomplete')}</strong> {t('profile.complete_warning')}
+      <button 
+        className="btn btn-sm btn-outline-warning ms-auto"
+        onClick={() => setActiveTab('profile')}
+      >
+        {t('student.complete_profile')}
+      </button>
+    </div>
+  </div>
+)}
 
             {/* Message Display */}
             {message.text && (
@@ -2628,26 +2641,52 @@ const Sidebar = () => {
                       menuPortalTarget={document.body}
                       menuPosition="fixed"
                       styles={{
-                        control: (base) => ({
-                          ...base,
-                          borderRadius: '0.5rem',
-                          border: '2px solid #e9ecef',
-                          minHeight: '50px'
-                        }),
-                        menu: (base) => ({
-                          ...base,
-                          maxHeight: window.innerWidth < 768 ? '200px' : '300px',
-                          zIndex: 9999
-                        }),
-                        menuList: (base) => ({
-                          ...base,
-                          maxHeight: window.innerWidth < 768 ? '200px' : '300px',
-                        }),
-                        menuPortal: (base) => ({ 
-                          ...base, 
-                          zIndex: 9999 
-                        })
-                      }}
+                      control: (base, state) => ({
+                        ...base,
+                        borderRadius: '0.5rem',
+                        border: state.isFocused 
+                          ? '2px solid #E53E3E'  // Red border when focused
+                          : '2px solid #e9ecef',
+                        minHeight: '50px',
+                        boxShadow: state.isFocused 
+                          ? '0 0 0 0.25rem rgba(229, 62, 62, 0.25)'  // Red shadow
+                          : 'none',
+                        '&:hover': {
+                          borderColor: '#E53E3E'  // Red border on hover
+                        }
+                      }),
+                      option: (base, state) => ({
+                        ...base,
+                        backgroundColor: state.isSelected 
+                          ? '#E53E3E'  // Red background when selected
+                          : state.isFocused 
+                          ? '#FED7D7'  // Light red on hover
+                          : 'white',
+                        color: state.isSelected ? 'white' : '#212529',
+                        cursor: 'pointer',
+                        '&:active': {
+                          backgroundColor: '#C53030'  // Darker red on click
+                        }
+                      }),
+                      menu: (base) => ({
+                        ...base,
+                        maxHeight: window.innerWidth < 768 ? '200px' : '300px',
+                        zIndex: 9999,
+                        boxShadow: '0 4px 12px rgba(229, 62, 62, 0.15)'  // Red shadow
+                      }),
+                      menuList: (base) => ({
+                        ...base,
+                        maxHeight: window.innerWidth < 768 ? '200px' : '300px',
+                      }),
+                      menuPortal: (base) => ({ 
+                        ...base, 
+                        zIndex: 9999 
+                      }),
+                      singleValue: (base) => ({
+                        ...base,
+                        color: '#212529'
+                      })
+                    }}
                     />
                   </div>
 
@@ -2695,16 +2734,38 @@ const Sidebar = () => {
                     menuPortalTarget={document.body}
                     menuPosition="fixed"
                     styles={{
-                      control: (base) => ({
+                      control: (base, state) => ({
                         ...base,
                         borderRadius: '0.5rem',
-                        border: '2px solid #e9ecef',
-                        minHeight: '50px'
+                        border: state.isFocused 
+                          ? '2px solid #E53E3E'  // Red border when focused
+                          : '2px solid #e9ecef',
+                        minHeight: '50px',
+                        boxShadow: state.isFocused 
+                          ? '0 0 0 0.25rem rgba(229, 62, 62, 0.25)'  // Red shadow
+                          : 'none',
+                        '&:hover': {
+                          borderColor: '#E53E3E'  // Red border on hover
+                        }
+                      }),
+                      option: (base, state) => ({
+                        ...base,
+                        backgroundColor: state.isSelected 
+                          ? '#E53E3E'  // Red background when selected
+                          : state.isFocused 
+                          ? '#FED7D7'  // Light red on hover
+                          : 'white',
+                        color: state.isSelected ? 'white' : '#212529',
+                        cursor: 'pointer',
+                        '&:active': {
+                          backgroundColor: '#C53030'  // Darker red on click
+                        }
                       }),
                       menu: (base) => ({
                         ...base,
                         maxHeight: window.innerWidth < 768 ? '200px' : '300px',
-                        zIndex: 9999
+                        zIndex: 9999,
+                        boxShadow: '0 4px 12px rgba(229, 62, 62, 0.15)'  // Red shadow
                       }),
                       menuList: (base) => ({
                         ...base,
@@ -2713,6 +2774,10 @@ const Sidebar = () => {
                       menuPortal: (base) => ({ 
                         ...base, 
                         zIndex: 9999 
+                      }),
+                      singleValue: (base) => ({
+                        ...base,
+                        color: '#212529'
                       })
                     }}
                   />
@@ -2736,19 +2801,50 @@ const Sidebar = () => {
                     menuPortalTarget={document.body}
                     menuPosition="fixed"
                     styles={{
-                      control: (base) => ({
+                      control: (base, state) => ({
                         ...base,
                         borderRadius: '0.5rem',
-                        border: '2px solid #e9ecef',
-                        minHeight: '50px'
+                        border: state.isFocused 
+                          ? '2px solid #E53E3E'  // Red border when focused
+                          : '2px solid #e9ecef',
+                        minHeight: '50px',
+                        boxShadow: state.isFocused 
+                          ? '0 0 0 0.25rem rgba(229, 62, 62, 0.25)'  // Red shadow
+                          : 'none',
+                        '&:hover': {
+                          borderColor: '#E53E3E'  // Red border on hover
+                        }
+                      }),
+                      option: (base, state) => ({
+                        ...base,
+                        backgroundColor: state.isSelected 
+                          ? '#E53E3E'  // Red background when selected
+                          : state.isFocused 
+                          ? '#FED7D7'  // Light red on hover
+                          : 'white',
+                        color: state.isSelected ? 'white' : '#212529',
+                        cursor: 'pointer',
+                        '&:active': {
+                          backgroundColor: '#C53030'  // Darker red on click
+                        }
                       }),
                       menu: (base) => ({
                         ...base,
-                        zIndex: 9999
+                        maxHeight: window.innerWidth < 768 ? '200px' : '300px',
+                        zIndex: 9999,
+                        boxShadow: '0 4px 12px rgba(229, 62, 62, 0.15)'  // Red shadow
+                      }),
+                      menuList: (base) => ({
+                        ...base,
+                        maxHeight: window.innerWidth < 768 ? '200px' : '300px',
                       }),
                       menuPortal: (base) => ({ 
                         ...base, 
                         zIndex: 9999 
+                      }),
+                      singleValue: (base) => ({
+                        ...base,
+                        color: '#212529'
                       })
                     }}
                   />
@@ -2965,27 +3061,52 @@ const Sidebar = () => {
                 menuPortalTarget={document.body}
                 menuPosition="fixed"
                 styles={{
-                  control: (base) => ({
-                    ...base,
-                    borderRadius: '0.5rem',
-                    border: '2px solid #e9ecef',
-                    padding: '0.5rem',
-                    minHeight: '50px'
-                  }),
-                  menu: (base) => ({
-                    ...base,
-                    maxHeight: window.innerWidth < 768 ? '200px' : '300px',
-                    zIndex: 9999
-                  }),
-                  menuList: (base) => ({
-                    ...base,
-                    maxHeight: window.innerWidth < 768 ? '200px' : '300px',
-                  }),
-                  menuPortal: (base) => ({ 
-                    ...base, 
-                    zIndex: 9999 
-                  })
-                }}
+                control: (base, state) => ({
+                  ...base,
+                  borderRadius: '0.5rem',
+                  border: state.isFocused 
+                    ? '2px solid #E53E3E'  // Red border when focused
+                    : '2px solid #e9ecef',
+                  minHeight: '50px',
+                  boxShadow: state.isFocused 
+                    ? '0 0 0 0.25rem rgba(229, 62, 62, 0.25)'  // Red shadow
+                    : 'none',
+                  '&:hover': {
+                    borderColor: '#E53E3E'  // Red border on hover
+                  }
+                }),
+                option: (base, state) => ({
+                  ...base,
+                  backgroundColor: state.isSelected 
+                    ? '#E53E3E'  // Red background when selected
+                    : state.isFocused 
+                    ? '#FED7D7'  // Light red on hover
+                    : 'white',
+                  color: state.isSelected ? 'white' : '#212529',
+                  cursor: 'pointer',
+                  '&:active': {
+                    backgroundColor: '#C53030'  // Darker red on click
+                  }
+                }),
+                menu: (base) => ({
+                  ...base,
+                  maxHeight: window.innerWidth < 768 ? '200px' : '300px',
+                  zIndex: 9999,
+                  boxShadow: '0 4px 12px rgba(229, 62, 62, 0.15)'  // Red shadow
+                }),
+                menuList: (base) => ({
+                  ...base,
+                  maxHeight: window.innerWidth < 768 ? '200px' : '300px',
+                }),
+                menuPortal: (base) => ({ 
+                  ...base, 
+                  zIndex: 9999 
+                }),
+                singleValue: (base) => ({
+                  ...base,
+                  color: '#212529'
+                })
+              }}
               />
               <div className="form-text">{t('student.leave_blank')}</div>
             </div>
@@ -3085,27 +3206,52 @@ const Sidebar = () => {
                 menuPortalTarget={document.body}
                 menuPosition="fixed"
                 styles={{
-                  control: (base) => ({
-                    ...base,
-                    borderRadius: '0.5rem',
-                    border: '2px solid #e9ecef',
-                    padding: '0.5rem',
-                    minHeight: '50px'
-                  }),
-                  menu: (base) => ({
-                    ...base,
-                    maxHeight: window.innerWidth < 768 ? '200px' : '300px',
-                    zIndex: 9999
-                  }),
-                  menuList: (base) => ({
-                    ...base,
-                    maxHeight: window.innerWidth < 768 ? '200px' : '300px',
-                  }),
-                  menuPortal: (base) => ({ 
-                    ...base, 
-                    zIndex: 9999 
-                  })
-                }}
+                control: (base, state) => ({
+                  ...base,
+                  borderRadius: '0.5rem',
+                  border: state.isFocused 
+                    ? '2px solid #E53E3E'  // Red border when focused
+                    : '2px solid #e9ecef',
+                  minHeight: '50px',
+                  boxShadow: state.isFocused 
+                    ? '0 0 0 0.25rem rgba(229, 62, 62, 0.25)'  // Red shadow
+                    : 'none',
+                  '&:hover': {
+                    borderColor: '#E53E3E'  // Red border on hover
+                  }
+                }),
+                option: (base, state) => ({
+                  ...base,
+                  backgroundColor: state.isSelected 
+                    ? '#E53E3E'  // Red background when selected
+                    : state.isFocused 
+                    ? '#FED7D7'  // Light red on hover
+                    : 'white',
+                  color: state.isSelected ? 'white' : '#212529',
+                  cursor: 'pointer',
+                  '&:active': {
+                    backgroundColor: '#C53030'  // Darker red on click
+                  }
+                }),
+                menu: (base) => ({
+                  ...base,
+                  maxHeight: window.innerWidth < 768 ? '200px' : '300px',
+                  zIndex: 9999,
+                  boxShadow: '0 4px 12px rgba(229, 62, 62, 0.15)'  // Red shadow
+                }),
+                menuList: (base) => ({
+                  ...base,
+                  maxHeight: window.innerWidth < 768 ? '200px' : '300px',
+                }),
+                menuPortal: (base) => ({ 
+                  ...base, 
+                  zIndex: 9999 
+                }),
+                singleValue: (base) => ({
+                  ...base,
+                  color: '#212529'
+                })
+              }}
               />
             </div>
 
@@ -3630,45 +3776,51 @@ const Sidebar = () => {
 {showRescheduleModal && (
   <>
     {/* Modal Backdrop */}
-    <div 
-      className="modal-backdrop fade show"
-      style={{ 
-        position: 'fixed',
-        top: 0,
-        left: 0,
-        width: '100%',
-        height: '100%',
-        backgroundColor: 'rgba(0,0,0,0.5)',
-        zIndex: 1050
-      }}
-      onClick={() => setShowRescheduleModal(false)}
-    />
+<div 
+  className="modal-backdrop show"
+  style={{ 
+    position: 'fixed',
+    top: 0,
+    left: 0,
+    width: '100vw',  // Changed from 100%
+    height: '100vh', // Changed from 100%
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    zIndex: 1050
+  }}
+  onClick={() => {
+    setShowRescheduleModal(false);
+    document.body.style.overflow = 'auto';
+  }}
+/>
     
     {/* Modal Container */}
     <div 
       className="modal fade show"
       style={{ 
         display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
+        alignItems: 'center',      // Vertical center
+        justifyContent: 'center',  // Horizontal center
         position: 'fixed',
         top: 0,
         left: 0,
-        width: '100%',
-        height: '100%',
-        overflow: 'auto',
-        zIndex: 1055
+        width: '100vw',
+        height: '100vh',
+        overflow: 'hidden',        // Prevent scrolling
+        zIndex: 1055,
+        padding: '1rem'
       }}
       tabIndex={-1}
       role="dialog"
     >
-      <div className="modal-dialog" role="document">
+      <div className="modal-dialog" style={{ margin: 0, maxWidth: '500px', width: '100%' }} role="document">
         <div 
           className="modal-content"
           style={{
             borderRadius: '1rem',
             border: 'none',
-            boxShadow: '0 10px 30px rgba(0, 0, 0, 0.3)'
+            boxShadow: '0 10px 30px rgba(0, 0, 0, 0.3)',
+            maxHeight: '90vh',
+            overflowY: 'auto'
           }}
         >
           {/* Modal Header */}
@@ -3752,26 +3904,52 @@ const Sidebar = () => {
                 menuPortalTarget={document.body}
                 menuPosition="fixed"
                 styles={{
-                  control: (base) => ({
-                    ...base,
-                    borderRadius: '0.5rem',
-                    border: '2px solid #e9ecef',
-                    minHeight: '45px'
-                  }),
-                  menu: (base) => ({
-                    ...base,
-                    maxHeight: window.innerWidth < 768 ? '200px' : '300px',
-                    zIndex: 9999
-                  }),
-                  menuList: (base) => ({
-                    ...base,
-                    maxHeight: window.innerWidth < 768 ? '200px' : '300px',
-                  }),
-                  menuPortal: (base) => ({ 
-                    ...base, 
-                    zIndex: 9999 
-                  })
-                }}
+                control: (base, state) => ({
+                  ...base,
+                  borderRadius: '0.5rem',
+                  border: state.isFocused 
+                    ? '2px solid #E53E3E'  // Red border when focused
+                    : '2px solid #e9ecef',
+                  minHeight: '50px',
+                  boxShadow: state.isFocused 
+                    ? '0 0 0 0.25rem rgba(229, 62, 62, 0.25)'  // Red shadow
+                    : 'none',
+                  '&:hover': {
+                    borderColor: '#E53E3E'  // Red border on hover
+                  }
+                }),
+                option: (base, state) => ({
+                  ...base,
+                  backgroundColor: state.isSelected 
+                    ? '#E53E3E'  // Red background when selected
+                    : state.isFocused 
+                    ? '#FED7D7'  // Light red on hover
+                    : 'white',
+                  color: state.isSelected ? 'white' : '#212529',
+                  cursor: 'pointer',
+                  '&:active': {
+                    backgroundColor: '#C53030'  // Darker red on click
+                  }
+                }),
+                menu: (base) => ({
+                  ...base,
+                  maxHeight: window.innerWidth < 768 ? '200px' : '300px',
+                  zIndex: 9999,
+                  boxShadow: '0 4px 12px rgba(229, 62, 62, 0.15)'  // Red shadow
+                }),
+                menuList: (base) => ({
+                  ...base,
+                  maxHeight: window.innerWidth < 768 ? '200px' : '300px',
+                }),
+                menuPortal: (base) => ({ 
+                  ...base, 
+                  zIndex: 9999 
+                }),
+                singleValue: (base) => ({
+                  ...base,
+                  color: '#212529'
+                })
+              }}
               />
             </div>
             </div>

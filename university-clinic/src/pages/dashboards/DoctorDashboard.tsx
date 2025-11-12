@@ -283,6 +283,7 @@ const EnhancedDoctorDashboard: React.FC<EnhancedDoctorDashboardProps> = ({ user,
 const [patientPrescriptions, setPatientPrescriptions] = useState<Prescription[]>([]);
 const [showPatientHistory, setShowPatientHistory] = useState<boolean>(false);
 const [selectedPrescription, setSelectedPrescription] = useState<Prescription | null>(null);
+const [departmentsLoading, setDepartmentsLoading] = useState(false);
 
 // Add this state at the top with your other states (around line 300)
 const [showArchivedPatients, setShowArchivedPatients] = useState<boolean>(false);
@@ -344,6 +345,15 @@ const [kpiData, setKpiData] = useState({
     time: '',
     reason: ''
   });
+
+  // Add this with your other state declarations
+const [departments, setDepartments] = useState<Array<{
+  id: number;
+  name: string;
+  code: string;
+  type: string;
+  is_active: boolean;
+}>>([]);
   
   const [medicalRecordForm, setMedicalRecordForm] = useState<MedicalRecordForm>({
     diagnosis: '',
@@ -1502,6 +1512,40 @@ const completeAppointmentWithReport = async (): Promise<void> => {
   }
 };
 
+/**
+ * Fetch departments from API
+ */
+const fetchDepartments = async (): Promise<void> => {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/departments`, {
+      headers: { 
+        'Authorization': `Bearer ${localStorage.getItem('token')}`,
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
+      }
+    });
+    
+    if (!response.ok) {
+      throw new Error(`Failed to load departments: HTTP ${response.status}`);
+    }
+    
+    const data = await response.json();
+    // Filter only active medical/clinical departments for doctors
+    const activeDepartments = (data.departments || data || []).filter(
+      (dept: any) => dept.is_active && (dept.type === 'medical' || dept.type === 'clinical')
+    );
+    setDepartments(activeDepartments);
+  } 
+  catch (error) {
+    console.error('Error fetching departments:', error);
+    setMessage({ 
+      type: 'error', 
+      text: getErrorMessage(error) || 'Failed to load departments' 
+    });
+    setTimeout(() => setMessage({ type: '', text: '' }), 5000);
+  }
+};
+
 // Add this function to handle modal cleanup
 const closeModal = (): void => {
   setShowModal('');
@@ -2063,7 +2107,12 @@ const formatDateTime = (dateString: string): { date: string; time: string } => {
   }
   if (activeTab === 'prescriptions') fetchPrescriptions();
   if (activeTab === 'profile') fetchDoctorProfile();
+  fetchDepartments();
 }, [activeTab]);
+
+useEffect(() => {
+  fetchDepartments(); // Fetch departments when component mounts
+}, []);
 
   useEffect(() => {
   console.log('=== APPOINTMENTS STATE CHANGED ===');
@@ -3258,7 +3307,7 @@ const Sidebar = () => {
           position: 'fixed',
           top: 0,
           left: isMobile ? (sidebarOpen ? 0 : '-300px') : 0,
-          bottom: 0,
+          height: '100vh',  // ← CHANGE THIS LINE
           width: sidebarCollapsed && !isMobile ? '85px' : '280px',
           background: '#1a1d29',
           boxShadow: '4px 0 24px rgba(0, 0, 0, 0.12)',
@@ -3395,17 +3444,14 @@ const Sidebar = () => {
 
         {/* ===== NAVIGATION ===== */}
         <nav
-          style={{
-            // DESKTOP: flex:1 with overflow auto (allows scrolling if needed)
-            // MOBILE: flexShrink:0 with no overflow (compact, no scroll)
-            flex: isMobile ? 'none' : 1,
-            flexShrink: isMobile ? 0 : 1,
-            overflowY: 'visible',
-            overflowX: 'hidden',
-            padding: sidebarCollapsed && !isMobile ? '12px 8px' : isMobile ? '6px 10px' : '16px 12px',
-            minHeight: isMobile ? 'auto' : 0,
-          }}
-        >
+  style={{
+    flex: 1,
+    overflowY: 'auto',
+    overflowX: 'hidden',
+    padding: sidebarCollapsed && !isMobile ? '12px 8px' : isMobile ? '6px 10px' : '16px 12px',
+    minHeight: 0, // Important for flex scrolling
+  }}
+>
           {/* Menu Section Label */}
           {!(sidebarCollapsed && !isMobile) && (
             <div
@@ -3501,18 +3547,20 @@ const Sidebar = () => {
           })}
         </nav>
 
-        {/* ===== SPACER (Desktop only) ===== */}
-        {!isMobile && <div style={{ flex: 1, minHeight: 0 }} />}
+        {/* ===== SPACER (Desktop only) ===== 
+        {!isMobile && <div style={{ flex: 1, minHeight: 0 }} />}*/}
 
         {/* ===== FOOTER ===== */}
         <div
-          style={{
-            padding: sidebarCollapsed && !isMobile ? '16px 12px' : isMobile ? '8px 12px' : '16px',
-            borderTop: '1px solid rgba(255, 255, 255, 0.08)',
-            background: 'linear-gradient(180deg, transparent 0%, rgba(0, 0, 0, 0.2) 100%)',
-            flexShrink: 0,
-          }}
-        >
+  style={{
+    padding: sidebarCollapsed && !isMobile ? '16px 12px' : isMobile ? '8px 12px' : '16px',
+    borderTop: '1px solid rgba(255, 255, 255, 0.08)',
+    background: 'linear-gradient(180deg, transparent 0%, rgba(0, 0, 0, 0.2) 100%)',
+    flexShrink: 0,
+    flexGrow: 0,
+    minHeight: 'auto',
+  }}
+>
           {!(sidebarCollapsed && !isMobile) ? (
             <div>
               {/* User Info Display */}
@@ -3742,7 +3790,12 @@ const Sidebar = () => {
 
   // Main render
    return (
-  <div className="min-vh-100" style={{ backgroundColor: '#f8f9fa', display: 'flex' }}>
+  <div style={{ 
+    display: 'flex', 
+    height: '100vh', 
+    overflow: 'hidden',
+    background: 'linear-gradient(135deg, #ffffffff 0%, #f0fdf4 100%)' 
+  }}>
     {/* Sidebar */}
     <Sidebar />
 
@@ -3787,6 +3840,9 @@ const Sidebar = () => {
     marginLeft: window.innerWidth >= 768 ? (sidebarCollapsed ? '85px' : '280px') : '0',
     paddingTop: window.innerWidth < 768 ? '80px' : '24px',  // CHANGED: Added top padding for desktop too
     transition: 'margin-left 0.3s ease',
+    height: '100vh',           // ← ADD THIS
+    overflowY: 'auto',         // ← ADD THIS
+    overflowX: 'hidden',       // ← ADD THIS
   }}
 >
 
@@ -3969,16 +4025,39 @@ const Sidebar = () => {
         </div>
 
         {/* Department */}
-        <div className="col-md-6">
-          <label className="form-label fw-semibold">{t('doctor.department')}</label>
-          <input
-            type="text"
-            className="form-control"
-            value={doctorProfile.department || ''}
-            onChange={(e) => setDoctorProfile(prev => ({ ...prev, department: e.target.value }))}
-            placeholder="e.g., Internal Medicine"
-          />
-        </div>
+        {/* Department */}
+<div className="col-md-6">
+  <label className="form-label fw-semibold">{t('doctor.department')}</label>
+  <Select
+    options={[
+      { value: '', label: t('doctor.select_department') || 'Select Department' },
+      ...departments.map(dept => ({
+        value: dept.name,
+        label: dept.name
+      }))
+    ]}
+    value={doctorProfile.department ? {
+      value: doctorProfile.department,
+      label: doctorProfile.department
+    } : null}
+    onChange={(option) => setDoctorProfile(prev => ({ 
+      ...prev, 
+      department: option?.value || '' 
+    }))}
+    
+    menuPortalTarget={document.body}
+    menuPosition="fixed"
+    placeholder={t('doctor.select_department') || 'Select Department'}
+    isClearable
+    isSearchable
+    isLoading={departments.length === 0}
+    noOptionsMessage={() => 
+      departments.length === 0 
+        ? t('doctor.loading_departments') || 'Loading departments...' 
+        : t('doctor.no_departments') || 'No departments found'
+    }
+  />
+</div>
 
         {/* Address */}
         <div className="col-12">

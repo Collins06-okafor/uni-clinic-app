@@ -9,6 +9,7 @@
 }
 
 /* Global Styles */
+
 .student-appointment-container {
   min-height: 100vh;
   background-color: #f8f9fa;
@@ -109,6 +110,87 @@
 .logout-btn:hover {
   background-color: var(--university-primary);
   color: white;
+}
+
+/* Fixed Layout Styles */
+.dashboard-wrapper {
+  display: flex;
+  height: 100vh;
+  overflow: hidden;
+}
+
+/* Custom scrollbar for main content */
+.dashboard-wrapper > div:last-child::-webkit-scrollbar {
+  width: 10px;
+}
+
+.dashboard-wrapper > div:last-child::-webkit-scrollbar-track {
+  background: #f1f1f1;
+}
+
+.dashboard-wrapper > div:last-child::-webkit-scrollbar-thumb {
+  background: #888;
+  border-radius: 5px;
+}
+
+.dashboard-wrapper > div:last-child::-webkit-scrollbar-thumb:hover {
+  background: #555;
+}
+
+/* Smooth transitions */
+.dashboard-wrapper * {
+  transition: margin-left 0.3s ease, width 0.3s ease;
+}
+
+/* Modal Positioning - Viewport Centered */
+.modal.show {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  position: fixed !important;
+  top: 0 !important;
+  left: 0 !important;
+  width: 100vw !important;
+  height: 100vh !important;
+  overflow: hidden !important;
+  z-index: 1055 !important;
+  padding: 1rem !important;
+}
+
+.modal-dialog {
+  margin: 0 !important;
+  max-width: 500px !important;
+  width: 100% !important;
+}
+
+.modal-content {
+  max-height: 90vh !important;
+  overflow-y: auto !important;
+}
+
+/* Backdrop */
+.modal-backdrop.show {
+  position: fixed !important;
+  top: 0 !important;
+  left: 0 !important;
+  width: 100vw !important;
+  height: 100vh !important;
+  z-index: 1050 !important;
+}
+
+/* Mobile */
+@media (max-width: 768px) {
+  .modal.show {
+    padding: 0.5rem !important;
+  }
+  
+  .modal-dialog {
+    max-width: 100% !important;
+  }
+  
+  .modal-content {
+    max-height: 95vh !important;
+  }
 }
 
 /* Bell/Notification Modal - Position outside navbar */
