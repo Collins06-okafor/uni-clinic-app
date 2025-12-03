@@ -20,6 +20,12 @@ class ClinicalStaffController extends Controller
     /**
  * Clinical staff dashboard with nursing, support overview, and student requests
  */
+private const PRIORITY_LEVELS = [
+        'urgent' => 3,
+        'high' => 2,
+        'normal' => 1
+    ];
+
 public function dashboard(Request $request): JsonResponse
 {
     $user = $request->user();
@@ -161,6 +167,22 @@ public function assignStudentRequest(Request $request, $id): JsonResponse
         ], 400);
     }
 
+    // ✅ ADD PRIORITY BLOCKING CHECK
+    $blockingCheck = $this->hasBlockingAppointments(
+        $appointment->id,
+        $appointment->date,
+        $appointment->time,
+        $appointment->priority ?? 'normal'
+    );
+    
+    if ($blockingCheck['has_blocking']) {
+        return response()->json([
+            'message' => 'Cannot assign this appointment. There are ' . $blockingCheck['count'] . ' higher priority appointments that must be processed first',
+            'blocking_appointments' => $blockingCheck['blocking_appointments'],
+            'can_proceed' => false
+        ], 423); // 423 Locked
+    }
+
     // Update status and assign doctor
     $appointment->status = 'assigned';
     $appointment->doctor_id = $validated['doctor_id'];
@@ -199,8 +221,24 @@ public function approveStudentRequest(Request $request, $id): JsonResponse
 
     $appointment = Appointment::findOrFail($id);
     
+    // ✅ ADD PRIORITY BLOCKING CHECK
+    $blockingCheck = $this->hasBlockingAppointments(
+        $appointment->id,
+        $appointment->date,
+        $appointment->time,
+        $appointment->priority ?? 'normal'
+    );
+    
+    if ($blockingCheck['has_blocking']) {
+        return response()->json([
+            'message' => 'Cannot approve this appointment. There are ' . $blockingCheck['count'] . ' higher priority appointments that must be processed first',
+            'blocking_appointments' => $blockingCheck['blocking_appointments'],
+            'can_proceed' => false
+        ], 423);
+    }
+    
     // Set to 'scheduled' - waiting for patient to walk in
-    $appointment->status = 'scheduled'; // CHANGED from 'waiting'
+    $appointment->status = 'scheduled';
     $appointment->type = 'approved_request';
     $appointment->doctor_id = $validated['doctor_id'];
     $appointment->approved_at = now();
@@ -526,13 +564,29 @@ public function confirmAppointment(Request $request, $id): JsonResponse
     
     $appointment = Appointment::with(['patient', 'doctor'])->findOrFail($id);
     
+    // ✅ ADD PRIORITY BLOCKING CHECK
+    $blockingCheck = $this->hasBlockingAppointments(
+        $appointment->id,
+        $appointment->date,
+        $appointment->time,
+        $appointment->priority ?? 'normal'
+    );
+    
+    if ($blockingCheck['has_blocking']) {
+        return response()->json([
+            'message' => 'Cannot confirm this appointment. There are ' . $blockingCheck['count'] . ' higher priority appointments pending',
+            'blocking_appointments' => $blockingCheck['blocking_appointments'],
+            'can_proceed' => false
+        ], 423);
+    }
+    
     // Update appointment status to confirmed
     $appointment->update(['status' => 'confirmed']);
     
     // Here you would typically send SMS/Email
     // For now, we'll just return success
 
-        // ✅ ADD BROADCASTING
+    // ADD BROADCASTING
     broadcast(new \App\Events\DashboardStatsUpdated('clinical-staff', [
         'confirmed_appointments' => Appointment::where('status', 'confirmed')->count(),
         'pending_appointments' => Appointment::where('status', 'pending')->count()
@@ -1430,7 +1484,12 @@ public function updateWalkInPatientStatus(Request $request, $id): JsonResponse
         $query->where('status', $status);
     }
     
-    $appointments = $query->get()->map(function($appointment) {
+    $appointments = $query
+    ->orderBy('created_at', 'desc')  // Newest first
+    ->orderBy('date', 'desc')        // Then by date
+    ->orderBy('time', 'desc')        // Then by time
+    ->get()
+    ->map(function($appointment) {
         // Determine the request type based on patient role
         $requestType = 'Student Request'; // Default
         
@@ -1476,6 +1535,98 @@ public function updateWalkInPatientStatus(Request $request, $id): JsonResponse
             'scheduled' => $appointments->where('status', 'scheduled')->count(),
         ]
     ]);
+}
+
+/**
+ * Check if there are higher priority pending appointments
+ */
+private function hasHigherPriorityPending($currentAppointmentId, $currentDate, $currentTime, $currentPriority): array
+{
+    $priorityOrder = [
+        'urgent' => 3,
+        'high' => 2,
+        'normal' => 1
+    ];
+    
+    $currentPriorityLevel = $priorityOrder[$currentPriority] ?? 1;
+    
+    // Get all pending/waiting appointments before this one
+    $blockingAppointments = Appointment::with(['patient'])
+        ->where('id', '!=', $currentAppointmentId)
+        ->whereIn('status', ['pending', 'waiting', 'scheduled', 'confirmed'])
+        ->where(function($query) use ($currentDate, $currentTime) {
+            $query->where('date', '<', $currentDate)
+                  ->orWhere(function($q) use ($currentDate, $currentTime) {
+                      $q->where('date', '=', $currentDate)
+                        ->where('time', '<', $currentTime);
+                  });
+        })
+        ->get()
+        ->filter(function($apt) use ($priorityOrder, $currentPriorityLevel) {
+            $aptPriority = $priorityOrder[$apt->priority ?? 'normal'] ?? 1;
+            return $aptPriority >= $currentPriorityLevel;
+        });
+    
+    return [
+        'has_blocking' => $blockingAppointments->count() > 0,
+        'count' => $blockingAppointments->count(),
+        'blocking_appointments' => $blockingAppointments->map(function($apt) {
+            return [
+                'id' => $apt->id,
+                'patient_name' => $apt->patient->name,
+                'date' => $apt->date,
+                'time' => $apt->time,
+                'priority' => $apt->priority,
+                'status' => $apt->status
+            ];
+        })->values()
+    ];
+}
+
+/**
+ * Check if appointment can be treated
+ */
+public function checkAppointmentTreatability(Request $request, $appointmentId): JsonResponse
+{
+    try {
+        $appointment = Appointment::with(['patient'])->findOrFail($appointmentId);
+        
+        // Only check for appointments that are about to be treated
+        if (!in_array($appointment->status, ['scheduled', 'confirmed', 'waiting'])) {
+            return response()->json([
+                'can_treat' => true,
+                'message' => 'Appointment already in progress or completed'
+            ]);
+        }
+        
+        $blockingCheck = $this->hasHigherPriorityPending(
+            $appointment->id,
+            $appointment->date,
+            $appointment->time,
+            $appointment->priority ?? 'normal'
+        );
+        
+        if ($blockingCheck['has_blocking']) {
+            return response()->json([
+                'can_treat' => false,
+                'message' => 'There are ' . $blockingCheck['count'] . ' higher priority pending appointments that must be treated first',
+                'blocking_appointments' => $blockingCheck['blocking_appointments']
+            ], 423); // 423 Locked
+        }
+        
+        return response()->json([
+            'can_treat' => true,
+            'message' => 'Appointment can be treated'
+        ]);
+        
+    } catch (\Exception $e) {
+        \Log::error('Error checking appointment treatability: ' . $e->getMessage());
+        return response()->json([
+            'can_treat' => false,
+            'message' => 'Failed to check appointment status',
+            'error' => $e->getMessage()
+        ], 500);
+    }
 }
 
     /**
@@ -1959,13 +2110,20 @@ private function checkVitalSignsAlerts(array $vitals): array
 }
 
 
-   public function updateVitalSigns(Request $request, $patientId): JsonResponse
+   // KEEP THIS VERSION (the one at the end of the file):
+public function updateVitalSigns(Request $request, $patientId): JsonResponse
 {
     \Log::info('=== VITAL SIGNS REQUEST RECEIVED ===', [
         'patient_id' => $patientId,
-        'request_data' => $request->all()
+        'request_data' => $request->all(),
+        'full_url' => $request->fullUrl(),
+        'method' => $request->method()
     ]);
 
+    // Add debugging to see which controller method is being called
+    \Log::debug('Controller method called: ' . __METHOD__);
+    \Log::debug('Controller file: ' . __FILE__);
+    
     $validated = $request->validate([
         'blood_pressure' => 'sometimes|string|max:20',
         'blood_pressure_systolic' => 'required|integer|min:60|max:250',
@@ -1975,6 +2133,8 @@ private function checkVitalSignsAlerts(array $vitals): array
         'temperature_unit' => 'required|in:F,C',
         'respiratory_rate' => 'nullable|integer|min:8|max:40',
         'oxygen_saturation' => 'nullable|integer|min:70|max:100',
+        'weight' => 'nullable|numeric|min:10|max:300',
+        'height' => 'nullable|numeric|min:50|max:250',
         'notes' => 'nullable|string|max:500',
         'doctor_id' => 'sometimes|exists:users,id'
     ]);
@@ -1991,6 +2151,14 @@ private function checkVitalSignsAlerts(array $vitals): array
             
         $doctorId = $todayAppointment ? $todayAppointment->doctor_id : null;
         \Log::info('Doctor ID resolved', ['doctor_id' => $doctorId]);
+    }
+
+    // Calculate BMI if weight and height are provided
+    $bmi = null;
+    if (isset($validated['weight']) && isset($validated['height']) && $validated['height'] > 0) {
+        $heightInMeters = $validated['height'] / 100; // Convert cm to meters
+        $bmi = $validated['weight'] / ($heightInMeters * $heightInMeters);
+        \Log::info('BMI calculated', ['weight' => $validated['weight'], 'height' => $validated['height'], 'bmi' => $bmi]);
     }
 
     // Handle blood_pressure string format
@@ -2017,6 +2185,20 @@ private function checkVitalSignsAlerts(array $vitals): array
     ]);
 
     try {
+        // Log the data that will be saved
+        \Log::info('Attempting to create MedicalRecord with:', [
+            'blood_pressure' => isset($validated['blood_pressure_systolic'], $validated['blood_pressure_diastolic']) 
+                ? $validated['blood_pressure_systolic'] . '/' . $validated['blood_pressure_diastolic']
+                : null,
+            'heart_rate' => isset($validated['heart_rate']) ? (int)$validated['heart_rate'] : null,
+            'temperature' => $validated['temperature'] ?? null,
+            'respiratory_rate' => isset($validated['respiratory_rate']) ? (int)$validated['respiratory_rate'] : null,
+            'oxygen_saturation' => isset($validated['oxygen_saturation']) ? (int)$validated['oxygen_saturation'] : null,
+            'weight' => $validated['weight'] ?? null,
+            'height' => $validated['height'] ?? null,
+            'bmi' => $bmi,
+        ]);
+
         // Create the record
         $record = MedicalRecord::create([
             'patient_id' => $patientId,
@@ -2027,35 +2209,75 @@ private function checkVitalSignsAlerts(array $vitals): array
             'treatment' => 'N/A',
             'notes' => $notes,
             'visit_date' => now()->format('Y-m-d'),
-            'created_by' => $request->user()->id
+            'created_by' => $request->user()->id,
+            
+            // ✅ FIXED DATABASE COLUMN ASSIGNMENTS WITH PROPER TYPECASTING
+            'blood_pressure' => isset($validated['blood_pressure_systolic'], $validated['blood_pressure_diastolic']) 
+                ? $validated['blood_pressure_systolic'] . '/' . $validated['blood_pressure_diastolic']
+                : null,
+            'heart_rate' => isset($validated['heart_rate']) ? (int)$validated['heart_rate'] : null,
+            'temperature' => $validated['temperature'] ?? null,
+            'respiratory_rate' => isset($validated['respiratory_rate']) ? (int)$validated['respiratory_rate'] : null,
+            'oxygen_saturation' => isset($validated['oxygen_saturation']) ? (int)$validated['oxygen_saturation'] : null,
+            'weight' => $validated['weight'] ?? null,
+            'height' => $validated['height'] ?? null,
+            'bmi' => $bmi,
         ]);
 
-        \Log::info('Record created', ['record_id' => $record->id]);
+        \Log::info('Record created with ID: ' . $record->id);
 
         // Immediately fetch it back to verify
         $verifyRecord = MedicalRecord::find($record->id);
         
         \Log::info('=== VERIFICATION CHECK ===', [
             'record_id' => $verifyRecord->id,
+            'blood_pressure' => $verifyRecord->blood_pressure,
+            'heart_rate' => $verifyRecord->heart_rate,
+            'temperature' => $verifyRecord->temperature,
+            'respiratory_rate' => $verifyRecord->respiratory_rate,
+            'oxygen_saturation' => $verifyRecord->oxygen_saturation,
+            'weight' => $verifyRecord->weight,
+            'height' => $verifyRecord->height,
+            'bmi' => $verifyRecord->bmi,
             'content_is_null' => is_null($verifyRecord->content),
             'content_is_array' => is_array($verifyRecord->content),
-            'content_value' => $verifyRecord->content,
-            'raw_content' => $verifyRecord->getRawOriginal('content')
+        ]);
+
+        // Also check the raw database values
+        $rawRecord = DB::table('medical_records')->where('id', $record->id)->first();
+        \Log::info('=== RAW DATABASE VALUES ===', [
+            'blood_pressure' => $rawRecord->blood_pressure ?? 'NULL',
+            'heart_rate' => $rawRecord->heart_rate ?? 'NULL',
+            'temperature' => $rawRecord->temperature ?? 'NULL',
+            'respiratory_rate' => $rawRecord->respiratory_rate ?? 'NULL',
+            'oxygen_saturation' => $rawRecord->oxygen_saturation ?? 'NULL',
+            'weight' => $rawRecord->weight ?? 'NULL',
+            'height' => $rawRecord->height ?? 'NULL',
+            'bmi' => $rawRecord->bmi ?? 'NULL',
         ]);
 
         if (is_null($verifyRecord->content)) {
-            \Log::error('CRITICAL: Content saved as NULL!', [
-                'model_casts' => $verifyRecord->getCasts(),
-                'model_fillable' => $verifyRecord->getFillable()
-            ]);
+            \Log::error('CRITICAL: Content saved as NULL!');
         }
 
         return response()->json([
             'message' => 'Vital signs recorded successfully',
             'record' => $record->load(['patient', 'doctor']),
             'debug_info' => [
-                'content_saved' => !is_null($verifyRecord->content),
-                'content_keys' => $verifyRecord->content ? array_keys($verifyRecord->content) : null
+                'db_id' => $record->id,
+                'blood_pressure_saved' => !is_null($verifyRecord->blood_pressure),
+                'heart_rate_saved' => !is_null($verifyRecord->heart_rate),
+                'temperature_saved' => !is_null($verifyRecord->temperature),
+                'all_fields' => [
+                    'blood_pressure' => $verifyRecord->blood_pressure,
+                    'heart_rate' => $verifyRecord->heart_rate,
+                    'temperature' => $verifyRecord->temperature,
+                    'respiratory_rate' => $verifyRecord->respiratory_rate,
+                    'oxygen_saturation' => $verifyRecord->oxygen_saturation,
+                    'weight' => $verifyRecord->weight,
+                    'height' => $verifyRecord->height,
+                    'bmi' => $verifyRecord->bmi,
+                ]
             ],
             'alerts' => $this->checkVitalSignsAlerts($contentData)
         ], 201);
@@ -2063,12 +2285,15 @@ private function checkVitalSignsAlerts(array $vitals): array
     } catch (\Exception $e) {
         \Log::error('Error creating vital signs record', [
             'error' => $e->getMessage(),
-            'trace' => $e->getTraceAsString()
+            'trace' => $e->getTraceAsString(),
+            'request_data' => $request->all(),
+            'patient_id' => $patientId
         ]);
         
         return response()->json([
             'message' => 'Failed to record vital signs',
-            'error' => $e->getMessage()
+            'error' => $e->getMessage(),
+            'request_data' => $request->all()
         ], 500);
     }
 }
@@ -2924,4 +3149,46 @@ public function getPrescribedMedications(Request $request): JsonResponse
             ], 500);
         }
     }
+
+    /**
+ * Check if there are higher priority appointments blocking this one
+ */
+private function hasBlockingAppointments($appointmentId, $appointmentDate, $appointmentTime, $appointmentPriority): array
+{
+    $currentPriorityLevel = self::PRIORITY_LEVELS[$appointmentPriority] ?? self::PRIORITY_LEVELS['normal'];
+    
+    // ✅ FIX: Only check appointments with HIGHER priority (not equal)
+    $blockingAppointments = Appointment::with(['patient'])
+        ->where('id', '!=', $appointmentId)
+        ->whereIn('status', ['pending', 'under_review', 'waiting'])
+        ->where(function($query) use ($currentPriorityLevel) {
+            // ✅ CRITICAL FIX: Only block if priority is STRICTLY HIGHER
+            if ($currentPriorityLevel == self::PRIORITY_LEVELS['normal']) {
+                // Normal: blocked by urgent OR high
+                $query->whereIn('priority', ['urgent', 'high']);
+            } elseif ($currentPriorityLevel == self::PRIORITY_LEVELS['high']) {
+                // High: blocked by urgent ONLY
+                $query->where('priority', 'urgent');
+            } elseif ($currentPriorityLevel == self::PRIORITY_LEVELS['urgent']) {
+                // Urgent: NEVER blocked by anything
+                $query->whereRaw('1 = 0'); // Always returns empty
+            }
+        })
+        ->get();
+
+    return [
+        'has_blocking' => $blockingAppointments->count() > 0,
+        'count' => $blockingAppointments->count(),
+        'blocking_appointments' => $blockingAppointments->map(function($apt) {
+            return [
+                'id' => $apt->id,
+                'patient_name' => $apt->patient ? $apt->patient->name : 'Unknown Patient',
+                'date' => $apt->date,
+                'time' => $apt->time,
+                'priority' => $apt->priority ?? 'normal',
+                'status' => $apt->status
+            ];
+        })->values()
+    ];
+}
 }

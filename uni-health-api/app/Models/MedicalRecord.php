@@ -15,15 +15,32 @@ class MedicalRecord extends Model
         'treatment',
         'notes',
         'visit_date',
-        'created_by'
+        'created_by',
+        
+        // ✅ ADD THESE VITAL SIGNS COLUMNS
+        'blood_pressure',
+        'heart_rate',
+        'temperature',
+        'respiratory_rate',
+        'oxygen_saturation',
+        'weight',
+        'height',
+        'bmi'
     ];
 
-    // 🔥 CRITICAL: Add this casting to auto-handle JSON
+    // Add casting for numeric fields if needed
     protected $casts = [
-        'content' => 'array', // This makes Laravel auto-encode/decode JSON
+        'content' => 'array',
         'visit_date' => 'date',
         'created_at' => 'datetime',
         'updated_at' => 'datetime',
+        'weight' => 'decimal:2',
+        'height' => 'decimal:2',
+        'bmi' => 'decimal:2',
+        'temperature' => 'decimal:2', // Add this for temperature
+        'heart_rate' => 'integer',    // Add this for heart rate
+        'respiratory_rate' => 'integer', // Add this for respiratory rate
+        'oxygen_saturation' => 'integer', // Add this for oxygen saturation
     ];
 
     // Relationship to patient
@@ -45,7 +62,7 @@ class MedicalRecord extends Model
     }
 
     public function creator()
-{
-    return $this->belongsTo(User::class, 'created_by');
-}
+    {
+        return $this->belongsTo(User::class, 'created_by');
+    }
 }

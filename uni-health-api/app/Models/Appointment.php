@@ -44,9 +44,18 @@ class Appointment extends Model
      */
     protected $casts = [
         'date' => 'date',
-        'time' => 'datetime:H:i',  // Cast time properly
+        //'time' => 'datetime:H:i',  // Cast time properly
         'doctor_id' => 'integer'
     ];
+
+    // Add this accessor method right after $casts
+public function getTimeAttribute($value)
+{
+    if (!$value) return null;
+    
+    // Parse the time and return in H:i format (no seconds)
+    return \Carbon\Carbon::parse($value)->format('H:i');
+}
 
     /**
      * Get the patient associated with the appointment.

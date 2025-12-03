@@ -102,7 +102,6 @@ class SuperAdminController extends Controller
                 'prescription_stats' => $this->getPrescriptionStats($date, $startOfMonth, $endOfMonth),
                 'system_health' => $this->getSystemHealth(),
                 
-                // ADD THIS - Trend data for charts
                 'trends' => [
                     'appointments' => $this->getAppointmentDailyTrend($startOfWeek, $endOfWeek),
                     'completions' => $this->getCompletionDailyTrend($startOfWeek, $endOfWeek),
@@ -124,11 +123,188 @@ class SuperAdminController extends Controller
             ]);
         } catch (\Exception $e) {
             \Log::error('Dashboard stats error: ' . $e->getMessage());
+            \Log::error($e->getTraceAsString());
             return response()->json(['error' => $e->getMessage()], 500);
         }
     }
 
-    // Add these new helper methods
+    /**
+     * Toggle user status (activate/deactivate) - UPDATED
+     */
+    public function toggleUserStatus($id)
+    {
+        try {
+            $user = User::findOrFail($id);
+            
+            // Prevent deactivating super admins
+            if (in_array($user->role, ['super_admin', 'superadmin'])) {
+                return response()->json([
+                    'message' => 'Cannot deactivate super admin accounts'
+                ], 403);
+            }
+            
+            // Don't toggle pending_verification users
+            if ($user->status === 'pending_verification') {
+                return response()->json([
+                    'message' => 'Cannot toggle status of pending verification users. Please approve or reject first.',
+                    'current_status' => $user->status
+                ], 400);
+            }
+            
+            $newStatus = $user->status === 'active' ? 'inactive' : 'active';
+            $user->status = $newStatus;
+            $user->save();
+            
+            // Log the change
+            \Log::info('User status toggled', [
+                'admin_id' => auth()->id(),
+                'admin_name' => auth()->user()->name,
+                'target_user_id' => $user->id,
+                'target_user_name' => $user->name,
+                'old_status' => $user->status,
+                'new_status' => $newStatus
+            ]);
+            
+            return response()->json([
+                'message' => "User {$newStatus} successfully",
+                'user' => $user->load('department'),
+                'status' => $newStatus
+            ]);
+        } catch (\Exception $e) {
+            \Log::error('Toggle user status error: ' . $e->getMessage());
+            return response()->json(['message' => 'Failed to toggle user status'], 500);
+        }
+    }
+
+    /**
+     * Bulk status update - UPDATED
+     */
+    public function bulkUpdateStatus(Request $request)
+    {
+        $request->validate([
+            'user_ids' => 'required|array',
+            'user_ids.*' => 'exists:users,id',
+            'status' => 'required|in:active,inactive,pending_verification'
+        ]);
+        
+        try {
+            $updated = User::whereIn('id', $request->user_ids)
+                ->whereNotIn('role', ['super_admin', 'superadmin'])
+                ->update(['status' => $request->status]);
+            
+            // Log the bulk update
+            \Log::info('Bulk user status update', [
+                'admin_id' => auth()->id(),
+                'admin_name' => auth()->user()->name,
+                'user_ids' => $request->user_ids,
+                'new_status' => $request->status,
+                'updated_count' => $updated
+            ]);
+            
+            return response()->json([
+                'message' => "{$updated} users updated successfully",
+                'updated_count' => $updated
+            ]);
+        } catch (\Exception $e) {
+            \Log::error('Bulk update error: ' . $e->getMessage());
+            return response()->json(['message' => 'Failed to update users'], 500);
+        }
+    }
+
+    /**
+     * Get all pending verification users - NEW
+     */
+    public function getPendingUsers()
+    {
+        try {
+            $pendingUsers = User::with('department')
+                ->where('status', 'pending_verification')
+                ->orderBy('created_at', 'desc')
+                ->get();
+            
+            return response()->json([
+                'pending_users' => $pendingUsers,
+                'count' => $pendingUsers->count()
+            ]);
+        } catch (\Exception $e) {
+            \Log::error('Get pending users error: ' . $e->getMessage());
+            return response()->json(['error' => $e->getMessage()], 500);
+        }
+    }
+
+    /**
+     * Approve a pending user - NEW
+     */
+    public function approveUser($id)
+    {
+        try {
+            $user = User::findOrFail($id);
+            
+            if ($user->status !== 'pending_verification') {
+                return response()->json([
+                    'message' => 'User is not pending verification',
+                    'current_status' => $user->status
+                ], 400);
+            }
+            
+            $user->status = 'active';
+            $user->email_verified_at = $user->email_verified_at ?? now();
+            $user->save();
+            
+            // Log the approval
+            \Log::info('User approved', [
+                'admin_id' => auth()->id(),
+                'admin_name' => auth()->user()->name,
+                'approved_user_id' => $user->id,
+                'approved_user_email' => $user->email
+            ]);
+            
+            return response()->json([
+                'message' => 'User approved successfully',
+                'user' => $user->load('department')
+            ]);
+        } catch (\Exception $e) {
+            \Log::error('User approval error: ' . $e->getMessage());
+            return response()->json(['message' => 'Failed to approve user'], 500);
+        }
+    }
+
+    /**
+     * Reject a pending user - NEW
+     */
+    public function rejectUser($id)
+    {
+        try {
+            $user = User::findOrFail($id);
+            
+            if ($user->status !== 'pending_verification') {
+                return response()->json([
+                    'message' => 'User is not pending verification',
+                    'current_status' => $user->status
+                ], 400);
+            }
+            
+            // Log the rejection before deleting
+            \Log::info('User rejected and deleted', [
+                'admin_id' => auth()->id(),
+                'admin_name' => auth()->user()->name,
+                'rejected_user_id' => $user->id,
+                'rejected_user_email' => $user->email
+            ]);
+            
+            $user->delete();
+            
+            return response()->json([
+                'message' => 'User rejected and removed successfully'
+            ]);
+        } catch (\Exception $e) {
+            \Log::error('User rejection error: ' . $e->getMessage());
+            return response()->json(['message' => 'Failed to reject user'], 500);
+        }
+    }
+
+    // --- Trend Helper Methods ---
+    
     private function getAppointmentDailyTrend($start, $end)
     {
         $trends = Appointment::whereBetween('date', [$start, $end])
@@ -167,6 +343,18 @@ class SuperAdminController extends Controller
         return $this->fillMissingDays($start, $end, $trends);
     }
 
+    private function getPrescriptionTrends($start, $end)
+    {
+        $trends = Prescription::whereBetween('created_at', [$start, $end])
+            ->select(DB::raw('DATE(created_at) as date'), DB::raw('count(*) as count'))
+            ->groupBy('date')
+            ->orderBy('date')
+            ->get()
+            ->pluck('count', 'date');
+        
+        return $this->fillMissingDays($start, $end, $trends);
+    }
+
     private function fillMissingDays($start, $end, $data)
     {
         $result = [];
@@ -181,7 +369,6 @@ class SuperAdminController extends Controller
 
     private function getDailyStats($date)
     {
-        // CHANGED: appointment_date → date
         $appointments = Appointment::whereDate('date', $date->toDateString());
 
         return [
@@ -204,7 +391,6 @@ class SuperAdminController extends Controller
 
     private function getWeeklyStats($start, $end)
     {
-        // CHANGED: appointment_date → date
         $appointments = Appointment::whereBetween('date', [$start->toDateString(), $end->toDateString()]);
 
         return [
@@ -224,7 +410,6 @@ class SuperAdminController extends Controller
 
     private function getMonthlyStats($start, $end)
     {
-        // CHANGED: appointment_date → date
         $appointments = Appointment::whereBetween('date', [$start->toDateString(), $end->toDateString()]);
 
         return [
@@ -271,7 +456,6 @@ class SuperAdminController extends Controller
         $start = Carbon::create($year, $month, 1)->startOfMonth();
         $end = Carbon::create($year, $month, 1)->endOfMonth();
 
-        // CHANGED: appointment_date → date
         $trends = Appointment::whereBetween('date', [$start->toDateString(), $end->toDateString()])
             ->select(DB::raw('DATE(date) as date'), 'status', DB::raw('count(*) as count'))
             ->groupBy('date', 'status')
@@ -297,31 +481,6 @@ class SuperAdminController extends Controller
 
         return array_values($formatted);
     }
-
-    private function getPrescriptionTrends($startOfMonth, $endOfMonth)
-{
-    $trends = Prescription::whereBetween('created_at', [$startOfMonth, $endOfMonth])
-        ->select(DB::raw('DATE(created_at) as date'), DB::raw('count(*) as count'))
-        ->groupBy('date')
-        ->orderBy('date')
-        ->get();
-
-    // Fill in missing days with 0
-    $start = Carbon::parse($startOfMonth);
-    $end = Carbon::parse($endOfMonth);
-    $allDays = [];
-    
-    for ($date = $start->copy(); $date->lte($end); $date->addDay()) {
-        $dateStr = $date->toDateString();
-        $allDays[$dateStr] = 0;
-    }
-    
-    foreach ($trends as $trend) {
-        $allDays[$trend->date] = $trend->count;
-    }
-    
-    return array_values($allDays);
-}
 
     private function getPrescriptionStats($date, $startOfMonth, $endOfMonth)
     {
@@ -350,7 +509,6 @@ class SuperAdminController extends Controller
         $today = Carbon::today();
 
         return [
-            // CHANGED: appointment_date → date
             'appointments_today' => Appointment::whereDate('date', $today)->count(),
             'upcoming_appointments' => Appointment::where('date', '>', Carbon::now())
                 ->whereIn('status', ['scheduled', 'confirmed'])
@@ -384,7 +542,6 @@ class SuperAdminController extends Controller
 
     private function calculateAverageAppointmentsPerDay()
     {
-        // CHANGED: appointment_date → date
         $first = Appointment::orderBy('date')->first();
         if (!$first) return 0;
         $days = Carbon::parse($first->date)->diffInDays(Carbon::today()) + 1;
@@ -393,7 +550,6 @@ class SuperAdminController extends Controller
 
     private function getBusiestDayOfWeek()
     {
-        // CHANGED: appointment_date → date
         $result = Appointment::select(DB::raw('DAYNAME(date) as day'), DB::raw('count(*) as count'))
             ->groupBy('day')
             ->orderByDesc('count')
@@ -405,7 +561,6 @@ class SuperAdminController extends Controller
     private function getTodayCompletionRate()
     {
         $today = Carbon::today();
-        // CHANGED: appointment_date → date
         $appointments = Appointment::whereDate('date', $today);
         return $this->calculateCompletionRate($appointments);
     }

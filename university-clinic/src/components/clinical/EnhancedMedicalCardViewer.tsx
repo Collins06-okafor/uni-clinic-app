@@ -6,31 +6,49 @@ interface MedicalCardViewerProps {
   onClose: () => void;
   authToken: string;
   apiBaseUrl: string;
+  userRole?: 'doctor' | 'clinical_staff' | 'nurse'; // ✅ ADD THIS
 }
 
 const EnhancedMedicalCardViewer: React.FC<MedicalCardViewerProps> = ({
   patientId,
   onClose,
   authToken,
-  apiBaseUrl
+  apiBaseUrl,
+  userRole = 'clinical_staff' // ✅ DEFAULT TO CLINICAL_STAFF
 }) => {
   const [medicalCard, setMedicalCard] = useState<any>(null);
   const [vitalsHistory, setVitalsHistory] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null); // ✅ ADD ERROR STATE
   const [activeSection, setActiveSection] = useState<'info' | 'vitals' | 'history'>('info');
 
   // MOBILE: Detect mobile device
   const isMobile = window.innerWidth < 768;
 
+  // ✅ DETERMINE CORRECT ENDPOINT PREFIX BASED ON USER ROLE
+  const getEndpointPrefix = () => {
+    switch (userRole) {
+      case 'doctor':
+        return `${apiBaseUrl}/api/doctor`;
+      case 'nurse':
+      case 'clinical_staff':
+      default:
+        return `${apiBaseUrl}/api/clinical`;
+    }
+  };
+
+  const endpointPrefix = getEndpointPrefix();
+
   useEffect(() => {
     loadMedicalCard();
     loadVitalsHistory();
-  }, [patientId]);
+  }, [patientId, endpointPrefix]); // ✅ ADD endpointPrefix TO DEPENDENCIES
 
   const loadMedicalCard = async () => {
     try {
+      setError(null); // ✅ RESET ERROR
       const response = await fetch(
-        `${apiBaseUrl}/api/clinical/patients/${patientId}/medical-card`,
+        `${endpointPrefix}/patients/${patientId}/medical-card`, // ✅ USE DYNAMIC ENDPOINT
         {
           headers: {
             'Authorization': `Bearer ${authToken}`,
@@ -40,19 +58,23 @@ const EnhancedMedicalCardViewer: React.FC<MedicalCardViewerProps> = ({
         }
       );
 
-      if (!response.ok) throw new Error('Failed to load medical card');
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.message || 'Failed to load medical card');
+      }
 
       const data = await response.json();
       setMedicalCard(data);
     } catch (error) {
       console.error('Error loading medical card:', error);
+      setError(error instanceof Error ? error.message : 'Failed to load medical card');
     }
   };
 
   const loadVitalsHistory = async () => {
     try {
       const response = await fetch(
-        `${apiBaseUrl}/api/clinical/patients/${patientId}/vitals-history?days=30`,
+        `${endpointPrefix}/patients/${patientId}/vitals-history?days=30`, // ✅ USE DYNAMIC ENDPOINT
         {
           headers: {
             'Authorization': `Bearer ${authToken}`,
@@ -62,16 +84,81 @@ const EnhancedMedicalCardViewer: React.FC<MedicalCardViewerProps> = ({
         }
       );
 
-      if (!response.ok) throw new Error('Failed to load vitals history');
+      if (!response.ok) {
+        throw new Error('Failed to load vitals history');
+      }
 
       const data = await response.json();
       setVitalsHistory(data.vital_signs_history || []);
     } catch (error) {
       console.error('Error loading vitals history:', error);
+      // Don't set error state here - vitals history is optional
     } finally {
       setLoading(false);
     }
   };
+
+  // ✅ ADD ERROR STATE DISPLAY
+  if (error) {
+    return (
+      <div 
+        className="modal fade show d-block medical-card-modal" 
+        style={{ backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 1055 }}
+        onClick={(e) => {
+          if (e.target === e.currentTarget) onClose();
+        }}
+      >
+        <div 
+          className="modal-dialog"
+          style={{
+            margin: isMobile ? '0' : '1.75rem auto',
+            maxWidth: isMobile ? '100%' : '600px',
+          }}
+        >
+          <div 
+            className="modal-content" 
+            style={{ borderRadius: isMobile ? '0' : '1rem' }}
+          >
+            <div className="modal-header bg-danger text-white">
+              <h5 className="modal-title">
+                <AlertCircle size={20} className="me-2" />
+                Error Loading Medical Card
+              </h5>
+              <button
+                type="button"
+                className="btn-close btn-close-white"
+                onClick={onClose}
+              />
+            </div>
+            <div className="modal-body p-4">
+              <div className="alert alert-danger mb-0">
+                <strong>Error:</strong> {error}
+              </div>
+              <p className="text-muted mt-3 mb-0">
+                Please try again later or contact support if the problem persists.
+              </p>
+            </div>
+            <div className="modal-footer">
+              <button className="btn btn-secondary" onClick={onClose}>
+                Close
+              </button>
+              <button 
+                className="btn btn-primary" 
+                onClick={() => {
+                  setError(null);
+                  setLoading(true);
+                  loadMedicalCard();
+                  loadVitalsHistory();
+                }}
+              >
+                Retry
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   if (loading) {
     return (

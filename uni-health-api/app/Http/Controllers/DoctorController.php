@@ -13,6 +13,8 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Log; // <- ADD THIS TOO
 use Illuminate\Support\Facades\Schema; // Add this line
+use App\Models\MedicalCard;
+use Carbon\Carbon;
 
 
 class DoctorController extends Controller
@@ -417,6 +419,629 @@ public function getPatients(Request $request): JsonResponse
     }
 }
 
+/**
+ * Get patient's medical card information
+ */
+public function getPatientMedicalCard(Request $request, $patientId): JsonResponse
+{
+    try {
+        $doctor = $request->user();
+        
+        // Load patient with all relationships (like Clinical Staff does)
+        $patient = User::with(['medicalCard', 'medicalDocuments'])->findOrFail($patientId);
+        
+        \Log::info('Doctor loading medical card for patient', [
+            'doctor_id' => $doctor->id,
+            'patient_id' => $patientId,
+            'has_medical_card' => !is_null($patient->medicalCard),
+        ]);
+        
+        // Check if doctor has access to this patient
+        $hasAccess = Appointment::where('doctor_id', $doctor->id)
+            ->where('patient_id', $patientId)
+            ->exists();
+            
+        if (!$hasAccess) {
+            return response()->json([
+                'error' => 'Access denied',
+                'message' => 'You do not have access to this patient\'s medical card'
+            ], 403);
+        }
+        
+        // Format date of birth properly
+        $dateOfBirth = null;
+        if ($patient->date_of_birth) {
+            try {
+                $dateOfBirth = \Carbon\Carbon::parse($patient->date_of_birth)->format('Y-m-d');
+            } catch (\Exception $e) {
+                \Log::warning("Could not parse date of birth for patient {$patientId}");
+                $dateOfBirth = $patient->date_of_birth;
+            }
+        }
+        
+        // Calculate age
+        $age = null;
+        if ($patient->date_of_birth) {
+            try {
+                $age = \Carbon\Carbon::parse($patient->date_of_birth)->age;
+            } catch (\Exception $e) {
+                \Log::warning("Could not calculate age for patient {$patientId}");
+            }
+        }
+        
+        // Build emergency contact from user fields
+        $emergencyContact = [
+            'name' => $patient->emergency_contact_name ?? 'Not recorded',
+            'phone' => $patient->emergency_contact_phone ?? 'Not recorded',
+            'relationship' => $patient->emergency_contact_relationship ?? 'Not specified',
+            'email' => $patient->emergency_contact_email ?? 'Not recorded'
+        ];
+        
+        // Override with medical card if it has data
+        if ($patient->medicalCard && !empty($patient->medicalCard->emergency_contact)) {
+            $cardEmergencyContact = is_array($patient->medicalCard->emergency_contact) 
+                ? $patient->medicalCard->emergency_contact 
+                : json_decode($patient->medicalCard->emergency_contact, true);
+            
+            if (is_array($cardEmergencyContact)) {
+                $emergencyContact = array_merge($emergencyContact, array_filter($cardEmergencyContact));
+            }
+        }
+        
+        // Parse allergies
+        $allergiesList = [];
+        $hasKnownAllergies = (bool)($patient->has_known_allergies ?? false);
+        $allergiesUncertain = (bool)($patient->allergies_uncertain ?? false);
+        
+        if ($hasKnownAllergies && !empty($patient->allergies)) {
+            $allergiesList = $this->parseArrayField($patient->allergies);
+        } elseif ($patient->medicalCard && !empty($patient->medicalCard->allergies)) {
+            $allergiesList = $this->parseArrayField($patient->medicalCard->allergies);
+        }
+        
+        // Parse medical history
+        $medicalHistoryList = [];
+        if (!empty($patient->medical_history)) {
+            $medicalHistoryList = $this->parseArrayField($patient->medical_history);
+        } elseif ($patient->medicalCard && !empty($patient->medicalCard->previous_conditions)) {
+            $medicalHistoryList = $this->parseArrayField($patient->medicalCard->previous_conditions);
+        }
+        
+        // Get blood type
+        $bloodType = $patient->blood_type ?? 
+                     ($patient->medicalCard->blood_type ?? 'Unknown');
+        
+        // Build comprehensive medical card data
+        $medicalCardData = [
+            'blood_type' => $bloodType,
+            'emergency_contact' => $emergencyContact,
+            'allergies' => $allergiesList,
+            'has_known_allergies' => $hasKnownAllergies,
+            'allergies_uncertain' => $allergiesUncertain,
+            'current_medications' => $patient->medicalCard 
+                ? $this->parseArrayField($patient->medicalCard->current_medications) 
+                : [],
+            'previous_conditions' => $medicalHistoryList,
+            'family_history' => $patient->medicalCard 
+                ? $this->parseArrayField($patient->medicalCard->family_history) 
+                : [],
+            'insurance_info' => $patient->medicalCard && !empty($patient->medicalCard->insurance_info)
+                ? (is_array($patient->medicalCard->insurance_info) 
+                    ? $patient->medicalCard->insurance_info 
+                    : json_decode($patient->medicalCard->insurance_info, true))
+                : null,
+            'addictions' => $patient->addictions ?? 'None recorded',
+        ];
+        
+        return response()->json([
+            'student' => [
+                'id' => $patient->id,
+                'name' => $patient->name ?? 'Not recorded',
+                'role' => $patient->role ?? 'student',
+                'student_id' => $patient->student_id ?? null,
+                'staff_no' => $patient->staff_no ?? null,
+                'email' => $patient->email ?? 'Not recorded',
+                'phone' => $patient->phone ?? 'Not recorded',
+                'date_of_birth' => $dateOfBirth,
+                'age' => $age,
+                'gender' => $patient->gender ?? 'Not specified',
+                'department' => $patient->department ?? 'Not recorded',
+                'bio' => $patient->bio ?? null,
+                
+                // Include all medical fields directly
+                'blood_type' => $bloodType,
+                'allergies' => $patient->allergies,
+                'has_known_allergies' => $hasKnownAllergies,
+                'allergies_uncertain' => $allergiesUncertain,
+                'addictions' => $patient->addictions,
+                'medical_history' => $patient->medical_history,
+                'emergency_contact_name' => $patient->emergency_contact_name,
+                'emergency_contact_phone' => $patient->emergency_contact_phone,
+                'emergency_contact_relationship' => $patient->emergency_contact_relationship,
+                'emergency_contact_email' => $patient->emergency_contact_email,
+            ],
+            'medical_card' => $medicalCardData,
+            'documents' => $patient->medicalDocuments ? $patient->medicalDocuments->map(function($doc) {
+                return [
+                    'id' => $doc->id,
+                    'type' => $doc->type,
+                    'description' => $doc->description,
+                    'date' => $doc->document_date,
+                    'uploaded_at' => $doc->created_at,
+                    'uploaded_by' => $doc->uploader->name ?? 'Unknown',
+                ];
+            }) : [],
+        ], 200);
+        
+    } catch (\Exception $e) {
+        \Log::error('Error loading medical card in DoctorController: ' . $e->getMessage());
+        \Log::error('Stack trace: ' . $e->getTraceAsString());
+        
+        return response()->json([
+            'message' => 'Failed to load medical card',
+            'error' => config('app.debug') ? $e->getMessage() : 'An error occurred'
+        ], 500);
+    }
+}
+
+// ADD THIS HELPER METHOD at the very end of your DoctorController class (before the final closing brace })
+private function parseArrayField($field): array
+{
+    if (empty($field)) {
+        return [];
+    }
+    
+    if (is_array($field)) {
+        return array_filter($field);
+    }
+    
+    if (is_string($field)) {
+        $decoded = json_decode($field, true);
+        if (json_last_error() === JSON_ERROR_NONE && is_array($decoded)) {
+            return array_filter($decoded);
+        }
+        
+        // Try to parse as comma or newline-separated list
+        $items = preg_split('/[,\n\r]+/', $field);
+        return array_filter(array_map('trim', $items));
+    }
+    
+    return [];
+}
+
+/**
+ * Get patient's vitals history (for doctors)
+ * Returns vital signs history for the past X days
+ */
+/**
+ * Get patient's vitals history (enhanced version)
+ * Returns vital signs history for the past X days
+ */
+public function getPatientVitalsHistory(Request $request, $patientId): JsonResponse
+{
+    try {
+        $doctor = $request->user();
+        $days = $request->query('days', 30);
+        $startDate = now()->subDays($days);
+        
+        Log::info('Fetching vitals history for doctor', [
+            'doctor_id' => $doctor->id,
+            'patient_id' => $patientId,
+            'days' => $days
+        ]);
+        
+        // Verify patient exists
+        $patient = User::find($patientId);
+        if (!$patient) {
+            return response()->json([
+                'error' => 'Patient not found',
+                'message' => 'No patient found with the given ID'
+            ], 404);
+        }
+        
+        // Check doctor access
+        $hasAccess = Appointment::where('doctor_id', $doctor->id)
+            ->where('patient_id', $patientId)
+            ->exists();
+            
+        if (!$hasAccess) {
+            return response()->json([
+                'error' => 'Access denied',
+                'message' => 'You do not have access to this patient\'s vitals history'
+            ], 403);
+        }
+        
+        // ✅ ENHANCED: Use Eloquent model instead of raw DB query
+        $vitalsRecords = MedicalRecord::where('patient_id', $patientId)
+            ->where('created_at', '>=', $startDate)
+            ->where(function($query) {
+                // Get records with any vital signs data
+                $query->whereNotNull('blood_pressure')
+                      ->orWhereNotNull('heart_rate')
+                      ->orWhereNotNull('temperature')
+                      ->orWhereNotNull('respiratory_rate')
+                      ->orWhereNotNull('oxygen_saturation')
+                      ->orWhereNotNull('weight')
+                      ->orWhereNotNull('height')
+                      ->orWhereNotNull('bmi');
+            })
+            ->with(['creator' => function($query) {
+                $query->select('id', 'name', 'role');
+            }])
+            ->orderBy('created_at', 'desc')
+            ->get();
+        
+        Log::info('Found vitals records', [
+            'count' => $vitalsRecords->count(),
+            'first_record' => $vitalsRecords->first() ? [
+                'id' => $vitalsRecords->first()->id,
+                'blood_pressure' => $vitalsRecords->first()->blood_pressure,
+                'created_at' => $vitalsRecords->first()->created_at
+            ] : null
+        ]);
+        
+        // Format results
+        $vitalsHistory = $vitalsRecords->map(function ($record) {
+            return [
+                'id' => $record->id,
+                'date' => $record->created_at->toISOString(),
+                'date_formatted' => $record->created_at->format('M d, Y H:i'),
+                'blood_pressure' => $record->blood_pressure ?? 'N/A',
+                'heart_rate' => $record->heart_rate ?? 'N/A',
+                'temperature' => $record->temperature ?? 'N/A',
+                'respiratory_rate' => $record->respiratory_rate ?? 'N/A',
+                'oxygen_saturation' => $record->oxygen_saturation ?? 'N/A',
+                'weight' => $record->weight ?? 'N/A',
+                'height' => $record->height ?? 'N/A',
+                'bmi' => $record->bmi ?? 'N/A',
+                'recorded_by' => $record->creator ? 
+                    ($record->creator->role === 'doctor' ? "Dr. {$record->creator->name}" : $record->creator->name) 
+                    : 'System',
+                'recorded_by_id' => $record->created_by,
+                'recorded_by_role' => $record->creator->role ?? null,
+                'alerts' => $this->checkVitalSignsAlertsFromRecord($record),
+                'notes' => $record->notes,
+            ];
+        });
+        
+        // Get the latest vital signs for quick overview
+        $latestVitals = $vitalsRecords->first();
+        $latestVitalsSummary = null;
+        
+        if ($latestVitals) {
+            $latestVitalsSummary = [
+                'date' => $latestVitals->created_at->format('Y-m-d H:i'),
+                'blood_pressure' => $latestVitals->blood_pressure,
+                'heart_rate' => $latestVitals->heart_rate,
+                'temperature' => $latestVitals->temperature,
+                'oxygen_saturation' => $latestVitals->oxygen_saturation,
+                'has_alerts' => !empty($this->checkVitalSignsAlertsFromRecord($latestVitals))
+            ];
+        }
+        
+        return response()->json([
+            'patient_id' => $patientId,
+            'patient_name' => $patient->name,
+            'period_days' => $days,
+            'start_date' => $startDate->format('Y-m-d'),
+            'end_date' => now()->format('Y-m-d'),
+            'total_records' => $vitalsHistory->count(),
+            'latest_vitals' => $latestVitalsSummary,
+            'vital_signs_history' => $vitalsHistory->values(),
+            'summary' => [
+                'with_blood_pressure' => $vitalsRecords->whereNotNull('blood_pressure')->count(),
+                'with_heart_rate' => $vitalsRecords->whereNotNull('heart_rate')->count(),
+                'with_temperature' => $vitalsRecords->whereNotNull('temperature')->count(),
+                'abnormal_readings' => $vitalsRecords->filter(function($record) {
+                    return !empty($this->checkVitalSignsAlertsFromRecord($record));
+                })->count()
+            ]
+        ], 200);
+        
+    } catch (\Exception $e) {
+        Log::error('Error fetching vitals history: ' . $e->getMessage());
+        Log::error('Stack trace: ' . $e->getTraceAsString());
+        
+        return response()->json([
+            'error' => 'Internal server error',
+            'message' => 'Failed to load vitals history',
+            'details' => config('app.debug') ? $e->getMessage() : null
+        ], 500);
+    }
+}
+
+/**
+ * Check vital signs for alerts from MedicalRecord model
+ */
+private function checkVitalSignsAlertsFromRecord(MedicalRecord $record): array
+{
+    $alerts = [];
+    
+    // Blood pressure check
+    if (!empty($record->blood_pressure)) {
+        $bp = explode('/', $record->blood_pressure);
+        if (count($bp) === 2) {
+            $systolic = (int)$bp[0];
+            $diastolic = (int)$bp[1];
+            
+            if ($systolic > 180 || $diastolic > 120) {
+                $alerts[] = [
+                    'type' => 'HYPERTENSIVE_CRISIS',
+                    'severity' => 'critical',
+                    'message' => 'Blood pressure is critically high - immediate attention required',
+                    'value' => $record->blood_pressure,
+                    'normal_range' => '90-120/60-80'
+                ];
+            } elseif ($systolic > 140 || $diastolic > 90) {
+                $alerts[] = [
+                    'type' => 'HIGH_BLOOD_PRESSURE',
+                    'severity' => 'warning',
+                    'message' => 'Blood pressure is elevated (Stage 1 Hypertension)',
+                    'value' => $record->blood_pressure,
+                    'normal_range' => '90-120/60-80'
+                ];
+            } elseif ($systolic < 90 || $diastolic < 60) {
+                $alerts[] = [
+                    'type' => 'LOW_BLOOD_PRESSURE',
+                    'severity' => 'warning',
+                    'message' => 'Blood pressure is low (Hypotension)',
+                    'value' => $record->blood_pressure,
+                    'normal_range' => '90-120/60-80'
+                ];
+            }
+        }
+    }
+    
+    // Heart rate check
+    if (!empty($record->heart_rate)) {
+        $hr = (int)$record->heart_rate;
+        if ($hr > 120) {
+            $alerts[] = [
+                'type' => 'HIGH_HEART_RATE',
+                'severity' => 'critical',
+                'message' => 'Heart rate is critically elevated (Severe Tachycardia)',
+                'value' => $hr . ' bpm',
+                'normal_range' => '60-100 bpm'
+            ];
+        } elseif ($hr > 100) {
+            $alerts[] = [
+                'type' => 'HIGH_HEART_RATE',
+                'severity' => 'warning',
+                'message' => 'Heart rate is elevated (Tachycardia)',
+                'value' => $hr . ' bpm',
+                'normal_range' => '60-100 bpm'
+            ];
+        } elseif ($hr < 60 && $hr > 0) {
+            $alerts[] = [
+                'type' => 'LOW_HEART_RATE',
+                'severity' => 'warning',
+                'message' => 'Heart rate is below normal (Bradycardia)',
+                'value' => $hr . ' bpm',
+                'normal_range' => '60-100 bpm'
+            ];
+        }
+    }
+    
+    // Temperature check
+    if (!empty($record->temperature)) {
+        $temp = (float)$record->temperature;
+        
+        if ($temp >= 39.5) {
+            $alerts[] = [
+                'type' => 'HIGH_FEVER',
+                'severity' => 'critical',
+                'message' => 'Patient has a high fever',
+                'value' => $temp . '°C',
+                'normal_range' => '36.5-37.5°C'
+            ];
+        } elseif ($temp >= 38.0) {
+            $alerts[] = [
+                'type' => 'FEVER',
+                'severity' => 'warning',
+                'message' => 'Patient has a fever',
+                'value' => $temp . '°C',
+                'normal_range' => '36.5-37.5°C'
+            ];
+        } elseif ($temp < 36.0) {
+            $alerts[] = [
+                'type' => 'LOW_TEMPERATURE',
+                'severity' => 'warning',
+                'message' => 'Body temperature is below normal',
+                'value' => $temp . '°C',
+                'normal_range' => '36.5-37.5°C'
+            ];
+        }
+    }
+    
+    // Oxygen saturation check
+    if (!empty($record->oxygen_saturation)) {
+        $spo2 = (int)$record->oxygen_saturation;
+        if ($spo2 < 90) {
+            $alerts[] = [
+                'type' => 'LOW_OXYGEN',
+                'severity' => 'critical',
+                'message' => 'Oxygen saturation is critically low',
+                'value' => $spo2 . '%',
+                'normal_range' => '95-100%'
+            ];
+        } elseif ($spo2 < 95) {
+            $alerts[] = [
+                'type' => 'LOW_OXYGEN',
+                'severity' => 'warning',
+                'message' => 'Oxygen saturation is below normal range',
+                'value' => $spo2 . '%',
+                'normal_range' => '95-100%'
+            ];
+        }
+    }
+    
+    // BMI check
+    if (!empty($record->bmi)) {
+        $bmi = (float)$record->bmi;
+        if ($bmi >= 30) {
+            $alerts[] = [
+                'type' => 'OBESITY',
+                'severity' => 'warning',
+                'message' => 'Patient BMI indicates obesity',
+                'value' => round($bmi, 1),
+                'normal_range' => '18.5-24.9'
+            ];
+        } elseif ($bmi >= 25) {
+            $alerts[] = [
+                'type' => 'OVERWEIGHT',
+                'severity' => 'info',
+                'message' => 'Patient BMI indicates overweight',
+                'value' => round($bmi, 1),
+                'normal_range' => '18.5-24.9'
+            ];
+        } elseif ($bmi < 18.5) {
+            $alerts[] = [
+                'type' => 'UNDERWEIGHT',
+                'severity' => 'warning',
+                'message' => 'Patient BMI indicates underweight',
+                'value' => round($bmi, 1),
+                'normal_range' => '18.5-24.9'
+            ];
+        }
+    }
+    
+    return $alerts;
+}
+
+/**
+ * Get patient's latest vital signs (quick access)
+ */
+public function getPatientLatestVitals(Request $request, $patientId): JsonResponse
+{
+    try {
+        $doctor = $request->user();
+        
+        // Check doctor access
+        $hasAccess = Appointment::where('doctor_id', $doctor->id)
+            ->where('patient_id', $patientId)
+            ->exists();
+            
+        if (!$hasAccess) {
+            return response()->json([
+                'error' => 'Access denied',
+                'message' => 'You do not have access to this patient\'s vitals'
+            ], 403);
+        }
+        
+        // Get the most recent vital signs record
+        $latestVitals = MedicalRecord::where('patient_id', $patientId)
+            ->whereNotNull('blood_pressure') // Only get actual vital records
+            ->orderBy('created_at', 'desc')
+            ->with(['creator' => function($query) {
+                $query->select('id', 'name', 'role');
+            }])
+            ->first();
+        
+        if (!$latestVitals) {
+            return response()->json([
+                'has_vitals' => false,
+                'message' => 'No vital signs recorded yet'
+            ]);
+        }
+        
+        $vitalsData = [
+            'id' => $latestVitals->id,
+            'date' => $latestVitals->created_at->toISOString(),
+            'date_formatted' => $latestVitals->created_at->format('M d, Y H:i'),
+            'blood_pressure' => $latestVitals->blood_pressure,
+            'heart_rate' => $latestVitals->heart_rate,
+            'temperature' => $latestVitals->temperature,
+            'respiratory_rate' => $latestVitals->respiratory_rate,
+            'oxygen_saturation' => $latestVitals->oxygen_saturation,
+            'weight' => $latestVitals->weight,
+            'height' => $latestVitals->height,
+            'bmi' => $latestVitals->bmi,
+            'recorded_by' => $latestVitals->creator ? 
+                ($latestVitals->creator->role === 'doctor' ? "Dr. {$latestVitals->creator->name}" : $latestVitals->creator->name) 
+                : 'System',
+            'recorded_at' => $latestVitals->created_at->format('g:i A'),
+            'alerts' => $this->checkVitalSignsAlertsFromRecord($latestVitals),
+            'notes' => $latestVitals->notes,
+        ];
+        
+        // Calculate trends if there are previous records
+        $previousVitals = MedicalRecord::where('patient_id', $patientId)
+            ->where('id', '!=', $latestVitals->id)
+            ->whereNotNull('blood_pressure')
+            ->orderBy('created_at', 'desc')
+            ->first();
+        
+        $trends = [];
+        if ($previousVitals) {
+            // Blood pressure trend
+            if ($latestVitals->blood_pressure && $previousVitals->blood_pressure) {
+                $latestBP = explode('/', $latestVitals->blood_pressure);
+                $previousBP = explode('/', $previousVitals->blood_pressure);
+                
+                if (count($latestBP) === 2 && count($previousBP) === 2) {
+                    $latestSystolic = (int)$latestBP[0];
+                    $previousSystolic = (int)$previousBP[0];
+                    $trends['blood_pressure'] = $latestSystolic > $previousSystolic ? 'increasing' : 
+                                               ($latestSystolic < $previousSystolic ? 'decreasing' : 'stable');
+                }
+            }
+            
+            // Heart rate trend
+            if ($latestVitals->heart_rate && $previousVitals->heart_rate) {
+                $trends['heart_rate'] = $latestVitals->heart_rate > $previousVitals->heart_rate ? 'increasing' : 
+                                       ($latestVitals->heart_rate < $previousVitals->heart_rate ? 'decreasing' : 'stable');
+            }
+            
+            // Temperature trend
+            if ($latestVitals->temperature && $previousVitals->temperature) {
+                $trends['temperature'] = $latestVitals->temperature > $previousVitals->temperature ? 'increasing' : 
+                                        ($latestVitals->temperature < $previousVitals->temperature ? 'decreasing' : 'stable');
+            }
+        }
+        
+        return response()->json([
+            'has_vitals' => true,
+            'patient_id' => $patientId,
+            'vitals' => $vitalsData,
+            'trends' => $trends,
+            'time_since_recording' => $latestVitals->created_at->diffForHumans(),
+            'is_today' => $latestVitals->created_at->isToday()
+        ]);
+        
+    } catch (\Exception $e) {
+        Log::error('Error fetching latest vitals: ' . $e->getMessage());
+        return response()->json([
+            'error' => 'Failed to fetch vitals',
+            'message' => $e->getMessage()
+        ], 500);
+    }
+}
+
+/**
+ * Get recorder name
+ * Helper method to get the name of who recorded the vitals
+ */
+private function getRecorderName($userId): string
+{
+    if (!$userId) {
+        return 'System';
+    }
+    
+    try {
+        $user = User::find($userId);
+        if ($user) {
+            if ($user->role === 'doctor') {
+                return "Dr. {$user->name}";
+            }
+            return $user->name;
+        }
+    } catch (\Exception $e) {
+        Log::warning('Error getting recorder name: ' . $e->getMessage());
+    }
+    
+    return 'Unknown';
+}
+
     public function archivePatients(Request $request): JsonResponse
     {
         $validated = $request->validate([
@@ -770,6 +1395,24 @@ public function updateAppointmentStatus(Request $request, $id): JsonResponse
         $appointment = Appointment::where('doctor_id', $request->user()->id)
             ->findOrFail($id);
 
+        // ✅ NEW: Block confirmation/completion if time hasn't arrived
+        if (in_array($validated['status'], ['confirmed', 'completed'])) {
+            $attendanceCheck = $this->canAttendToPatient(
+                $request->user()->id, 
+                $appointment->patient_id
+            );
+            
+            if (!$attendanceCheck['can_attend']) {
+                return response()->json([
+                    'message' => 'Cannot update appointment status at this time',
+                    'reason' => $attendanceCheck['reason'],
+                    'appointment_time' => $attendanceCheck['appointment_time'] ?? null,
+                    'can_attend_from' => $attendanceCheck['can_attend_from'] ?? null,
+                    'current_time' => $attendanceCheck['current_time'] ?? null
+                ], 403);
+            }
+        }
+
         // Update appointment status
         $updateData = [
             'status' => $validated['status'],
@@ -834,6 +1477,123 @@ public function updateAppointmentStatus(Request $request, $id): JsonResponse
 }
 
 /**
+ * Check if doctor can attend to patient (appointment time has arrived)
+ */
+/**
+ * Check if doctor can attend to patient (appointment time has arrived)
+ */
+private function canAttendToPatient($doctorId, $patientId): array
+{
+    // Get the patient's appointment with this doctor
+    $appointment = Appointment::where('doctor_id', $doctorId)
+        ->where('patient_id', $patientId)
+        ->whereIn('status', ['scheduled', 'confirmed'])
+        ->where('date', '<=', now()->format('Y-m-d'))
+        ->orderBy('date', 'desc')
+        ->orderBy('time', 'desc')
+        ->first();
+    
+    if (!$appointment) {
+        return [
+            'can_attend' => false,
+            'reason' => 'No active appointment found for this patient'
+        ];
+    }
+    
+    // ✅ NEW CHECK: For walk-ins, only allow if status is 'confirmed'
+    if ($appointment->priority === 'urgent' || isset($appointment->is_walk_in)) {
+        if ($appointment->status !== 'confirmed') {
+            return [
+                'can_attend' => false,
+                'reason' => 'Walk-in patient must be confirmed by clinical staff before treatment',
+                'appointment_status' => $appointment->status
+            ];
+        }
+        
+        // Walk-in is confirmed, allow treatment immediately
+        return [
+            'can_attend' => true,
+            'appointment' => $appointment
+        ];
+    }
+    
+    // ✅ STRICT TIME CHECK for regular appointments
+    try {
+        $timeString = $appointment->time instanceof \Carbon\Carbon 
+            ? $appointment->time->format('H:i:s')
+            : trim((string) $appointment->time);
+        
+        $dateTimeString = $appointment->date . ' ' . $timeString;
+        $appointmentDateTime = Carbon::parse($dateTimeString);
+        
+    } catch (\Exception $e) {
+        Log::error('Error parsing appointment datetime', [
+            'appointment_id' => $appointment->id,
+            'date' => $appointment->date,
+            'time' => $appointment->time,
+            'error' => $e->getMessage()
+        ]);
+        
+        // If parsing fails, block access for safety
+        return [
+            'can_attend' => false,
+            'reason' => 'It is not possible to attend to this patient at this time',
+            'appointment' => $appointment
+        ];
+    }
+    
+    $now = Carbon::now();
+    
+    // ✅ STRICT RULE: Allow attendance 15 minutes before appointment
+    $gracePeriod = 15; // minutes
+    $canAttendFrom = $appointmentDateTime->copy()->subMinutes($gracePeriod);
+    
+    // ✅ Block if appointment time hasn't arrived yet
+    if ($now->lt($canAttendFrom)) {
+        return [
+            'can_attend' => false,
+            'reason' => "Appointment is scheduled for {$appointmentDateTime->format('F j, Y')} at {$appointmentDateTime->format('g:i A')}. You can start attending from {$canAttendFrom->format('g:i A')}.",
+            'appointment_time' => $appointmentDateTime->format('Y-m-d H:i'),
+            'can_attend_from' => $canAttendFrom->format('Y-m-d H:i'),
+            'current_time' => $now->format('Y-m-d H:i')
+        ];
+    }
+    
+    // ✅ Time has arrived - allow attendance
+    return [
+        'can_attend' => true,
+        'appointment' => $appointment
+    ];
+}
+
+/**
+ * Check if doctor can prescribe to a patient
+ */
+public function canPrescribeToPatient(Request $request, $patientId): JsonResponse
+{
+    $attendanceCheck = $this->canAttendToPatient($request->user()->id, $patientId);
+    
+    if (!$attendanceCheck['can_attend']) {
+        return response()->json([
+            'can_prescribe' => false,
+            'reason' => $attendanceCheck['reason'],
+            'appointment_time' => $attendanceCheck['appointment_time'] ?? null,
+            'can_attend_from' => $attendanceCheck['can_attend_from'] ?? null
+        ], 403);
+    }
+    
+    return response()->json([
+        'can_prescribe' => true,
+        'appointment' => [
+            'id' => $attendanceCheck['appointment']->id,
+            'date' => $attendanceCheck['appointment']->date,
+            'time' => $attendanceCheck['appointment']->time,
+            'status' => $attendanceCheck['appointment']->status
+        ]
+    ]);
+}
+
+/**
  * Helper method to create medications from text
  */
 private function createMedicationsFromText($prescription, $medicationsText, $appointment)
@@ -892,6 +1652,51 @@ private function createMedicationsFromText($prescription, $medicationsText, $app
             'patient_id' => $appointment->patient_id,
             'status' => 'active'
         ]);
+    }
+}
+
+/**
+ * Get prescriptions for a specific patient
+ */
+public function getPatientPrescriptions(Request $request, $patientId): JsonResponse
+{
+    try {
+        $doctor = $request->user();
+        
+        // Check if doctor has access to this patient
+        $hasAccess = Appointment::where('doctor_id', $doctor->id)
+            ->where('patient_id', $patientId)
+            ->exists();
+            
+        if (!$hasAccess) {
+            return response()->json([
+                'error' => 'Access denied',
+                'message' => 'You do not have access to this patient\'s prescriptions'
+            ], 403);
+        }
+        
+        // Get ALL prescriptions for this patient (not just current doctor's)
+        $prescriptions = Prescription::where('patient_id', $patientId)
+            ->with([
+                'doctor:id,name',
+                'medications' => function($query) {
+                    $query->orderBy('start_date', 'desc');
+                }
+            ])
+            ->orderBy('created_at', 'desc')
+            ->get();
+        
+        return response()->json([
+            'prescriptions' => $prescriptions,
+            'count' => $prescriptions->count()
+        ]);
+        
+    } catch (\Exception $e) {
+        Log::error('Error fetching patient prescriptions: ' . $e->getMessage());
+        return response()->json([
+            'error' => 'Failed to load prescriptions',
+            'message' => $e->getMessage()
+        ], 500);
     }
 }
 
@@ -970,61 +1775,72 @@ private function createMedicationsFromText($prescription, $medicationsText, $app
      * Create a prescription with multiple medications
      */
     public function createPrescription(Request $request): JsonResponse
-    {
-        $validated = $request->validate([
-            'patient_id' => 'required|exists:users,id',
-            'medications' => 'required|array|min:1',
-            'medications.*.name' => 'required|string|max:255',
-            'medications.*.dosage' => 'required|string|max:100',
-            'medications.*.instructions' => 'required|string',
-            'medications.*.start_date' => 'required|date|after_or_equal:today',
-            'medications.*.end_date' => 'required|date|after_or_equal:medications.*.start_date',
-            'notes' => 'nullable|string',
-            'status' => 'sometimes|string|in:active,completed,cancelled',
-            'force' => 'sometimes|boolean'
+{
+    $validated = $request->validate([
+        'patient_id' => 'required|exists:users,id',
+        'medications' => 'required|array|min:1',
+        'medications.*.name' => 'required|string|max:255',
+        'medications.*.dosage' => 'required|string|max:100',
+        'medications.*.instructions' => 'required|string',
+        'medications.*.start_date' => 'required|date|after_or_equal:today',
+        'medications.*.end_date' => 'required|date|after_or_equal:medications.*.start_date',
+        'notes' => 'nullable|string',
+        'status' => 'sometimes|string|in:active,completed,cancelled',
+        'force' => 'sometimes|boolean'
+    ]);
+
+    try {
+        // ✅ NEW: Check if doctor can attend to this patient
+        $attendanceCheck = $this->canAttendToPatient($request->user()->id, $validated['patient_id']);
+        
+        if (!$attendanceCheck['can_attend']) {
+            return response()->json([
+                'message' => 'Cannot create prescription at this time',
+                'reason' => $attendanceCheck['reason'],
+                'appointment_time' => $attendanceCheck['appointment_time'] ?? null,
+                'can_attend_from' => $attendanceCheck['can_attend_from'] ?? null
+            ], 403);
+        }
+
+        DB::beginTransaction();
+
+        $prescription = Prescription::create([
+            'patient_id' => $validated['patient_id'],
+            'doctor_id' => auth()->id(),
+            'notes' => $validated['notes'] ?? null,
+            'status' => $validated['status'] ?? 'active'
         ]);
 
-        try {
-            DB::beginTransaction();
-
-            $prescription = Prescription::create([
+        foreach ($validated['medications'] as $medication) {
+            $prescription->medications()->create([
+                'name' => $medication['name'],
+                'dosage' => $medication['dosage'],
+                'instructions' => $medication['instructions'],
+                'start_date' => $medication['start_date'],
+                'end_date' => $medication['end_date'],
+                'created_by' => auth()->id(),
                 'patient_id' => $validated['patient_id'],
-                'doctor_id' => auth()->id(),
-                // Remove created_by for prescriptions table - it doesn't have this field
-                'notes' => $validated['notes'] ?? null,
-                'status' => $validated['status'] ?? 'active'
+                'status' => 'active',
+                'frequency' => 'daily'
             ]);
-
-            foreach ($validated['medications'] as $medication) {
-                $prescription->medications()->create([
-                    'name' => $medication['name'],
-                    'dosage' => $medication['dosage'],
-                    'instructions' => $medication['instructions'],
-                    'start_date' => $medication['start_date'],
-                    'end_date' => $medication['end_date'],
-                    'created_by' => auth()->id(), // ADD THIS - medications table requires it
-                    'patient_id' => $validated['patient_id'], // ADD THIS if not automatically set
-                    'status' => 'active',
-                    'frequency' => 'daily' // ADD THIS - required field with enum values
-                ]);
-            }
-
-            DB::commit();
-
-            return response()->json([
-                'message' => 'Prescription created successfully',
-                'data' => $prescription->load(['patient:id,name', 'doctor:id,name', 'medications'])
-            ], 201);
-
-        } catch (\Exception $e) {
-            DB::rollBack();
-            Log::error('Prescription creation error: ' . $e->getMessage());
-            return response()->json([
-                'message' => 'Failed to create prescription',
-                'error' => $e->getMessage()
-            ], 500);
         }
+
+        DB::commit();
+
+        return response()->json([
+            'message' => 'Prescription created successfully',
+            'data' => $prescription->load(['patient:id,name', 'doctor:id,name', 'medications'])
+        ], 201);
+
+    } catch (\Exception $e) {
+        DB::rollBack();
+        Log::error('Prescription creation error: ' . $e->getMessage());
+        return response()->json([
+            'message' => 'Failed to create prescription',
+            'error' => $e->getMessage()
+        ], 500);
     }
+}
 
     /**
      * Update doctor availability
@@ -1068,10 +1884,7 @@ private function createMedicationsFromText($prescription, $medicationsText, $app
         }
     }
 
-    /**
- * Create a new medical record for a patient (with optional prescription)
- */
-public function createMedicalRecord(Request $request, $patientId)
+    public function createMedicalRecord(Request $request, $patientId)
 {
     $validated = $request->validate([
         'diagnosis' => 'required|string|max:1000',
@@ -1089,12 +1902,25 @@ public function createMedicalRecord(Request $request, $patientId)
     ]);
 
     try {
+        // ✅ NEW: Check if doctor can attend to this patient
+        $attendanceCheck = $this->canAttendToPatient($request->user()->id, $patientId);
+        
+        if (!$attendanceCheck['can_attend']) {
+            return response()->json([
+                'message' => 'Cannot create medical record at this time',
+                'reason' => $attendanceCheck['reason'],
+                'appointment_time' => $attendanceCheck['appointment_time'] ?? null,
+                'can_attend_from' => $attendanceCheck['can_attend_from'] ?? null
+            ], 403);
+        }
+
         DB::beginTransaction();
 
         // Create medical record
         $record = MedicalRecord::create([
             'patient_id' => $patientId,
             'doctor_id' => $request->user()->id,
+            'appointment_id' => $attendanceCheck['appointment']->id ?? null, // Link to appointment
             'created_by' => $request->user()->id,
             'diagnosis' => $validated['diagnosis'],
             'treatment' => $validated['treatment'],

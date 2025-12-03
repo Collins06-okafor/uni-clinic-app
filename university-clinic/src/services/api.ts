@@ -21,14 +21,13 @@ class ApiService {
   constructor() {
     this.client = axios.create({
       baseURL: API_BASE_URL,
-      timeout: 30000, // Increased to 30 seconds
+      timeout: 30000,
       headers: {
         'Content-Type': 'application/json',
         'Accept': 'application/json',
       },
     });
 
-    // Request interceptor with localization support
     this.client.interceptors.request.use(
       (config) => {
         const token = localStorage.getItem('token') || sessionStorage.getItem('token');
@@ -36,7 +35,6 @@ class ApiService {
           config.headers.Authorization = `Bearer ${token}`;
         }
 
-        // Add localization header
         const currentLanguage = localStorage.getItem('language') || 'en';
         config.headers['X-Locale'] = currentLanguage;
         config.headers['Accept-Language'] = currentLanguage;
@@ -48,7 +46,6 @@ class ApiService {
       }
     );
 
-    // Response interceptor with error handling
     this.client.interceptors.response.use(
       (response) => response,
       (error) => {
@@ -84,6 +81,15 @@ class ApiService {
   async put<T = any>(url: string, data: any = {}, config: AxiosRequestConfig = {}): Promise<T> {
     try {
       const response: AxiosResponse<T> = await this.client.put(url, data, config);
+      return response.data;
+    } catch (error) {
+      throw this.handleError(error as AxiosError);
+    }
+  }
+
+  async patch<T = any>(url: string, data: any = {}, config: AxiosRequestConfig = {}): Promise<T> {
+    try {
+      const response: AxiosResponse<T> = await this.client.patch(url, data, config);
       return response.data;
     } catch (error) {
       throw this.handleError(error as AxiosError);
@@ -352,12 +358,51 @@ class ApiService {
     return this.post('/language/set', { language });
   }
 
+  // ==================== SUPERADMIN - USER STATUS MANAGEMENT ====================
+  
+  /**
+   * Toggle user status between active and inactive
+   */
+  async toggleUserStatus<T = any>(userId: string | number): Promise<T> {
+    return this.patch(`/superadmin/users/${userId}/toggle-status`);
+  }
+
+  /**
+   * Bulk update user status
+   */
+  async bulkUpdateUserStatus<T = any>(userIds: (string | number)[], status: 'active' | 'inactive' | 'pending_verification'): Promise<T> {
+    return this.post('/superadmin/users/bulk-status', {
+      user_ids: userIds,
+      status: status
+    });
+  }
+
+  /**
+   * Get all pending verification users
+   */
+  async getPendingUsers<T = any>(): Promise<T> {
+    return this.get('/superadmin/users/pending');
+  }
+
+  /**
+   * Approve a pending user
+   */
+  async approveUser<T = any>(userId: string | number): Promise<T> {
+    return this.post(`/superadmin/users/${userId}/approve`);
+  }
+
+  /**
+   * Reject a pending user
+   */
+  async rejectUser<T = any>(userId: string | number): Promise<T> {
+    return this.post(`/superadmin/users/${userId}/reject`);
+  }
+
   // ==================== ERROR HANDLING ====================
   private handleError(error: AxiosError): ApiError {
     if (error.response) {
       const { data, status } = error.response;
       
-      // Check for Laravel validation errors
       if (data && typeof data === 'object' && 'errors' in data) {
         const errors = (data as any).errors;
         const firstError = Object.values(errors)[0];
@@ -368,7 +413,6 @@ class ApiService {
         };
       }
       
-      // Check for standard message
       if (data && typeof data === 'object' && 'message' in data) {
         return {
           message: (data as any).message,
@@ -376,7 +420,6 @@ class ApiService {
         };
       }
       
-      // Status-based errors
       if (status === 404) {
         return { message: 'Resource not found', status };
       } else if (status === 403) {

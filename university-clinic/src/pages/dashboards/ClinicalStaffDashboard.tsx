@@ -33,6 +33,7 @@ import PhoneInput from "react-phone-input-2";
 import "react-phone-input-2/lib/style.css";
 import Select from 'react-select';
 import './ClinicalStaffDashboard.css';
+import { formatTime, formatDate } from '../../utils/timeFormatUtils';
 
 ChartJS.register(
   CategoryScale,
@@ -484,45 +485,45 @@ const ClinicalStaffDashboard: React.FC<ClinicalStaffDashboardProps> = ({ user, o
     },
     
     post: async <T = any>(endpoint: string, data: Record<string, any>): Promise<ApiResponse<T>> => {
-      try {
-        console.log(`POST to ${endpoint} with data:`, data);
-        const response = await fetch(`${CLINICAL_API_BASE}/${endpoint}`, {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${AUTH_TOKEN}`,
-            'Content-Type': 'application/json',
-            'Accept': 'application/json',
-          },
-          body: JSON.stringify(data)
-        });
+    try {
+      console.log(`POST to ${endpoint} with data:`, data);
+      const response = await fetch(`${CLINICAL_API_BASE}/${endpoint}`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${AUTH_TOKEN}`,
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
+        body: JSON.stringify(data)
+      });
+      
+      const responseText = await response.text();
+      console.log(`Response from ${endpoint}:`, responseText);
+      
+      if (!response.ok) {
+        console.error(`HTTP ${response.status} response:`, responseText);
         
-        const responseText = await response.text();
-        console.log(`Response from ${endpoint}:`, responseText);
-        
-        if (!response.ok) {
-          console.error(`HTTP ${response.status} response:`, responseText);
+        try {
+          const errorData = JSON.parse(responseText);
           
-          try {
-            const errorData = JSON.parse(responseText);
-            if (errorData.errors) {
-              const validationErrors = Object.values(errorData.errors).flat().join(', ');
-              throw new Error(`Validation errors: ${validationErrors}`);
-            } else if (errorData.message) {
-              throw new Error(errorData.message);
-            }
-          } catch (parseError) {
-            // If parsing fails, use the original error
-          }
+          // ✅ CREATE ERROR WITH FULL DATA
+          const error: any = new Error(errorData.message || `HTTP error! status: ${response.status} - ${response.statusText}`);
+          error.status = response.status;
+          error.response = { data: errorData };
+          error.data = errorData;
+          throw error;
           
+        } catch (parseError) {
           throw new Error(`HTTP error! status: ${response.status} - ${response.statusText}`);
         }
-        
-        return JSON.parse(responseText);
-      } catch (error) {
-        console.error(`API POST Error for ${endpoint}:`, error);
-        throw error;
       }
-    },
+      
+      return JSON.parse(responseText);
+    } catch (error) {
+      console.error(`API POST Error for ${endpoint}:`, error);
+      throw error;
+    }
+  },
     
     put: async <T = any>(endpoint: string, data: Record<string, any>): Promise<ApiResponse<T>> => {
       try {
@@ -1109,41 +1110,8 @@ const isDateBlocked = (dateString: string): boolean => {
     }
   };
 
-  // Add at the top of component (same as Academic Staff)
-const formatDate = (dateString: string): string => {
-  try {
-    const date = new Date(dateString);
-    return date.toLocaleDateString('en-US', {
-      month: '2-digit',
-      day: '2-digit',
-      year: 'numeric'
-    });
-  } catch (error) {
-    return dateString;
-  }
-};
+  
 
-const formatTime = (timeString: string): string => {
-  try {
-    let date: Date;
-    if (timeString.includes('T')) {
-      date = new Date(timeString);
-    } else {
-      const [hours, minutes] = timeString.split(':');
-      date = new Date();
-      date.setHours(parseInt(hours), parseInt(minutes), 0);
-    }
-    
-    return date.toLocaleTimeString('en-US', {
-      hour: 'numeric',
-      minute: '2-digit',
-      second: '2-digit',
-      hour12: true
-    });
-  } catch (error) {
-    return timeString;
-  }
-};
 
   const fetchProfile = async (): Promise<void> => {
   setProfileLoading(true);
@@ -1195,6 +1163,25 @@ const formatTime = (timeString: string): string => {
     showMessage('error', 'Network error fetching profile');
   } finally {
     setProfileLoading(false);
+  }
+};
+
+// Add this new API function
+const checkAppointmentTreatability = async (appointmentId: string | number): Promise<{
+  can_treat: boolean;
+  message: string;
+  blocking_appointments?: any[];
+}> => {
+  try {
+    const response = await api.get<{ can_treat: boolean; message: string; blocking_appointments?: any[] }>(`appointments/${appointmentId}/check-treatability`);
+    // api.get returns a generic ApiResponse<T>; cast to the expected shape for TypeScript
+    return response as unknown as { can_treat: boolean; message: string; blocking_appointments?: any[] };
+  } catch (error: any) {
+    if (error?.response?.status === 423 && error.response.data) {
+      // 423 Locked - has blocking appointments
+      return error.response.data as { can_treat: boolean; message: string; blocking_appointments?: any[] };
+    }
+    throw error;
   }
 };
 
@@ -1366,43 +1353,91 @@ const saveProfile = async (e?: React.FormEvent): Promise<void> => {
   };
 
   const handleApproveRequest = async (
-    requestId: string | number, 
-    doctorId: string | number, 
-    notes: string = '',
-    status: string = 'waiting'
-  ) => {
-    try {
-      setLoading(true);
-      await api.post(`student-requests/${requestId}/approve`, {
-        doctor_id: doctorId,
-        notes,
-        status
-      });
-      
-      setMessage({ type: 'success', text: 'Student request approved and assigned!' });
-      
-      // Refresh all relevant data
-      await Promise.all([
-        loadStudentRequests(),
-        loadAppointments(),
-        loadDashboardData(),
-        loadUrgentRequests() // ADD THIS LINE - Refresh urgent requests
-      ]);
-      
-      // Trigger walk-in refresh
-      window.dispatchEvent(new CustomEvent('refreshWalkIn'));
-      
-      // Switch to walk-in tab to show the assigned patient
-      setActiveTab('walkin');
-      
-      setShowModal('');
-    } catch (error) {
-      console.error('Error approving request:', error);
-      setMessage({ type: 'error', text: `Error approving request: ${(error as Error).message}` });
-    } finally {
-      setLoading(false);
+  requestId: string | number, 
+  doctorId: string | number, 
+  notes: string = '',
+  status: string = 'waiting'
+) => {
+  try {
+    setLoading(true);
+    await api.post(`student-requests/${requestId}/approve`, {
+      doctor_id: doctorId,
+      notes,
+      status
+    });
+    
+    setMessage({ type: 'success', text: 'Student request approved and assigned!' });
+    
+    // Refresh all relevant data
+    await Promise.all([
+      loadStudentRequests(),
+      loadAppointments(),
+      loadDashboardData(),
+      loadUrgentRequests()
+    ]);
+    
+    // Trigger walk-in refresh
+    window.dispatchEvent(new CustomEvent('refreshWalkIn'));
+    
+    // Switch to walk-in tab to show the assigned patient
+    setActiveTab('walkin');
+    
+    setShowModal('');
+  } catch (error: any) {
+    console.error('Error approving request:', error);
+    
+    // ✅ ADD THIS BLOCK - Handle 423 status specially
+    if (error.message?.includes('423')) {
+      // Try to extract the JSON response from the error
+      try {
+        const response = await fetch(`${CLINICAL_API_BASE}/student-requests/${requestId}/approve`, {
+          method: 'POST',
+          headers: { 
+            'Authorization': `Bearer ${AUTH_TOKEN}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ doctor_id: doctorId, notes, status })
+        });
+        
+        if (response.status === 423) {
+  const errorData = await response.json();
+  
+  // ✅ SHORTER MESSAGE - Just show count and first 2
+  let blockingList = '';
+  if (errorData.blocking_appointments && errorData.blocking_appointments.length > 0) {
+    const firstTwo = errorData.blocking_appointments.slice(0, 2);
+    blockingList = '\n\nBlocking appointments:\n' + 
+      firstTwo.map((apt: any) => 
+        `• ${apt.patient_name} - ${(apt.priority || 'normal').toUpperCase()}`
+      ).join('\n');
+    
+    if (errorData.blocking_appointments.length > 2) {
+      blockingList += `\n• ... and ${errorData.blocking_appointments.length - 2} more`;
     }
-  };
+  }
+  
+  setMessage({
+    type: 'error',
+    text: `⚠️ ${errorData.message}${blockingList}`
+  });
+  
+  setTimeout(() => setMessage({ type: '', text: '' }), 8000);
+  return;
+}
+      } catch (parseError) {
+        console.error('Error parsing 423 response:', parseError);
+      }
+    }
+    
+    // Default error handling
+    setMessage({ 
+      type: 'error', 
+      text: `Error approving request: ${error.message}` 
+    });
+  } finally {
+    setLoading(false);
+  }
+};
   
   
   const QuickTimeSlots: React.FC<QuickTimeSlotsProps> = ({ selectedDate, onTimeSelect, formData, setFormData, checkDoctorAvailability }) => {
@@ -1627,13 +1662,13 @@ useEffect(() => {
   };
 
   const getPriorityBadge = (priority: string): string => {
-    const badges: Record<string, string> = {
-      urgent: 'badge bg-danger',
-      high: 'badge bg-warning text-dark',
-      normal: 'badge bg-info'
-    };
-    return badges[priority] || 'badge bg-secondary';
+  const badges: Record<string, string> = {
+    urgent: 'badge bg-danger text-white',    // 🔴 Red
+    high: 'badge bg-warning text-dark',      // 🟠 Orange  
+    normal: 'badge bg-success text-white'    // 🟢 Green
   };
+  return badges[priority] || 'badge bg-secondary';
+};
 
   // Navigation Component
   // Updated Navigation Component with inline styles for ClinicalStaffDashboard.tsx
@@ -2929,61 +2964,64 @@ const DashboardOverview: React.FC = () => {
 const AppointmentsTab: React.FC = () => {
   // Combine appointments and student requests for display
   const combinedAppointments = useMemo(() => {
-  const regularAppointments = appointments.map(apt => ({ 
-    ...apt, 
-    isStudentRequest: false 
-  }));
-  
-  const studentRequestAppointments = studentRequests.map(request => {
-    // Determine the display type based on patient role
-    let displayType = 'Student Request'; // Default
+    const regularAppointments = appointments.map(apt => ({ 
+      ...apt, 
+      isStudentRequest: false 
+    }));
     
-    if (request.patient) {
-      // Check if patient has staff_no (academic staff)
-      if (request.patient.staff_no) {
-        displayType = 'Academic Staff Request';
+    const studentRequestAppointments = studentRequests.map(request => {
+      let displayType = 'Student Request';
+      
+      if (request.patient) {
+        if (request.patient.staff_no) {
+          displayType = 'Academic Staff Request';
+        }
       }
-      // Alternative: Check by role if available
-      // if (request.patient.role === 'academic_staff') {
-      //   displayType = 'Academic Staff Request';
-      // }
-    }
+      
+      const requestType = request.request_type || displayType;
+      
+      return {
+        ...request,
+        isStudentRequest: true,
+        patient: request.patient ? {
+          name: request.patient.name,
+          student_id: request.patient.student_id || 'N/A',
+          staff_no: request.patient.staff_no || null,
+          department: request.patient.department || 'N/A'
+        } : {
+          name: 'Unknown',
+          student_id: 'N/A',
+          staff_no: null,
+          department: 'N/A'
+        },
+        doctor: 'To be assigned',
+        type: requestType,
+        appointment_type: request.appointment_type || requestType,
+        request_type: requestType,
+        priority: request.priority || request.urgency || 'normal',
+        status: request.status || 'pending',
+        date: request.date || request.requested_date,
+        time: request.time || request.requested_time,
+        reason: request.reason || request.message
+      };
+    });
     
-    // Use request_type from backend if available, otherwise use displayType
-    const requestType = request.request_type || displayType;
-    
-    return {
-      ...request,
-      isStudentRequest: true,
-      patient: request.patient ? {
-        name: request.patient.name,
-        student_id: request.patient.student_id || 'N/A',
-        staff_no: request.patient.staff_no || null,
-        department: request.patient.department || 'N/A'
-      } : {
-        name: 'Unknown',
-        student_id: 'N/A',
-        staff_no: null,
-        department: 'N/A'
-      },
-      doctor: 'To be assigned',
-      type: requestType, // Use the determined request type
-      appointment_type: request.appointment_type || requestType,
-      request_type: requestType, // Store for later use
-      priority: request.priority || request.urgency || 'normal',
-      status: request.status || 'pending',
-      date: request.date || request.requested_date,
-      time: request.time || request.requested_time,
-      reason: request.reason || request.message
-    };
-  });
-  
-  return [...regularAppointments, ...studentRequestAppointments].sort((a, b) => {
-    const dateCompare = new Date(a.date || '1970-01-01').getTime() - new Date(b.date || '1970-01-01').getTime();
-    if (dateCompare !== 0) return dateCompare;
-    return (a.time || '00:00').localeCompare(b.time || '00:00');
-  });
-}, [appointments, studentRequests]);
+    // ✅ FIX: Sort by date DESCENDING (newest first), then time DESCENDING
+    return [...regularAppointments, ...studentRequestAppointments].sort((a, b) => {
+      const dateB = new Date(b.date || '1970-01-01').getTime();
+      const dateA = new Date(a.date || '1970-01-01').getTime();
+      
+      // Compare dates - newer dates first
+      if (dateB !== dateA) {
+        return dateB - dateA;
+      }
+      
+      // Same date - later times first
+      const timeB = b.time || '00:00';
+      const timeA = a.time || '00:00';
+      return timeB.localeCompare(timeA);
+    });
+  }, [appointments, studentRequests]);
 
   return (
     <div className="container-fluid py-4">
@@ -3020,82 +3058,82 @@ const AppointmentsTab: React.FC = () => {
           <div className="row mb-4">
             <div className="col-md-3">
               <Select
-  value={{
-    value: filters.status,
-    label: filters.status === 'all' 
-      ? t('clinical.all_statuses')
-      : t(`clinical.${filters.status}`)
-  }}
-  onChange={(option) => setFilters({...filters, status: option?.value || 'all'})}
-  options={[
-    { value: 'all', label: t('clinical.all_statuses') },
-    { value: 'scheduled', label: t('clinical.scheduled') },
-    { value: 'confirmed', label: t('clinical.confirmed') },
-    { value: 'in_progress', label: t('clinical.in_progress') },
-    { value: 'completed', label: t('clinical.completed') },
-    { value: 'cancelled', label: t('clinical.cancelled') },
-    { value: 'pending', label: t('clinical.pending') },
-    { value: 'under_review', label: t('clinical.under_review') },
-    { value: 'rejected', label: t('clinical.rejected') },
-    { value: 'needs_reassignment', label: t('clinical.needs_reassignment') }
-  ]}
-  placeholder={t('clinical.select_status')}
-  menuPortalTarget={document.body}
-  menuPosition="fixed"
-  styles={{
-    control: (base) => ({
-      ...base,
-      minHeight: window.innerWidth < 768 ? '44px' : '38px',
-      fontSize: window.innerWidth < 768 ? '16px' : '14px'
-    }),
-    menu: (base) => ({
-      ...base,
-      maxHeight: window.innerWidth < 768 ? '250px' : '300px',
-      zIndex: 9999
-    }),
-    menuList: (base) => ({
-      ...base,
-      maxHeight: window.innerWidth < 768 ? '250px' : '300px',
-    }),
-    menuPortal: (base) => ({ 
-      ...base, 
-      zIndex: 9999 
-    })
-  }}
-/>
+                value={{
+                  value: filters.status,
+                  label: filters.status === 'all' 
+                    ? t('clinical.all_statuses')
+                    : t(`clinical.${filters.status}`)
+                }}
+                onChange={(option) => setFilters({...filters, status: option?.value || 'all'})}
+                options={[
+                  { value: 'all', label: t('clinical.all_statuses') },
+                  { value: 'scheduled', label: t('clinical.scheduled') },
+                  { value: 'confirmed', label: t('clinical.confirmed') },
+                  { value: 'in_progress', label: t('clinical.in_progress') },
+                  { value: 'completed', label: t('clinical.completed') },
+                  { value: 'cancelled', label: t('clinical.cancelled') },
+                  { value: 'pending', label: t('clinical.pending') },
+                  { value: 'under_review', label: t('clinical.under_review') },
+                  { value: 'rejected', label: t('clinical.rejected') },
+                  { value: 'needs_reassignment', label: t('clinical.needs_reassignment') }
+                ]}
+                placeholder={t('clinical.select_status')}
+                menuPortalTarget={document.body}
+                menuPosition="fixed"
+                styles={{
+                  control: (base) => ({
+                    ...base,
+                    minHeight: window.innerWidth < 768 ? '44px' : '38px',
+                    fontSize: window.innerWidth < 768 ? '16px' : '14px'
+                  }),
+                  menu: (base) => ({
+                    ...base,
+                    maxHeight: window.innerWidth < 768 ? '250px' : '300px',
+                    zIndex: 9999
+                  }),
+                  menuList: (base) => ({
+                    ...base,
+                    maxHeight: window.innerWidth < 768 ? '250px' : '300px',
+                  }),
+                  menuPortal: (base) => ({ 
+                    ...base, 
+                    zIndex: 9999 
+                  })
+                }}
+              />
             </div>
             <div className="col-md-3">
               <Select
-  value={{
-    value: filters.priority,
-    label: filters.priority === 'all' 
-      ? t('clinical.all_priorities')
-      : t(`clinical.${filters.priority}`)
-  }}
-  onChange={(option) => setFilters({...filters, priority: option?.value || 'all'})}
-  options={[
-    { value: 'all', label: t('clinical.all_priorities') },
-    { value: 'normal', label: t('clinical.normal') },
-    { value: 'high', label: t('clinical.high') },
-    { value: 'urgent', label: t('clinical.urgent') }
-  ]}
-  placeholder={t('clinical.select_priority')}
-  menuPortalTarget={document.body}
-  menuPosition="fixed"
-  styles={{
-    control: (base) => ({
-      ...base,
-      minHeight: window.innerWidth < 768 ? '44px' : '38px',
-      fontSize: window.innerWidth < 768 ? '16px' : '14px'
-    }),
-    menu: (base) => ({
-      ...base,
-      maxHeight: window.innerWidth < 768 ? '250px' : '300px',
-      zIndex: 9999
-    }),
-    menuPortal: (base) => ({ ...base, zIndex: 9999 })
-  }}
-/>
+                value={{
+                  value: filters.priority,
+                  label: filters.priority === 'all' 
+                    ? t('clinical.all_priorities')
+                    : t(`clinical.${filters.priority}`)
+                }}
+                onChange={(option) => setFilters({...filters, priority: option?.value || 'all'})}
+                options={[
+                  { value: 'all', label: t('clinical.all_priorities') },
+                  { value: 'normal', label: t('clinical.normal') },
+                  { value: 'high', label: t('clinical.high') },
+                  { value: 'urgent', label: t('clinical.urgent') }
+                ]}
+                placeholder={t('clinical.select_priority')}
+                menuPortalTarget={document.body}
+                menuPosition="fixed"
+                styles={{
+                  control: (base) => ({
+                    ...base,
+                    minHeight: window.innerWidth < 768 ? '44px' : '38px',
+                    fontSize: window.innerWidth < 768 ? '16px' : '14px'
+                  }),
+                  menu: (base) => ({
+                    ...base,
+                    maxHeight: window.innerWidth < 768 ? '250px' : '300px',
+                    zIndex: 9999
+                  }),
+                  menuPortal: (base) => ({ ...base, zIndex: 9999 })
+                }}
+              />
             </div>
             <div className="col-md-3">
               <button 
@@ -3153,7 +3191,6 @@ const AppointmentsTab: React.FC = () => {
                     })
                     .map((apt) => {
                       return (
-                        
                         <tr key={`${apt.isStudentRequest ? 'request' : 'appointment'}-${apt.id}`}>
                           <td>
                             <span className={`badge ${apt.isStudentRequest ? 'bg-info' : 'bg-primary'}`}>
@@ -3172,19 +3209,14 @@ const AppointmentsTab: React.FC = () => {
                               <small className="text-muted">{apt.patient?.student_id || 'N/A'}</small>
                             </div>
                           </td>
-                          <td>
-  {apt.date ? formatDate(apt.date) : 'Not set'}
-</td>
-                          <td>
-  {apt.time ? formatTime(apt.time) : 'Not set'}
-</td>
+                          <td>{apt.date ? formatDate(apt.date) : 'Not set'}</td>
+                          <td>{apt.time ? formatTime(apt.time) : 'Not set'}</td>
                           <td>
                             <span className="badge bg-info text-dark">
                               {apt.type || apt.appointment_type || 'General'}
                             </span>
                           </td>
                           <td>
-                            {/* Keep rejected status as rejected, others use default styling */}
                             {apt.isStudentRequest && apt.status === 'rejected' ? (
                               <span className="badge bg-danger">
                                 {t('clinical.rejected')}
@@ -3220,7 +3252,6 @@ const AppointmentsTab: React.FC = () => {
                           <td>
                             <div className="btn-group btn-group-sm" role="group">
                               {apt.needs_reassignment ? (
-                                // Show reassign button for cancelled appointments
                                 <button 
                                   className="btn btn-warning"
                                   onClick={() => {
@@ -3237,41 +3268,38 @@ const AppointmentsTab: React.FC = () => {
                                 </button>
                               ) : apt.isStudentRequest ? (
                                 <>
-                                  {/* Show assign button for pending/under_review requests */}
                                   {['pending', 'under_review'].includes(apt.status) && (
-                                    <button 
-                                      className="btn btn-outline-primary"
-                                      onClick={() => {
-                                        setFormData({
-                                          ...apt,
-                                          appointmentId: apt.id,
-                                          action: 'assign'
-                                        });
-                                        setShowModal('assignRequest');
-                                      }}
-                                    >
-                                      {t('clinical.assign_doctor')}
-                                    </button>
-                                  )}
-                                  
-                                  {/* Show approve & schedule button for pending/under_review */}
-                                  {['pending', 'under_review'].includes(apt.status) && (
-                                    <button 
-                                      className="btn btn-outline-success"
-                                      onClick={() => {
-                                        setFormData({
-                                          ...apt,
-                                          appointmentId: apt.id,
-                                          action: 'approve'
-                                        });
-                                        setShowModal('reviewRequest');
-                                      }}
-                                    >
-                                      {t('clinical.approve_schedule')}
-                                    </button>
+                                    <>
+                                      <button 
+                                        className="btn btn-outline-primary"
+                                        onClick={() => {
+                                          setFormData({
+                                            ...apt,
+                                            appointmentId: apt.id,
+                                            action: 'assign'
+                                          });
+                                          setShowModal('assignRequest');
+                                        }}
+                                      >
+                                        {t('clinical.assign_doctor')}
+                                      </button>
+                                      
+                                      <button 
+                                        className="btn btn-outline-success"
+                                        onClick={() => {
+                                          setFormData({
+                                            ...apt,
+                                            appointmentId: apt.id,
+                                            action: 'approve'
+                                          });
+                                          setShowModal('reviewRequest');
+                                        }}
+                                      >
+                                        {t('clinical.approve_schedule')}
+                                      </button>
+                                    </>
                                   )}
 
-                                  {/* Show "Ready for Doctor" button for assigned/scheduled requests */}
                                   {['assigned', 'scheduled'].includes(apt.status) && (
                                     <button 
                                       className="btn btn-success"
@@ -3282,7 +3310,6 @@ const AppointmentsTab: React.FC = () => {
                                     </button>
                                   )}
 
-                                  {/* Show reopen button for rejected requests */}
                                   {apt.status === 'rejected' && (
                                     <button 
                                       className="btn btn-outline-info"
@@ -3301,39 +3328,90 @@ const AppointmentsTab: React.FC = () => {
                                   )}
                                 </>
                               ) : (
-  <>
-    <button 
-      className="btn btn-outline-primary"
-      onClick={() => {
-        setFormData({...apt});
-        setShowModal('editAppointment');
-      }}
-    >
-      <Edit size={14} />
-    </button>
-    
-    {/* Show "Ready for Doctor" for scheduled/confirmed appointments */}
-    {['scheduled', 'confirmed'].includes(apt.status) ? (
-      <button 
-        className="btn btn-success"
-        disabled
-      >
-        <Check size={14} className="me-1" />
-        Ready for Doctor
-      </button>
-    ) : (
-      <button 
-        className="btn btn-outline-success"
-        onClick={() => {
-          setFormData({ appointmentId: apt.id, method: 'sms' });
-          setShowModal('confirm');
-        }}
-      >
-        <Check size={14} />
-      </button>
-    )}
-  </>
-)}
+                                <>
+                                  <button 
+                                    className="btn btn-outline-primary"
+                                    onClick={() => {
+                                      setFormData({...apt});
+                                      setShowModal('editAppointment');
+                                    }}
+                                  >
+                                    <Edit size={14} />
+                                  </button>
+                                  
+                                  {/* ✅ UPDATED: Enhanced "Check if Ready" button */}
+                                  {['scheduled', 'confirmed'].includes(apt.status) ? (
+                                    <button 
+                                      className="btn btn-sm btn-outline-primary"
+                                      onClick={async () => {
+                                        try {
+                                          setLoading(true);
+                                          const result = await checkAppointmentTreatability(apt.id);
+                                          
+                                          if (!result.can_treat) {
+                                            let blockingDetails = '';
+                                            if (result.blocking_appointments && result.blocking_appointments.length > 0) {
+                                              blockingDetails = '\n\n📋 Blocking Appointments:\n' + 
+                                                result.blocking_appointments.map((ba: any) => 
+                                                  `• ${ba.patient_name}\n  Date: ${formatDate(ba.date)} at ${formatTime(ba.time)}\n  Priority: ${ba.priority.toUpperCase()} | Status: ${ba.status.toUpperCase()}`
+                                                ).join('\n\n');
+                                            }
+                                            
+                                            setMessage({
+                                              type: 'error',
+                                              text: `⚠️ CANNOT TREAT THIS APPOINTMENT\n\n${result.message}${blockingDetails}\n\n💡 These appointments must be completed first due to higher priority or earlier scheduling time.`
+                                            });
+                                          } else {
+                                            setMessage({
+                                              type: 'success',
+                                              text: '✅ Ready to Treat!\n\nThis appointment can be treated now. No blocking appointments found.'
+                                            });
+                                          }
+                                        } catch (error) {
+                                          console.error('Error checking treatability:', error);
+                                          setMessage({
+                                            type: 'error',
+                                            text: 'Failed to check appointment status. Please try again.'
+                                          });
+                                        } finally {
+                                          setLoading(false);
+                                          setTimeout(() => setMessage({ type: '', text: '' }), 12000);
+                                        }
+                                      }}
+                                      disabled={loading}
+                                      title="Check if this appointment can be treated now (checks for blocking appointments)"
+                                      style={{
+                                        borderColor: '#0d6efd',
+                                        color: '#0d6efd',
+                                        fontSize: '0.875rem',
+                                        padding: '0.25rem 0.5rem'
+                                      }}
+                                    >
+                                      {loading ? (
+                                        <>
+                                          <span className="spinner-border spinner-border-sm me-1"></span>
+                                          Checking...
+                                        </>
+                                      ) : (
+                                        <>
+                                          <CheckCircle size={14} className="me-1" />
+                                          Check if Ready
+                                        </>
+                                      )}
+                                    </button>
+                                  ) : (
+                                    <button 
+                                      className="btn btn-outline-success"
+                                      onClick={() => {
+                                        setFormData({ appointmentId: apt.id, method: 'sms' });
+                                        setShowModal('confirm');
+                                      }}
+                                    >
+                                      <Check size={14} />
+                                    </button>
+                                  )}
+                                </>
+                              )}
                             </div>
                           </td>
                         </tr>

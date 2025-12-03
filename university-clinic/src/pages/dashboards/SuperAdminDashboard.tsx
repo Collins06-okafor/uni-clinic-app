@@ -95,6 +95,8 @@ const EnhancedSuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({ user,
   const [messageType, setMessageType] = useState<'success' | 'error'>('success');
   const [editingDepartment, setEditingDepartment] = useState<Department | null>(null);
   const [editingHoliday, setEditingHoliday] = useState<Holiday | null>(null);
+  const [selectedUsers, setSelectedUsers] = useState<Set<number | string>>(new Set());
+  const [selectAll, setSelectAll] = useState(false);
 
   // NEW: KPI Dashboard States
   const [kpiStats, setKpiStats] = useState<any>(null);
@@ -599,6 +601,71 @@ const LineSparkline = ({ data, color, width = 100, height = 40 }: { data: number
       })}
     </svg>
   );
+};
+
+// ✅ ADD: Toggle user status handler
+const toggleUserStatus = async (userId: string | number, currentStatus: string) => {
+  setLoading(true);
+  try {
+    const response = await api.toggleUserStatus(userId);
+    setMessage(response.message || t('superadmin.user_status_updated'));
+    setMessageType('success');
+    fetchData();
+  } catch (error: any) {
+    setMessage(error.message || t('superadmin.status_update_error'));
+    setMessageType('error');
+  } finally {
+    setLoading(false);
+  }
+};
+
+// ✅ ADD: Bulk status update handler
+const handleBulkStatusUpdate = async (status: 'active' | 'inactive') => {
+  if (selectedUsers.size === 0) {
+    setMessage(t('superadmin.select_users_first'));
+    setMessageType('error');
+    return;
+  }
+  
+  const action = status === 'active' ? 'activate' : 'deactivate';
+  if (!window.confirm(t(`superadmin.confirm_bulk_${action}`, { count: selectedUsers.size }))) return;
+  
+  setLoading(true);
+  try {
+    const response = await api.bulkUpdateUserStatus(Array.from(selectedUsers), status);
+    setMessage(response.message || t('superadmin.bulk_update_success'));
+    setMessageType('success');
+    setSelectedUsers(new Set());
+    setSelectAll(false);
+    fetchData();
+  } catch (error: any) {
+    setMessage(error.message || t('superadmin.bulk_update_error'));
+    setMessageType('error');
+  } finally {
+    setLoading(false);
+  }
+};
+
+// ✅ ADD: Select/deselect users
+const toggleUserSelection = (userId: string | number) => {
+  const newSelected = new Set(selectedUsers);
+  if (newSelected.has(userId)) {
+    newSelected.delete(userId);
+  } else {
+    newSelected.add(userId);
+  }
+  setSelectedUsers(newSelected);
+  setSelectAll(newSelected.size === users.length);
+};
+
+// ✅ ADD: Select all toggle
+const toggleSelectAll = () => {
+  if (selectAll) {
+    setSelectedUsers(new Set());
+  } else {
+    setSelectedUsers(new Set(users.map((u: User) => u.id)));
+  }
+  setSelectAll(!selectAll);
 };
 
 const RadialProgress = ({ percentage, color, size = 120 }: { percentage: number, color: string, size?: number }) => {
@@ -1445,73 +1512,99 @@ const Sidebar = () => {
     </div>
 
     {/* Prescription Activity */}
-    {kpiStats?.prescription_stats && (
-      <div className="row mb-4">
-        <div className="col-12">
-          <div className="card shadow-sm border-0" style={{ borderRadius: '16px' }}>
-            <div className="card-header bg-white border-0" style={{ borderRadius: '16px 16px 0 0' }}>
-              <h6 className="fw-bold mb-0">{t('superadmin.prescription_activity')}</h6>
+    // Replace the prescription activity section with proper null checks
+{kpiStats?.prescription_stats && (
+  <div className="row mb-4">
+    <div className="col-12">
+      <div className="card shadow-sm border-0" style={{ borderRadius: '16px' }}>
+        <div className="card-header bg-white border-0" style={{ borderRadius: '16px 16px 0 0' }}>
+          <h6 className="fw-bold mb-0">{t('superadmin.prescription_activity')}</h6>
+        </div>
+        <div className="card-body">
+          <div className="row g-3">
+            {/* Today */}
+            <div className="col-md-3">
+              <div style={{
+                padding: '20px',
+                background: 'linear-gradient(135deg, #fef3c7 0%, #fde68a 100%)',
+                borderRadius: '12px'
+              }}>
+                <div style={{ fontSize: '13px', fontWeight: '600', color: '#92400e', marginBottom: '12px' }}>
+                  {t('superadmin.today')}
+                </div>
+                <div style={{ fontSize: '32px', fontWeight: '700', color: '#78350f', marginBottom: '8px' }}>
+                  {kpiStats.prescription_stats?.today || 0}
+                </div>
+                <div style={{ fontSize: '11px', color: '#92400e' }}>
+                  {t('superadmin.prescriptions_issued')}
+                </div>
+              </div>
             </div>
-            <div className="card-body">
-              <div className="row g-3">
-                {/* Today */}
-                <div className="col-md-3">
-                  <div style={{/* ... styles ... */}}>
-                    {/* ... */}
-                    <div style={{ fontSize: '13px', fontWeight: '600', color: '#92400e', marginBottom: '12px' }}>
-                      {t('superadmin.today')}
-                    </div>
-                    {/* ... */}
-                  </div>
-                </div>
 
-                {/* This Week */}
-                <div className="col-md-3">
-                  <div style={{/* ... styles ... */}}>
-                    {/* ... */}
-                    <div style={{ fontSize: '13px', fontWeight: '600', color: '#1e40af', marginBottom: '12px' }}>
-                      {t('superadmin.this_week_prescriptions')}
-                    </div>
-                    {/* ... */}
-                  </div>
+            {/* This Week */}
+            <div className="col-md-3">
+              <div style={{
+                padding: '20px',
+                background: 'linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%)',
+                borderRadius: '12px'
+              }}>
+                <div style={{ fontSize: '13px', fontWeight: '600', color: '#1e40af', marginBottom: '12px' }}>
+                  {t('superadmin.this_week_prescriptions')}
                 </div>
+                <div style={{ fontSize: '32px', fontWeight: '700', color: '#1e3a8a', marginBottom: '8px' }}>
+                  {kpiStats.prescription_stats?.this_week || 0}
+                </div>
+                <div style={{ fontSize: '11px', color: '#1e40af' }}>
+                  {t('superadmin.prescriptions_issued')}
+                </div>
+              </div>
+            </div>
 
-                {/* This Month */}
-                <div className="col-md-3">
-                  <div style={{/* ... styles ... */}}>
-                    {/* ... */}
-                    <div style={{ fontSize: '13px', fontWeight: '600', color: '#065f46', marginBottom: '12px' }}>
-                      {t('superadmin.this_month_prescriptions')}
-                    </div>
-                    {/* ... */}
-                  </div>
+            {/* This Month */}
+            <div className="col-md-3">
+              <div style={{
+                padding: '20px',
+                background: 'linear-gradient(135deg, #d1fae5 0%, #a7f3d0 100%)',
+                borderRadius: '12px'
+              }}>
+                <div style={{ fontSize: '13px', fontWeight: '600', color: '#065f46', marginBottom: '12px' }}>
+                  {t('superadmin.this_month_prescriptions')}
                 </div>
+                <div style={{ fontSize: '32px', fontWeight: '700', color: '#064e3b', marginBottom: '8px' }}>
+                  {kpiStats.prescription_stats?.this_month || 0}
+                </div>
+                <div style={{ fontSize: '11px', color: '#065f46' }}>
+                  {t('superadmin.prescriptions_issued')}
+                </div>
+              </div>
+            </div>
 
-                {/* Total */}
-                <div className="col-md-3">
-                  <div style={{/* ... styles ... */}}>
-                    {/* ... */}
-                    <div style={{ fontSize: '13px', fontWeight: '600', color: '#3730a3', marginBottom: '8px', width: '100%' }}>
-                      {t('superadmin.total_prescriptions')}
-                    </div>
-                    <div style={{/* ... circle progress styles ... */}}>
-                      <div style={{
-                        position: 'absolute', top: '50%', left: '50%',
-                        transform: 'translate(-50%, -50%)',
-                        fontSize: '10px', fontWeight: '700',
-                        color: '#312e81', textAlign: 'center'
-                      }}>
-                        {t('superadmin.growth')}
-                      </div>
-                    </div>
-                  </div>
+            {/* Total */}
+            <div className="col-md-3">
+              <div style={{
+                padding: '20px',
+                background: 'linear-gradient(135deg, #e0e7ff 0%, #c7d2fe 100%)',
+                borderRadius: '12px',
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center'
+              }}>
+                <div style={{ fontSize: '13px', fontWeight: '600', color: '#3730a3', marginBottom: '8px', width: '100%' }}>
+                  {t('superadmin.total_prescriptions')}
                 </div>
+                <RadialProgress 
+                  percentage={Math.min(100, Math.round((kpiStats.prescription_stats?.this_month || 0) / Math.max(1, kpiStats.prescription_stats?.total || 1) * 100))} 
+                  color="#4f46e5" 
+                  size={100}
+                />
               </div>
             </div>
           </div>
         </div>
       </div>
-    )}
+    </div>
+  </div>
+)}
 
                 {/* Charts Row */}
     {chartData && (
@@ -1856,59 +1949,127 @@ const Sidebar = () => {
                     ) : (
                       <div className="table-responsive">
                         <table className="table table-hover">
-                          <thead>
-                            <tr>
-                              <th>{t('superadmin.name')}</th>
-                              <th>{t('superadmin.email')}</th>
-                              <th>{t('superadmin.role')}</th>
-                              <th>{t('superadmin.departments')}</th>
-                              <th>{t('common.status')}</th>
-                              <th>{t('superadmin.created')}</th>
-                              <th>{t('superadmin.actions')}</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {users.map((systemUser: User) => (
-                              <tr key={systemUser.id}>
-                                <td>{systemUser.name}</td>
-                                <td>{systemUser.email}</td>
-                                <td>
-                                  <span className={`badge ${
-                                    systemUser.role === 'doctor' ? 'bg-primary' :
-                                    systemUser.role === 'admin' ? 'bg-danger' :
-                                    systemUser.role === 'clinical_staff' ? 'bg-success' :
-                                    'bg-info'
-                                  }`}>
-                                    {t(`superadmin.${systemUser.role?.replace('_', '')}`)}
-                                  </span>
-                                </td>
-                                <td>
-  {typeof systemUser.department === 'object' && systemUser.department !== null
-    ? systemUser.department.name
-    : systemUser.department || '-'}
-</td>
-                                <td>
-                                  <span className={`badge ${
-                                    systemUser.status === 'active' ? 'bg-success' : 'bg-warning'
-                                  }`}>
-                                    {t(`status.${systemUser.status || 'active'}`)}
-                                  </span>
-                                </td>
-                                <td>{formatDate(systemUser.created_at)}</td>
-                                <td>
-                                  <button
-                                    className="btn btn-sm btn-outline-danger"
-                                    onClick={() => deleteUser(systemUser.id)}
-                                    disabled={loading}
-                                    title={t('superadmin.delete_user')}
-                                  >
-                                    <Trash2 size={16} />
-                                  </button>
-                                </td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
+  <thead>
+    <tr>
+      {/* ✅ ADD: Checkbox column header */}
+      <th style={{ width: '50px' }}>
+        <input
+          type="checkbox"
+          checked={selectAll}
+          onChange={toggleSelectAll}
+          className="form-check-input"
+        />
+      </th>
+      <th>{t('superadmin.name')}</th>
+      <th>{t('superadmin.email')}</th>
+      <th>{t('superadmin.role')}</th>
+      <th>{t('superadmin.departments')}</th>
+      <th>{t('common.status')}</th>
+      <th>{t('superadmin.created')}</th>
+      <th>{t('superadmin.actions')}</th>
+    </tr>
+  </thead>
+  <tbody>
+    {users.map((systemUser: User) => (
+      <tr key={systemUser.id}>
+        {/* ✅ ADD: Checkbox for each row */}
+        <td>
+          <input
+            type="checkbox"
+            checked={selectedUsers.has(systemUser.id)}
+            onChange={() => toggleUserSelection(systemUser.id)}
+            className="form-check-input"
+          />
+        </td>
+        
+        <td>{systemUser.name}</td>
+        <td>{systemUser.email}</td>
+        <td>
+          <span className={`badge ${
+            systemUser.role === 'doctor' ? 'bg-primary' :
+            systemUser.role === 'admin' ? 'bg-danger' :
+            systemUser.role === 'clinical_staff' ? 'bg-success' :
+            'bg-info'
+          }`}>
+            {t(`superadmin.${systemUser.role?.replace('_', '')}`)}
+          </span>
+        </td>
+        <td>
+          {typeof systemUser.department === 'object' && systemUser.department !== null
+            ? systemUser.department.name
+            : systemUser.department || '-'}
+        </td>
+        
+        {/* ✅ UPDATED: Clickable status badge */}
+        <td>
+          <span 
+            className={`badge ${
+              systemUser.status === 'active' ? 'bg-success' : 
+              systemUser.status === 'inactive' ? 'bg-warning' : 
+              'bg-secondary'
+            }`}
+            style={{ cursor: 'pointer' }}
+            onClick={() => toggleUserStatus(systemUser.id, systemUser.status || 'active')}
+            title={t('superadmin.click_to_toggle_status')}
+          >
+            {systemUser.status === 'active' ? (
+              <>
+                <CheckCircle size={14} className="me-1" />
+                {t('status.active')}
+              </>
+            ) : systemUser.status === 'inactive' ? (
+              <>
+                <X size={14} className="me-1" />
+                {t('status.inactive')}
+              </>
+            ) : (
+              <>
+                <Clock size={14} className="me-1" />
+                {t('status.pending_verification')}
+              </>
+            )}
+          </span>
+        </td>
+        
+        <td>{formatDate(systemUser.created_at)}</td>
+        
+        {/* ✅ UPDATED: Actions with toggle button */}
+        <td>
+          <div className="btn-group btn-group-sm">
+            <button
+              className={`btn btn-sm ${
+                systemUser.status === 'active' 
+                  ? 'btn-outline-warning' 
+                  : 'btn-outline-success'
+              }`}
+              onClick={() => toggleUserStatus(systemUser.id, systemUser.status || 'active')}
+              disabled={loading}
+              title={
+                systemUser.status === 'active' 
+                  ? t('superadmin.deactivate_user')
+                  : t('superadmin.activate_user')
+              }
+            >
+              {systemUser.status === 'active' ? (
+                <EyeOff size={16} />
+              ) : (
+                <Eye size={16} />
+              )}
+            </button>
+            <button
+              className="btn btn-sm btn-outline-danger"
+              onClick={() => deleteUser(systemUser.id)}
+              disabled={loading}
+              title={t('superadmin.delete_user')}
+            >
+              <Trash2 size={16} />
+            </button>
+          </div>
+        </td>
+      </tr>
+    ))}
+  </tbody>
+</table>
                       </div>
                     )}
                   </div>

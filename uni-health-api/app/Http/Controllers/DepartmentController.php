@@ -10,13 +10,18 @@ use Illuminate\Http\JsonResponse;
 class DepartmentController extends Controller
 {
     /**
-     * Get all departments
+     * Get all departments (including inactive ones for SuperAdmin)
      */
     public function index(): JsonResponse
     {
         try {
-            // Simple fetch without the relationship count for now
-            $departments = Department::where('is_active', true)
+            // ✅ FIXED: Removed ->where('is_active', true) to show ALL departments
+            $departments = Department::withCount([
+                    'users as staff_count' => function($query) {
+                        $query->whereIn('role', ['doctor', 'clinical_staff', 'academic_staff'])
+                              ->where('status', 'active');
+                    }
+                ])
                 ->orderBy('name')
                 ->get(['id', 'name', 'code', 'description', 'type', 'is_active']);
 
@@ -51,6 +56,14 @@ class DepartmentController extends Controller
                 'type' => $request->type,
                 'metadata' => $request->metadata ?? [],
                 'is_active' => true
+            ]);
+
+            // Load staff count for the response
+            $department->loadCount([
+                'users as staff_count' => function($query) {
+                    $query->whereIn('role', ['doctor', 'clinical_staff', 'academic_staff'])
+                          ->where('status', 'active');
+                }
             ]);
 
             return response()->json([
@@ -89,9 +102,17 @@ class DepartmentController extends Controller
                 'metadata' => $request->metadata ?? []
             ]);
 
+            // Reload with staff count
+            $department->loadCount([
+                'users as staff_count' => function($query) {
+                    $query->whereIn('role', ['doctor', 'clinical_staff', 'academic_staff'])
+                          ->where('status', 'active');
+                }
+            ]);
+
             return response()->json([
                 'message' => 'Department updated successfully',
-                'department' => $department->fresh()
+                'department' => $department
             ]);
         } catch (\Exception $e) {
             return response()->json([
@@ -150,6 +171,35 @@ class DepartmentController extends Controller
         } catch (\Exception $e) {
             return response()->json([
                 'message' => 'Failed to deactivate department',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Get staff members of a department
+     */
+    public function getStaff(Department $department): JsonResponse
+    {
+        try {
+            $staff = $department->users()
+                ->whereIn('role', ['doctor', 'clinical_staff', 'academic_staff'])
+                ->select('id', 'name', 'email', 'role', 'staff_type', 'status')
+                ->orderBy('name')
+                ->get();
+
+            return response()->json([
+                'department' => [
+                    'id' => $department->id,
+                    'name' => $department->name,
+                    'code' => $department->code
+                ],
+                'staff' => $staff,
+                'staff_count' => $staff->count()
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'message' => 'Failed to fetch department staff',
                 'error' => $e->getMessage()
             ], 500);
         }

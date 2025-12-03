@@ -10,8 +10,8 @@ import "react-phone-input-2/lib/style.css";
 import PhoneInput from "react-phone-input-2";
 import Select from 'react-select';
 import './DoctorDashboard.css';
-
-
+import EnhancedMedicalCardViewer from '../../components/clinical/EnhancedMedicalCardViewer';
+import { formatTime, formatDate, formatDateForAPI } from '../../utils/timeFormatUtils';
 
 // Types
 interface User {
@@ -284,6 +284,9 @@ const [patientPrescriptions, setPatientPrescriptions] = useState<Prescription[]>
 const [showPatientHistory, setShowPatientHistory] = useState<boolean>(false);
 const [selectedPrescription, setSelectedPrescription] = useState<Prescription | null>(null);
 const [departmentsLoading, setDepartmentsLoading] = useState(false);
+const [showMedicalCard, setShowMedicalCard] = useState<boolean>(false);
+const [selectedPatientForCard, setSelectedPatientForCard] = useState<Patient | null>(null);
+
 
 // Add this state at the top with your other states (around line 300)
 const [showArchivedPatients, setShowArchivedPatients] = useState<boolean>(false);
@@ -297,6 +300,11 @@ const [appointmentFilter, setAppointmentFilter] = useState({
   status: 'all',
   priority: 'all'
 });
+const [appointmentTimeError, setAppointmentTimeError] = useState<{
+  message: string;
+  appointmentTime?: string;
+  canAttendFrom?: string;
+} | null>(null);
 const [walkInAlerts, setWalkInAlerts] = useState<any[]>([]);
   const [doctorProfile, setDoctorProfile] = useState<DoctorProfile>({
     name: user?.name || '',
@@ -328,6 +336,12 @@ const [kpiData, setKpiData] = useState({
   pendingAppointments: 0,
   todayAppointments: 0
 });
+
+const [canPrescribe, setCanPrescribe] = useState<{
+  allowed: boolean;
+  reason?: string;
+  appointmentTime?: string;
+}>({ allowed: true });
   
   // Form states
   const [availabilityForm, setAvailabilityForm] = useState<AvailabilityForm>({
@@ -1279,7 +1293,9 @@ const fetchPatientMedicalRecords = async (patientId: number): Promise<void> => {
 // Fetch prescriptions for a specific patient
 const fetchPatientPrescriptions = async (patientId: number): Promise<void> => {
   try {
-    const response = await fetch(`${DOCTOR_API_BASE}/prescriptions?patient_id=${patientId}`, {
+    console.log('Fetching prescriptions for patient:', patientId); // Debug log
+    
+    const response = await fetch(`${DOCTOR_API_BASE}/patients/${patientId}/prescriptions`, {
       headers: { 
         'Authorization': `Bearer ${localStorage.getItem('token')}`,
         'Content-Type': 'application/json',
@@ -1287,14 +1303,20 @@ const fetchPatientPrescriptions = async (patientId: number): Promise<void> => {
       }
     });
     
+    console.log('Prescriptions response status:', response.status); // Debug log
+    
     if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.message || `HTTP error! status: ${response.status}`);
     }
     
     const data = await response.json();
-    setPatientPrescriptions(data.prescriptions?.data || []);
+    console.log('Prescriptions data received:', data); // Debug log
+    
+    setPatientPrescriptions(data.prescriptions || []);
   } catch (error) {
     console.error('Error fetching patient prescriptions:', error);
+    setPatientPrescriptions([]); // Set empty array on error
   }
 };
 
@@ -1431,6 +1453,29 @@ const getAvailableTimeSlots = (selectedDate: string): string[] => {
       body: JSON.stringify(updateData)
     });
     
+    // ✅ NEW: Handle 403 Forbidden (time restriction)
+    if (response.status === 403) {
+      const errorData = await response.json();
+      
+      setAppointmentTimeError({
+        message: errorData.reason || 'Cannot perform this action yet',
+        appointmentTime: errorData.appointment_time,
+        canAttendFrom: errorData.can_attend_from
+      });
+      
+      setMessage({ 
+        type: 'error', 
+        text: errorData.reason || 'Appointment time has not arrived yet' 
+      });
+      
+      setTimeout(() => {
+        setAppointmentTimeError(null);
+        setMessage({ type: '', text: '' });
+      }, 8000);
+      
+      return; // Stop execution
+    }
+    
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));
       throw new Error(errorData.message || `Failed to ${action} appointment`);
@@ -1441,7 +1486,7 @@ const getAvailableTimeSlots = (selectedDate: string): string[] => {
     // Refresh both appointments and urgent requests
     await Promise.all([
       fetchAppointments(),
-      fetchUrgentRequests() // ADD THIS LINE
+      fetchUrgentRequests()
     ]);
     
   } catch (error: any) {
@@ -1509,6 +1554,38 @@ const completeAppointmentWithReport = async (): Promise<void> => {
   } finally {
     setLoading(false);
     setTimeout(() => setMessage({ type: '', text: '' }), 5000);
+  }
+};
+
+const checkPrescriptionEligibility = async (patientId: string) => {
+  try {
+    const response = await fetch(
+      `${DOCTOR_API_BASE}/patients/${patientId}/can-prescribe`,
+      {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`,
+          'Content-Type': 'application/json',
+        }
+      }
+    );
+    
+    const data = await response.json();
+    
+    if (!response.ok) {
+      setCanPrescribe({
+        allowed: false,
+        reason: data.reason,
+        appointmentTime: data.appointment_time
+      });
+      return false;
+    }
+    
+    setCanPrescribe({ allowed: true });
+    return true;
+    
+  } catch (error) {
+    console.error('Error checking prescription eligibility:', error);
+    return true; // Fail open - let backend handle it
   }
 };
 
@@ -1707,6 +1784,8 @@ const validateAppointmentTime = (date: string, time: string, patientId: string):
   return null; // No conflicts
 };
 
+
+
   const viewAppointmentDetails = (appointment: Appointment): void => {
     setSelectedAppointment(appointment);
     setShowModal('viewAppointment');
@@ -1717,6 +1796,7 @@ const viewPrescriptionDetails = (prescription: Prescription): void => {
   setSelectedPrescription(prescription);
   setShowModal('viewPrescription');
 };
+
 
   // Enhanced createAppointment function (replace your existing one)
 const createAppointment = async (): Promise<void> => {
@@ -1865,27 +1945,66 @@ const unarchiveSelectedPatients = async (): Promise<void> => {
       }
     }
 
-    const response = await fetch(`${DOCTOR_API_BASE}/patients/${selectedPatient.id}/medical-records`, {
+    // ✅ FIX: Only send medications if has_prescription is true AND medications are filled
+    const requestBody: any = {
+      diagnosis: medicalRecordForm.diagnosis,
+      treatment: medicalRecordForm.treatment,
+      notes: medicalRecordForm.notes,
+      visit_date: medicalRecordForm.visit_date,
+      has_prescription: medicalRecordForm.has_prescription,
+    };
+
+    // Only include medications if prescription is being created
+    if (medicalRecordForm.has_prescription) {
+      // Filter out empty medication entries
+      const validMedications = medicalRecordForm.medications.filter(med => 
+        med.name && med.dosage && med.instructions && med.start_date && med.end_date
+      );
+      
+      if (validMedications.length > 0) {
+        requestBody.medications = validMedications;
+      } else {
+        setMessage({ type: 'error', text: 'Please add at least one medication or uncheck "Has Prescription"' });
+        setTimeout(() => setMessage({ type: '', text: '' }), 5000);
+        return;
+      }
+    }
+
+    const response = await fetch(`${DOCTOR_API_BASE}/patients/${selectedPatient.id}/records`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'Accept': 'application/json',
         'Authorization': `Bearer ${localStorage.getItem('token')}`
       },
-      body: JSON.stringify({
-        diagnosis: medicalRecordForm.diagnosis,
-        treatment: medicalRecordForm.treatment,
-        notes: medicalRecordForm.notes,
-        visit_date: medicalRecordForm.visit_date,
-        // Include prescription data if medications are prescribed
-        has_prescription: medicalRecordForm.has_prescription,
-        medications: medicalRecordForm.has_prescription ? medicalRecordForm.medications : []
-      })
+      body: JSON.stringify(requestBody)
     });
     
+    const responseData = await response.json();
+    
     if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
-      throw new Error(errorData.message || `HTTP error! status: ${response.status}`);
+      // Handle appointment time restriction (403 Forbidden)
+      if (response.status === 403) {
+        setAppointmentTimeError({
+          message: responseData.reason || responseData.message || 'Cannot create medical record at this time',
+          appointmentTime: responseData.appointment_time,
+          canAttendFrom: responseData.can_attend_from
+        });
+        
+        // Also show in message bar
+        setMessage({ 
+          type: 'error', 
+          text: responseData.reason || 'You can only create records during scheduled appointment times' 
+        });
+        
+        setTimeout(() => {
+          setAppointmentTimeError(null);
+          setMessage({ type: '', text: '' });
+        }, 8000);
+        return;
+      }
+      
+      throw new Error(responseData.message || `HTTP error! status: ${response.status}`);
     }
     
     setMessage({ 
@@ -1928,105 +2047,119 @@ const unarchiveSelectedPatients = async (): Promise<void> => {
   }
 };
 
-  const createPrescription = async (): Promise<void> => {
+ const createPrescription = async (): Promise<void> => {
+  try {
+    // Validation
+    if (!prescriptionForm.patient_id) {
+      setMessage({ type: 'error', text: 'Please select a patient' });
+      return;
+    }
+
+    // Check eligibility first
+    const canPrescribe = await checkPrescriptionEligibility(prescriptionForm.patient_id);
+    if (!canPrescribe) {
+      // Error is already shown by checkPrescriptionEligibility
+      return;
+    }
+
+    const invalidMedications = prescriptionForm.medications.filter(med => 
+      !med.name || !med.dosage || !med.instructions || !med.start_date || !med.end_date
+    );
+    
+    if (invalidMedications.length > 0) {
+      setMessage({ type: 'error', text: 'Please fill all fields for each medication' });
+      return;
+    }
+
+    const formattedPrescription = {
+      patient_id: prescriptionForm.patient_id,
+      notes: prescriptionForm.notes,
+      medications: prescriptionForm.medications.map(med => ({
+        name: med.name,
+        dosage: med.dosage,
+        instructions: med.instructions,
+        start_date: formatDateForAPI(med.start_date),
+        end_date: formatDateForAPI(med.end_date),
+        frequency: med.frequency || 'daily'
+      }))
+    };
+
+    console.log('Sending prescription data:', formattedPrescription);
+
+    const response = await fetch(`${DOCTOR_API_BASE}/prescriptions`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+        'Authorization': `Bearer ${localStorage.getItem('token')}`
+      },
+      body: JSON.stringify(formattedPrescription)
+    });
+    
+    const responseText = await response.text();
+    let responseData: any;
+    
     try {
-      if (!prescriptionForm.patient_id) {
-        setMessage({ type: 'error', text: 'Please select a patient' });
-        return;
-      }
-
-      const invalidMedications = prescriptionForm.medications.filter(med => 
-        !med.name || !med.dosage || !med.instructions || !med.start_date || !med.end_date
-      );
-      
-      if (invalidMedications.length > 0) {
-        setMessage({ type: 'error', text: 'Please fill all fields for each medication' });
-        return;
-      }
-
-      const formattedPrescription = {
-        patient_id: prescriptionForm.patient_id,
-        notes: prescriptionForm.notes,
-        medications: prescriptionForm.medications.map(med => ({
-          name: med.name,
-          dosage: med.dosage,
-          instructions: med.instructions,
-          start_date: formatDateForAPI(med.start_date),
-          end_date: formatDateForAPI(med.end_date),
-          frequency: med.frequency || 'daily'
-        }))
-      };
-
-      console.log('Sending prescription data:', formattedPrescription);
-
-      // FIX: Use DOCTOR_API_BASE instead of API_BASE_URL
-      const response = await fetch(`${DOCTOR_API_BASE}/prescriptions`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        },
-        body: JSON.stringify(formattedPrescription)
-      });
-      
-      const responseText = await response.text();
-      let responseData: any;
-      
-      try {
-        responseData = responseText ? JSON.parse(responseText) : {};
-      } catch (e) {
-        console.error('Failed to parse response as JSON:', responseText);
-        responseData = { message: responseText };
-      }
-      
-      if (!response.ok) {
-        if (response.status === 500) {
-          console.error('Server error details:', responseData);
-          throw new Error(`Server error: ${responseData.message || 'Internal server error'}`);
-        }
-        
-        if (response.status === 422 && responseData.errors) {
-          const errorMessages = Object.values(responseData.errors).flat().join(', ');
-          throw new Error(`Validation error: ${errorMessages}`);
-        }
-        
-        throw new Error(`HTTP error! status: ${response.status}, message: ${responseData.message || 'Unknown error'}`);
-      }
-      
-      setMessage({ type: 'success', text: 'Prescription created successfully!' });
-      setShowModal('');
-      setPrescriptionForm({
-        patient_id: '',
-        medications: [{ name: '', dosage: '', instructions: '', start_date: '', end_date: '', frequency: 'daily' }],
-        notes: ''
-      });
-
-      fetchPrescriptions();
-
-      setTimeout(() => setMessage({ type: '', text: '' }), 5000);
-    } catch (error: any) {
-      console.error('Error creating prescription:', error);
-      setMessage({ type: 'error', text: error.message || 'Failed to create prescription. Please check console for details.' });
-      setTimeout(() => setMessage({ type: '', text: '' }), 5000);
-    }
-  };
-
-  const formatDateForAPI = (dateString: string): string => {
-    if (!dateString) return '';
-    
-    const date = new Date(dateString);
-    if (isNaN(date.getTime())) {
-      console.warn('Invalid date:', dateString);
-      return dateString;
+      responseData = responseText ? JSON.parse(responseText) : {};
+    } catch (e) {
+      console.error('Failed to parse response as JSON:', responseText);
+      responseData = { message: responseText };
     }
     
-    const year = date.getFullYear();
-    const month = String(date.getMonth() + 1).padStart(2, '0');
-    const day = String(date.getDate()).padStart(2, '0');
+    if (!response.ok) {
+      // ✅ Handle appointment time restriction (403 Forbidden)
+      if (response.status === 403) {
+        setAppointmentTimeError({
+          message: responseData.reason || responseData.message || 'Cannot create prescription at this time',
+          appointmentTime: responseData.appointment_time,
+          canAttendFrom: responseData.can_attend_from
+        });
+        
+        // Also show in message bar
+        setMessage({ 
+          type: 'error', 
+          text: responseData.reason || 'You can only prescribe during scheduled appointment times' 
+        });
+        
+        setTimeout(() => {
+          setAppointmentTimeError(null);
+          setMessage({ type: '', text: '' });
+        }, 8000);
+        return;
+      }
+      
+      if (response.status === 500) {
+        console.error('Server error details:', responseData);
+        throw new Error(`Server error: ${responseData.message || 'Internal server error'}`);
+      }
+      
+      if (response.status === 422 && responseData.errors) {
+        const errorMessages = Object.values(responseData.errors).flat().join(', ');
+        throw new Error(`Validation error: ${errorMessages}`);
+      }
+      
+      throw new Error(`HTTP error! status: ${response.status}, message: ${responseData.message || 'Unknown error'}`);
+    }
     
-    return `${year}-${month}-${day}`;
-  };
+    setMessage({ type: 'success', text: 'Prescription created successfully!' });
+    setShowModal('');
+    setPrescriptionForm({
+      patient_id: '',
+      medications: [{ name: '', dosage: '', instructions: '', start_date: '', end_date: '', frequency: 'daily' }],
+      notes: ''
+    });
+
+    fetchPrescriptions();
+
+    setTimeout(() => setMessage({ type: '', text: '' }), 5000);
+  } catch (error: any) {
+    console.error('Error creating prescription:', error);
+    setMessage({ type: 'error', text: error.message || 'Failed to create prescription. Please check console for details.' });
+    setTimeout(() => setMessage({ type: '', text: '' }), 5000);
+  }
+};
+
+  
 
   const addMedication = (): void => {
     setPrescriptionForm(prev => ({
@@ -2042,53 +2175,8 @@ const unarchiveSelectedPatients = async (): Promise<void> => {
     }));
   };
 
-  const formatTime = (timeString: string | undefined): string => {
-  if (!timeString) return '';
   
-  try {
-    // Handle "10:00:00" or "10:00" format
-    const timeParts = timeString.split(':');
-    let hours = parseInt(timeParts[0]);
-    const minutes = timeParts[1];
-    
-    // Convert to 12-hour format with AM/PM
-    const period = hours >= 12 ? 'PM' : 'AM';
-    hours = hours % 12 || 12; // Convert 0 to 12 for midnight
-    
-    return `${hours}:${minutes} ${period}`;
-  } catch (error) {
-    console.error('Error formatting time:', error);
-    return timeString;
-  }
-};
 
-// Format date nicely
-const formatDate = (dateString: string | undefined): string => {
-  if (!dateString) return '';
-  
-  try {
-    // Handle "2025-10-07" format
-    const datePart = dateString.split('T')[0];
-    const date = new Date(datePart + 'T00:00:00');
-    
-    // Format as "Oct 7, 2025" or use toLocaleDateString for user's locale
-    return date.toLocaleDateString('en-US', {
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric'
-    });
-  } catch (error) {
-    console.error('Error formatting date:', error);
-    return dateString;
-  }
-};
-
-const formatDateTime = (dateString: string): { date: string; time: string } => {
-  return {
-    date: formatDate(dateString),
-    time: formatTime(dateString)
-  };
-};
 
   
 
@@ -2632,13 +2720,13 @@ const AppointmentsTab = () => (
             {t('appointments.set_availability')}
           </button>
 
-          <button
+          {/* <button
             onClick={() => setShowModal('appointment')}
             className="btn btn-light btn-sm"
           >
             <Plus size={16} className="me-1" />
             {t('appointments.new_appointment')}
-          </button>
+          </button>*/}
         </div>
       </div>
     </div>
@@ -2992,109 +3080,202 @@ const AppointmentsTab = () => (
             </div>
           </div>
 
-          {/* Patients Table */}
-          <div className="table-responsive">
-            <table className="table table-hover mb-0">
-              <thead className="table-light">
-                <tr>
-                  <th style={{ width: "50px" }} className="border-0">
-                    <span className="visually-hidden">{t('doctor.select')}</span>
-                  </th>
-                  <th className="border-0 fw-semibold">{t('doctor.patient')}</th>
-                  <th className="border-0 fw-semibold">{t('doctor.patient_id')}</th>
-                  <th className="border-0 fw-semibold">{t('doctor.contact')}</th>
-                  <th className="border-0 fw-semibold">{t('doctor.department')}</th>
-                  <th className="border-0 fw-semibold">{t('doctor.role')}</th>
-                  <th className="border-0 fw-semibold text-center">{t('doctor.actions')}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredPatients.map((patient: Patient) => (
-                  <tr 
-                    key={patient.id} 
-                    className={`${selectedPatients.has(patient.id) ? 'table-primary' : ''}`}
-                    style={{ 
-                      backgroundColor: selectedPatients.has(patient.id) ? 'rgba(13, 110, 253, 0.1)' : 'transparent',
-                      transition: 'all 0.2s ease'
-                    }}
-                  >
-                    <td className="align-middle">
-                      <div className="form-check">
-                        <input
-                          className="form-check-input"
-                          type="checkbox"
-                          checked={selectedPatients.has(patient.id)}
-                          onChange={() => togglePatientSelection(patient.id)}
-                        />
-                      </div>
-                    </td>
-                    
-                    <td className="align-middle">
+          {/* Mobile card layout */}
+          <div className="d-block d-lg-none">
+            {filteredPatients.map((patient: Patient) => (
+              <div key={patient.id} className="card mb-2 border">
+                <div className="card-body p-3">
+                  <div className="d-flex justify-content-between align-items-start mb-2">
+                    <div className="flex-grow-1">
+                      <h6 className="mb-1 fw-semibold">{patient.name}</h6>
+                      <small className="text-muted">{patient.student_id || patient.staff_no}</small>
+                    </div>
+                    <div className="form-check">
+                      <input
+                        className="form-check-input"
+                        type="checkbox"
+                        checked={selectedPatients.has(patient.id)}
+                        onChange={() => togglePatientSelection(patient.id)}
+                      />
+                    </div>
+                  </div>
+                  
+                  <div className="mb-2">
+                    <div className="d-flex align-items-center mb-1">
+                      <Mail size={14} className="me-2 text-primary" />
+                      <span className="small">{patient.email}</span>
+                    </div>
+                    {patient.phone && (
                       <div className="d-flex align-items-center">
-                        <div 
-                          className="rounded-circle me-3 d-flex align-items-center justify-content-center"
+                        <Phone size={14} className="me-2 text-success" />
+                        <span className="small">{patient.phone}</span>
+                      </div>
+                    )}
+                  </div>
+                  
+                  <div className="d-flex gap-1 flex-wrap">
+                    {/* View Details Button */}
+                    <button 
+                      className="btn btn-sm btn-outline-primary flex-fill" 
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setShowMedicalCard(false);
+                        setSelectedPatientForCard(null);
+                        setSelectedPatient(patient);
+                        setShowModal('viewPatient');
+                      }}
+                    >
+                      <Eye size={14} className="me-1" />
+                      {t('doctor.view_details')}
+                    </button>
+                    
+                    {/* Medical Card Button */}
+                    <button 
+                      className="btn btn-sm btn-outline-success flex-fill" 
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setShowModal('');
+                        setSelectedPatient(null);
+                        setSelectedPatientForCard(patient);
+                        setShowMedicalCard(true);
+                      }}
+                    >
+                      <Activity size={14} className="me-1" />
+                      Medical Card
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Desktop table layout */}
+          <div className="d-none d-lg-block">
+            <div className="table-responsive">
+              <table className="table table-hover mb-0">
+                <thead className="table-light">
+                  <tr>
+                    <th style={{ width: "50px" }} className="border-0">
+                      <span className="visually-hidden">{t('doctor.select')}</span>
+                    </th>
+                    <th className="border-0 fw-semibold">{t('doctor.patient')}</th>
+                    <th className="border-0 fw-semibold">{t('doctor.patient_id')}</th>
+                    <th className="border-0 fw-semibold">{t('doctor.contact')}</th>
+                    <th className="border-0 fw-semibold">{t('doctor.department')}</th>
+                    <th className="border-0 fw-semibold">{t('doctor.role')}</th>
+                    <th className="border-0 fw-semibold text-center">{t('doctor.actions')}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredPatients.map((patient: Patient) => (
+                    <tr 
+                      key={patient.id} 
+                      className={`${selectedPatients.has(patient.id) ? 'table-primary' : ''}`}
+                      style={{ 
+                        backgroundColor: selectedPatients.has(patient.id) ? 'rgba(13, 110, 253, 0.1)' : 'transparent',
+                        transition: 'all 0.2s ease'
+                      }}
+                    >
+                      <td className="align-middle">
+                        <div className="form-check">
+                          <input
+                            className="form-check-input"
+                            type="checkbox"
+                            checked={selectedPatients.has(patient.id)}
+                            onChange={() => togglePatientSelection(patient.id)}
+                          />
+                        </div>
+                      </td>
+                      
+                      <td className="align-middle">
+                        <div className="d-flex align-items-center">
+                          <div 
+                            className="rounded-circle me-3 d-flex align-items-center justify-content-center"
+                            style={{
+                              width: '40px',
+                              height: '40px',
+                              backgroundColor: universityTheme.primary + '20',
+                              color: universityTheme.primary
+                            }}
+                          >
+                            <User size={20} />
+                          </div>
+                          <div>
+                            <div className="fw-semibold text-dark">{patient.name}</div>
+                            <small className="text-muted">
+                              {t('doctor.patient')} #{patient.id}
+                            </small>
+                          </div>
+                        </div>
+                      </td>
+                      
+                      <td className="align-middle">
+                        <span className="badge bg-light text-dark border">
+                          {patient.student_id || patient.staff_no || 'N/A'}
+                        </span>
+                      </td>
+                      
+                      <td className="align-middle">
+                        <div>
+                          <div className="fw-medium">{patient.email}</div>
+                          <small className="text-muted">{t('doctor.email')}</small>
+                        </div>
+                      </td>
+                      
+                      <td className="align-middle">
+                        <span className="text-dark">{patient.department}</span>
+                      </td>
+                      
+                      <td className="align-middle">
+                        <span 
+                          className="badge"
                           style={{
-                            width: '40px',
-                            height: '40px',
-                            backgroundColor: universityTheme.primary + '20',
-                            color: universityTheme.primary
+                            backgroundColor: patient.role === 'student' ? '#e3f2fd' : '#f3e5f5',
+                            color: patient.role === 'student' ? '#1976d2' : '#7b1fa2'
                           }}
                         >
-                          <User size={20} />
+                          {patient.role}
+                        </span>
+                      </td>
+                      
+                      <td className="align-middle text-center">
+                        <div className="btn-group" role="group">
+                          {/* View Details Button */}
+                          <button 
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setShowMedicalCard(false);
+                              setSelectedPatientForCard(null);
+                              setSelectedPatient(patient);
+                              setShowModal('viewPatient');
+                            }}
+                            className="btn btn-sm btn-outline-primary"
+                            title={t('doctor.view_details')}
+                          >
+                            <Eye size={16} />
+                          </button>
+                          
+                          {/* Medical Card Button */}
+                          <button 
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setShowModal('');
+                              setSelectedPatient(null);
+                              setSelectedPatientForCard(patient);
+                              setShowMedicalCard(true);
+                            }}
+                            className="btn btn-sm btn-outline-success"
+                            title="View Medical Card & Vitals"
+                          >
+                            <Activity size={16} />
+                          </button>
                         </div>
-                        <div>
-                          <div className="fw-semibold text-dark">{patient.name}</div>
-                          <small className="text-muted">
-                            {t('doctor.patient')} #{patient.id}
-                          </small>
-                        </div>
-                      </div>
-                    </td>
-                    
-                    <td className="align-middle">
-                      <span className="badge bg-light text-dark border">
-                        {patient.student_id || patient.staff_no || 'N/A'}
-                      </span>
-                    </td>
-                    
-                    <td className="align-middle">
-                      <div>
-                        <div className="fw-medium">{patient.email}</div>
-                        <small className="text-muted">{t('doctor.email')}</small>
-                      </div>
-                    </td>
-                    
-                    <td className="align-middle">
-                      <span className="text-dark">{patient.department}</span>
-                    </td>
-                    
-                    <td className="align-middle">
-                      <span 
-                        className="badge"
-                        style={{
-                          backgroundColor: patient.role === 'student' ? '#e3f2fd' : '#f3e5f5',
-                          color: patient.role === 'student' ? '#1976d2' : '#7b1fa2'
-                        }}
-                      >
-                        {patient.role}
-                      </span>
-                    </td>
-                    
-                    <td className="align-middle text-center">
-                      <div className="btn-group" role="group">
-                        <button 
-                          onClick={() => {setSelectedPatient(patient); setShowModal('viewPatient');}}
-                          className="btn btn-sm btn-outline-primary"
-                          title={t('doctor.view_details')}
-                        >
-                          <Eye size={16} />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
 
           {/* Footer with pagination info */}
@@ -3788,6 +3969,43 @@ const Sidebar = () => {
     )
   );
 
+  {/* Appointment Time Error Alert */}
+{appointmentTimeError && (
+  <div className="container-fluid px-4 mb-3">
+    <div className="alert alert-warning alert-dismissible fade show shadow-sm" role="alert">
+      <div className="d-flex align-items-start">
+        <Clock size={28} className="me-3 flex-shrink-0 text-warning" />
+        <div className="flex-grow-1">
+          <h5 className="alert-heading mb-2 fw-bold">
+            ⏰ Appointment Time Not Yet Reached
+          </h5>
+          <p className="mb-2">{appointmentTimeError.message}</p>
+          {appointmentTimeError.appointmentTime && (
+            <div className="small">
+              <strong>📅 Scheduled Appointment:</strong> {appointmentTimeError.appointmentTime}
+              <br />
+              {appointmentTimeError.canAttendFrom && (
+                <>
+                  <strong>✅ Can Start Attending From:</strong> {appointmentTimeError.canAttendFrom}
+                  <br />
+                </>
+              )}
+              <em className="text-muted">
+                You can only prescribe medications or create medical records during the scheduled appointment time.
+              </em>
+            </div>
+          )}
+        </div>
+        <button
+          type="button"
+          className="btn-close"
+          onClick={() => setAppointmentTimeError(null)}
+        ></button>
+      </div>
+    </div>
+  </div>
+)}
+
   // Main render
    return (
   <div style={{ 
@@ -4129,9 +4347,9 @@ const Sidebar = () => {
           <>
             <div className="modal-header" style={{ background: universityTheme.gradient }}>
               <h5 className="modal-title text-white">
-  <Clock size={20} className="me-2" />
-  {t('doctor.set_availability_title')}
-</h5>
+                <Clock size={20} className="me-2" />
+                {t('doctor.set_availability_title')}
+              </h5>
               <button
                 type="button"
                 className="btn-close btn-close-white"
@@ -4257,14 +4475,14 @@ const Sidebar = () => {
           </>
         )}
         
-        {/* New Appointment Modal */}
+        {/* New Appointment Modal 
         {showModal === 'appointment' && (
           <>
             <div className="modal-header" style={{ background: universityTheme.gradient }}>
               <h5 className="modal-title text-white">
-  <Plus size={20} className="me-2" />
-  {t('doctor.new_appointment_title')}
-</h5>
+                <Plus size={20} className="me-2" />
+                {t('doctor.new_appointment_title')}
+              </h5>
               <button
                 type="button"
                 className="btn-close btn-close-white"
@@ -4273,41 +4491,41 @@ const Sidebar = () => {
             </div>
 
             <div className="modal-body p-4">
-              {/* Patient Selection */}
-<div className="mb-3">
-  <label className="form-label fw-semibold">
-    Patient <span className="text-danger">*</span>
-  </label>
-  <Select
-    options={patients.map(patient => ({
-      value: patient.id.toString(),
-      label: `${patient.name} - ${patient.student_id || patient.staff_no}`
-    }))}
-    value={appointmentForm.patient_id ? {
-      value: appointmentForm.patient_id,
-      label: patients.find(p => p.id.toString() === appointmentForm.patient_id)?.name || ''
-    } : null}
-    onChange={(option) => setAppointmentForm(prev => ({
-      ...prev,
-      patient_id: option?.value || ''
-    }))}
-    placeholder="Select a patient"
-    isClearable
-    isSearchable
-    styles={selectStyles}
-    theme={selectTheme}
-    menuPortalTarget={document.body}
-    menuPosition="fixed"
-  />
-  {!appointmentForm.patient_id && (
-    <div className="form-text text-danger fst-italic small">
-      Please select a patient
-    </div>
-  )}
-</div>
+              {/* Patient Selection 
+              <div className="mb-3">
+                <label className="form-label fw-semibold">
+                  Patient <span className="text-danger">*</span>
+                </label>
+                <Select
+                  options={patients.map(patient => ({
+                    value: patient.id.toString(),
+                    label: `${patient.name} - ${patient.student_id || patient.staff_no}`
+                  }))}
+                  value={appointmentForm.patient_id ? {
+                    value: appointmentForm.patient_id,
+                    label: patients.find(p => p.id.toString() === appointmentForm.patient_id)?.name || ''
+                  } : null}
+                  onChange={(option) => setAppointmentForm(prev => ({
+                    ...prev,
+                    patient_id: option?.value || ''
+                  }))}
+                  placeholder="Select a patient"
+                  isClearable
+                  isSearchable
+                  styles={selectStyles}
+                  theme={selectTheme}
+                  menuPortalTarget={document.body}
+                  menuPosition="fixed"
+                />
+                {!appointmentForm.patient_id && (
+                  <div className="form-text text-danger fst-italic small">
+                    Please select a patient
+                  </div>
+                )}
+              </div>
 
               <div className="row">
-                {/* Date Selection */}
+                {/* Date Selection 
                 <div className="col-md-6 mb-3">
                   <label className="form-label fw-semibold">
                     Date <span className="text-danger">*</span>
@@ -4330,42 +4548,42 @@ const Sidebar = () => {
                   )}
                 </div>
 
-                {/* Time Selection */}
-<div className="col-md-6 mb-3">
-  <label className="form-label fw-semibold">
-    Time <span className="text-danger">*</span>
-  </label>
-  <Select
-    options={getAvailableTimeSlots(appointmentForm.date).map(slot => ({
-      value: slot,
-      label: slot
-    }))}
-    value={appointmentForm.time ? {
-      value: appointmentForm.time,
-      label: appointmentForm.time
-    } : null}
-    onChange={(option) => setAppointmentForm(prev => ({
-      ...prev,
-      time: option?.value || ''
-    }))}
-    placeholder="Select time"
-    isClearable
-    isSearchable={false}
-    isDisabled={!appointmentForm.date || isDateBlocked(appointmentForm.date)}
-    styles={selectStyles}
-    theme={selectTheme}
-    menuPortalTarget={document.body}
-    menuPosition="fixed"
-  />
-  {!appointmentForm.time && (
-    <div className="form-text text-danger fst-italic small">
-      Please select a time
-    </div>
-  )}
-</div>
+                {/* Time Selection 
+                  <div className="col-md-6 mb-3">
+                    <label className="form-label fw-semibold">
+                      Time <span className="text-danger">*</span>
+                    </label>
+                    <Select
+                      options={getAvailableTimeSlots(appointmentForm.date).map(slot => ({
+                        value: slot,
+                        label: slot
+                      }))}
+                      value={appointmentForm.time ? {
+                        value: appointmentForm.time,
+                        label: appointmentForm.time
+                      } : null}
+                      onChange={(option) => setAppointmentForm(prev => ({
+                        ...prev,
+                        time: option?.value || ''
+                      }))}
+                      placeholder="Select time"
+                      isClearable
+                      isSearchable={false}
+                      isDisabled={!appointmentForm.date || isDateBlocked(appointmentForm.date)}
+                      styles={selectStyles}
+                      theme={selectTheme}
+                      menuPortalTarget={document.body}
+                      menuPosition="fixed"
+                    />
+                    {!appointmentForm.time && (
+                      <div className="form-text text-danger fst-italic small">
+                        Please select a time
+                      </div>
+                    )}
+                  </div>
               </div>
 
-              {/* Reason for Visit */}
+              {/* Reason for Visit 
               <div className="mb-3">
                 <label className="form-label fw-semibold">
                   Reason for Visit <span className="text-danger">*</span>
@@ -4390,7 +4608,7 @@ const Sidebar = () => {
                 )}
               </div>
 
-              {/* Appointment Summary */}
+              {/* Appointment Summary 
               {appointmentForm.date && appointmentForm.time && (
                 <div className="alert alert-info d-flex align-items-center">
                   <Clock size={16} className="me-2" />
@@ -4401,7 +4619,7 @@ const Sidebar = () => {
               )}
             </div>
 
-            {/* Modal Footer */}
+            {/* Modal Footer 
             <div className="modal-footer">
               <button
                 type="button"
@@ -4439,16 +4657,16 @@ const Sidebar = () => {
               </button>
             </div>
           </>
-        )}
+        )} */}
 
         {/* View Appointment Details Modal */}
         {showModal === 'viewAppointment' && selectedAppointment && (
           <>
             <div className="modal-header" style={{ background: universityTheme.gradient }}>
               <h5 className="modal-title text-white">
-  <Eye size={20} className="me-2" />
-  {t('doctor.appointment_details')}
-</h5>
+                <Eye size={20} className="me-2" />
+                {t('doctor.appointment_details')}
+              </h5>
               <button
                 type="button"
                 className="btn-close btn-close-white"
@@ -4745,36 +4963,36 @@ const Sidebar = () => {
         {/* ADD THE VIEW PATIENT DETAILS MODAL HERE */}
         {/* Enhanced View Patient Details Modal */}
         {showModal === 'viewPatient' && selectedPatient && (
-  <>
-    <div className="modal-header" style={{ background: universityTheme.gradient }}>
-      <h5 className="modal-title text-white">
-        <User size={20} className="me-2" />
-        {t('doctor.patient_details')} - {selectedPatient.name}
-      </h5>
-      <button
-        type="button"
-        className="btn-close btn-close-white"
-        onClick={() => {
-          setShowModal('');
-          setShowPatientHistory(false);
-          setPatientMedicalRecords([]);
-          setPatientPrescriptions([]);
-        }}
-      ></button>
-    </div>
-    <div className="modal-body p-4" style={{ maxHeight: '80vh', overflowY: 'auto' }}>
-      {/* Basic Patient Information */}
-      <div className="row mb-4">
-        <div className="col-md-6 mb-3">
-          <label className="form-label fw-semibold text-muted small">{t('doctor.name')}</label>
-          <div className="fw-semibold">{selectedPatient.name}</div>
-        </div>
-        <div className="col-md-6 mb-3">
-          <label className="form-label fw-semibold text-muted small">{t('doctor.id')}</label>
-          <div className="fw-semibold">{selectedPatient.student_id || selectedPatient.staff_no}</div>
-        </div>
-      </div>
-              
+          <>
+            <div className="modal-header" style={{ background: universityTheme.gradient }}>
+              <h5 className="modal-title text-white">
+                <User size={20} className="me-2" />
+                {t('doctor.patient_details')} - {selectedPatient.name}
+              </h5>
+              <button
+                type="button"
+                className="btn-close btn-close-white"
+                onClick={() => {
+                  setShowModal('');
+                  setShowPatientHistory(false);
+                  setPatientMedicalRecords([]);
+                  setPatientPrescriptions([]);
+                }}
+              ></button>
+            </div>
+            <div className="modal-body p-4" style={{ maxHeight: '80vh', overflowY: 'auto' }}>
+              {/* Basic Patient Information */}
+              <div className="row mb-4">
+                <div className="col-md-6 mb-3">
+                  <label className="form-label fw-semibold text-muted small">{t('doctor.name')}</label>
+                  <div className="fw-semibold">{selectedPatient.name}</div>
+                </div>
+                <div className="col-md-6 mb-3">
+                  <label className="form-label fw-semibold text-muted small">{t('doctor.id')}</label>
+                  <div className="fw-semibold">{selectedPatient.student_id || selectedPatient.staff_no}</div>
+                </div>
+              </div>
+                      
               <div className="row mb-4">
                 <div className="col-md-6 mb-3">
                   <label className="form-label fw-semibold text-muted small">{t('doctor.email')}</label>
@@ -4841,8 +5059,8 @@ const Sidebar = () => {
                         </div>
                       ) : (
                         <div>
-                          {patientMedicalRecords.slice(0, showPatientHistory ? undefined : 3).map((record) => (
-                            <div key={record.id} className="card mb-2 border">
+                          {patientMedicalRecords.slice(0, 3).map((record) => (
+        <div key={record.id} className="card mb-2 border">
                               <div className="card-body p-3">
                                 <div className="d-flex justify-content-between align-items-start mb-2">
                                   <small className="text-muted">
@@ -4883,58 +5101,95 @@ const Sidebar = () => {
                     </div>
 
                     {/* Recent Prescriptions */}
-                    <div className="col-md-6">
-                      <h6 className="text-success mb-3">
-                        <Pill size={16} className="me-1" />
-                        Recent Prescriptions
-                      </h6>
-                      {patientPrescriptions.length === 0 ? (
-                        <div className="text-center py-3 bg-light rounded">
-                          <Pill size={24} className="text-muted mb-2" />
-                          <p className="text-muted mb-0 small">No prescriptions found</p>
-                        </div>
-                      ) : (
-                        <div>
-                          {patientPrescriptions.slice(0, showPatientHistory ? undefined : 3).map((prescription) => (
-                            <div key={prescription.id} className="card mb-2 border">
-                              <div className="card-body p-3">
-                                <div className="d-flex justify-content-between align-items-start mb-2">
-                                  <small className="text-muted">
-                                    {new Date(prescription.created_at).toLocaleDateString()}
-                                  </small>
-                                  <span className={`badge ${getStatusBadge(prescription.status)} badge-sm`}>
-                                    {prescription.status}
-                                  </span>
-                                </div>
-                                {prescription.medications?.map((med, index) => (
-                                  <div key={index} className="mb-2 p-2 bg-light rounded">
-                                    <div className="fw-semibold small">{med.name}</div>
-                                    <div className="small text-muted">{med.dosage} - {med.instructions}</div>
-                                    <div className="small text-muted">
-                                      {med.start_date} to {med.end_date}
-                                    </div>
-                                  </div>
-                                ))}
-                                {prescription.notes && (
-                                  <div className="small text-muted mt-2">
-                                    <strong>Notes:</strong> {prescription.notes}
-                                  </div>
-                                )}
-                              </div>
-                            </div>
-                          ))}
-                          
-                          {!showPatientHistory && patientPrescriptions.length > 3 && (
-                            <button
-                              className="btn btn-sm btn-outline-success w-100 mt-2"
-                              onClick={() => setShowPatientHistory(true)}
-                            >
-                              View All {patientPrescriptions.length} Prescriptions
-                            </button>
-                          )}
-                        </div>
-                      )}
+{/* Recent Prescriptions */}
+<div className="col-md-6">
+  <h6 className="text-success mb-3">
+    <Pill size={16} className="me-1" />
+    Recent Prescriptions
+  </h6>
+  {patientPrescriptions.length === 0 ? (
+    <div className="text-center py-3 bg-light rounded">
+      <Pill size={24} className="text-muted mb-2" />
+      <p className="text-muted mb-0 small">No prescriptions found</p>
+    </div>
+  ) : (
+    <div>
+      {patientPrescriptions.slice(0, 3).map((prescription) => (
+        <div 
+          key={prescription.id} 
+          className="card mb-3 shadow-sm" 
+          style={{ borderLeft: '4px solid #28a745' }}
+        >
+          <div className="card-body p-3">
+            {/* Header: Date & Status */}
+            <div className="d-flex justify-content-between align-items-center mb-3 pb-2 border-bottom">
+              <div>
+                <small className="text-muted d-block">Prescribed on</small>
+                <strong className="text-dark">
+                  {new Date(prescription.created_at).toLocaleDateString('en-US', { 
+                    month: 'short', 
+                    day: 'numeric', 
+                    year: 'numeric' 
+                  })}
+                </strong>
+              </div>
+              <span 
+                className={`badge ${
+                  prescription.status === 'active' ? 'bg-success' : 
+                  prescription.status === 'completed' ? 'bg-secondary' : 
+                  'bg-danger'
+                }`}
+              >
+                {prescription.status === 'active' ? '● Active' : 
+                 prescription.status === 'completed' ? '✓ Completed' : 
+                 '✗ Cancelled'}
+              </span>
+            </div>
+
+            {/* Medications List */}
+            <div className="mb-2">
+              <small className="text-muted fw-semibold d-block mb-2">MEDICATIONS</small>
+              {prescription.medications?.map((med, index) => (
+                <div 
+                  key={index} 
+                  className="p-2 mb-2 bg-light rounded border-start border-3 border-primary"
+                >
+                  {/* Medication Name */}
+                  <div className="d-flex align-items-start mb-1">
+                    <Pill size={14} className="me-2 text-primary mt-1" />
+                    <div className="flex-grow-1">
+                      <div className="fw-bold text-dark">{med.name}</div>
+                      <div className="small text-muted">{med.dosage}</div>
                     </div>
+                  </div>
+
+                  {/* Instructions */}
+                  <div className="small text-dark mb-1">
+                    <strong>Instructions:</strong> {med.instructions}
+                  </div>
+
+                  {/* Duration */}
+                  <div className="small text-muted">
+                    <Calendar size={12} className="me-1" />
+                    {new Date(med.start_date).toLocaleDateString()} → {new Date(med.end_date).toLocaleDateString()}
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Doctor's Notes */}
+            {prescription.notes && (
+              <div className="mt-2 pt-2 border-top">
+                <small className="text-muted fw-semibold d-block mb-1">DOCTOR'S NOTES</small>
+                <p className="small text-dark mb-0">{prescription.notes}</p>
+              </div>
+            )}
+          </div>
+        </div>
+      ))}
+    </div>
+  )}
+</div>
                   </div>
                 )}
               </div>
@@ -4963,252 +5218,294 @@ const Sidebar = () => {
         )}
                 
                 {/* Prescription Modal */}
-                {showModal === 'prescription' && (
-                  <>
-                    <div className="modal-header" style={{ background: universityTheme.gradient }}>
-                      <h5 className="modal-title text-white">
-                        <Pill size={20} className="me-2" />
-                        {t('doctor.create_prescription_title')}
-                      </h5>
-                      <button
-                        type="button"
-                        className="btn-close btn-close-white"
-                        onClick={() => setShowModal('')}
-                      ></button>
-                    </div>
-
-                    <div className="modal-body p-4" style={{ maxHeight: '70vh', overflowY: 'auto' }}>
-                      {/* Patient Selection */}
-<div className="mb-3">
-  <label className="form-label fw-semibold">
-    {t('doctor.patient')} <span className="text-danger">*</span>
-  </label>
-  <Select
-    options={patients.map(patient => ({
-      value: patient.id.toString(),
-      label: `${patient.name} - ${patient.student_id || patient.staff_no}`
-    }))}
-    value={prescriptionForm.patient_id ? {
-      value: prescriptionForm.patient_id,
-      label: patients.find(p => p.id.toString() === prescriptionForm.patient_id)?.name || ''
-    } : null}
-    onChange={(option) => setPrescriptionForm(prev => ({
-      ...prev,
-      patient_id: option?.value || ''
-    }))}
-    placeholder="Select a patient"
-    isClearable
-    isSearchable
-    styles={selectStyles}
-    theme={selectTheme}
-    menuPortalTarget={document.body}
-    menuPosition="fixed"
-  />
-  {!prescriptionForm.patient_id && (
-    <div className="form-text text-danger fst-italic small">
-      {t('doctor.select_patient')}
+{showModal === 'prescription' && (
+  <>
+    <div className="modal-header" style={{ background: universityTheme.gradient }}>
+      <h5 className="modal-title text-white">
+        <Pill size={20} className="me-2" />
+        {t('doctor.create_prescription_title')}
+      </h5>
+      <button
+        type="button"
+        className="btn-close btn-close-white"
+        onClick={() => setShowModal('')}
+      ></button>
     </div>
-  )}
-</div>
 
-                      {/* Medications */}
-                      <div className="mb-3">
-                        <div className="d-flex justify-content-between align-items-center mb-2">
-                          <label className="form-label fw-semibold">
-                            {t('doctor.medications')} <span className="text-danger">*</span>
-                          </label>
-                          <button
-                            type="button"
-                            className="btn btn-sm btn-outline-primary"
-                            onClick={addMedication}
-                          >
-                            <Plus size={16} className="me-1" />
-                            {t('doctor.add_medication')}
-                          </button>
-                        </div>
-
-                        {prescriptionForm.medications.map((medication, index) => (
-                          <div key={index} className="card mb-2">
-                            <div className="card-body p-3">
-                              <div className="d-flex justify-content-between align-items-start mb-2">
-                                <h6 className="mb-0">Medication {index + 1}</h6>
-                                {prescriptionForm.medications.length > 1 && (
-                                  <button
-                                    type="button"
-                                    className="btn btn-sm btn-outline-danger"
-                                    onClick={() => removeMedication(index)}
-                                  >
-                                    <X size={16} />
-                                  </button>
-                                )}
-                              </div>
-
-                              <div className="row">
-                                <div className="col-md-6 mb-2">
-                                  <input
-                                    type="text"
-                                    className="form-control form-control-sm"
-                                    placeholder={t('doctor.medication_name') + ' *'}
-                                    value={medication.name}
-                                    onChange={(e) => {
-                                      const newMedications = [...prescriptionForm.medications];
-                                      newMedications[index].name = e.target.value;
-                                      setPrescriptionForm((prev) => ({
-                                        ...prev,
-                                        medications: newMedications,
-                                      }));
-                                    }}
-                                  />
-                                  {!medication.name.trim() && (
-                                    <div className="form-text text-danger small fst-italic">
-                                      {t('doctor.medication_name_required')}
-                                    </div>
-                                  )}
-                                </div>
-
-                                <div className="col-md-6 mb-2">
-                                  <input
-                                    type="text"
-                                    className="form-control form-control-sm"
-                                    placeholder={t('doctor.dosage') + ' *'}
-                                    value={medication.dosage}
-                                    onChange={(e) => {
-                                      const newMedications = [...prescriptionForm.medications];
-                                      newMedications[index].dosage = e.target.value;
-                                      setPrescriptionForm((prev) => ({
-                                        ...prev,
-                                        medications: newMedications,
-                                      }));
-                                    }}
-                                  />
-                                  {!medication.dosage.trim() && (
-                                    <div className="form-text text-danger small fst-italic">
-                                      {t('doctor.dosage_required')}
-                                    </div>
-                                  )}
-                                </div>
-                              </div>
-
-                              <div className="mb-2">
-                              <input
-                                type="text"
-                                className="form-control form-control-sm"
-                                placeholder={t('doctor.instructions') + ' *'}
-                                value={medication.instructions}
-                                onChange={(e) => {
-                                  const newMedications = [...prescriptionForm.medications];
-                                  newMedications[index].instructions = e.target.value;
-                                  setPrescriptionForm(prev => ({ ...prev, medications: newMedications }));
-                                }}
-                              />
-                              {!medication.instructions.trim() && (
-                                <div className="form-text text-danger small fst-italic">
-                                  {t('doctor.instructions_required')}
-                                </div>
-                              )}
-                            </div>
-
-                              <div className="row">
-                                <div className="col-md-6 mb-2">
-                                  <label className="form-label small">{t('doctor.start_date')}</label>
-                                  <input
-                                    type="date"
-                                    className="form-control form-control-sm"
-                                    value={medication.start_date}
-                                    onChange={(e) => {
-                                      const newMedications = [...prescriptionForm.medications];
-                                      newMedications[index].start_date = e.target.value;
-                                      setPrescriptionForm(prev => ({ ...prev, medications: newMedications }));
-                                    }}
-                                  />
-                                </div>
-
-                                <div className="col-md-6 mb-2">
-                                  <label className="form-label small">{t('doctor.end_date')}</label>
-                                  <input
-                                    type="date"
-                                    className="form-control form-control-sm"
-                                    value={medication.end_date}
-                                    onChange={(e) => {
-                                      const newMedications = [...prescriptionForm.medications];
-                                      newMedications[index].end_date = e.target.value;
-                                      setPrescriptionForm(prev => ({ ...prev, medications: newMedications }));
-                                    }}
-                                  />
-                                </div>
-
-                                <div className="col-md-4 mb-2">
-  <label className="form-label small">{t('doctor.frequency')}</label>
-  <Select
-    options={[
-      { value: 'daily', label: t('doctor.daily') },
-      { value: 'twice_daily', label: t('doctor.twice_daily') },
-      { value: 'weekly', label: t('doctor.weekly') },
-      { value: 'as_needed', label: t('doctor.as_needed') }
-    ]}
-    value={{
-      value: medication.frequency || 'daily',
-      label: t(`doctor.${medication.frequency || 'daily'}`)
-    }}
-    onChange={(option) => {
-      const newMedications = [...prescriptionForm.medications];
-      newMedications[index].frequency = option?.value || 'daily';
-      setPrescriptionForm(prev => ({ ...prev, medications: newMedications }));
-    }}
-    styles={selectStyles}
-    theme={selectTheme}
-    menuPortalTarget={document.body}
-    menuPosition="fixed"
-    isSearchable={false}
-  />
-</div>
-                              </div>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-
-                      {/* Additional Notes */}
-                      <div className="mb-3">
-                        <label className="form-label fw-semibold">{t('doctor.prescription_notes')}</label>
-                        <textarea
-                          className="form-control"
-                          rows={3}
-                          value={prescriptionForm.notes}
-                          onChange={(e) => setPrescriptionForm(prev => ({ ...prev, notes: e.target.value }))}
-                          placeholder={t('doctor.prescription_notes_placeholder')}
-                        />
-                      </div>
-                    </div>
-
-                    <div className="modal-footer">
-                      <button
-                        type="button"
-                        className="btn btn-secondary"
-                        onClick={() => setShowModal('')}
-                      >
-                        {t('doctor.cancel')}
-                      </button>
-                      <button
-                        type="button"
-                        className="btn btn-primary"
-                        onClick={() => {
-                          if (!prescriptionForm.patient_id ||
-                              prescriptionForm.medications.some(m => !m.name.trim() || !m.dosage.trim() || !m.instructions.trim())
-                          ) {
-                            setMessage({ type: 'error', text: t('doctor.fill_medication_fields') });
-                            setTimeout(() => setMessage({ type: '', text: '' }), 4000);
-                            return;
-                          }
-                          createPrescription();
-                        }}
-                        style={{ background: universityTheme.gradient, border: 'none' }}
-                      >
-                        {t('doctor.create_prescription')}
-                      </button>
-                    </div>
-                  </>
+    <div className="modal-body p-4" style={{ maxHeight: '70vh', overflowY: 'auto' }}>
+      {/* Patient Selection */}
+      <div className="mb-3">
+        <label className="form-label fw-semibold">
+          {t('doctor.patient')} <span className="text-danger">*</span>
+        </label>
+        <Select
+          options={patients.map(patient => ({
+            value: patient.id.toString(),
+            label: `${patient.name} - ${patient.student_id || patient.staff_no}`
+          }))}
+          value={prescriptionForm.patient_id ? {
+            value: prescriptionForm.patient_id,
+            label: patients.find(p => p.id.toString() === prescriptionForm.patient_id)?.name || ''
+          } : null}
+          onChange={async (option) => {
+            setPrescriptionForm(prev => ({
+              ...prev,
+              patient_id: option?.value || ''
+            }));
+            
+            // Check if doctor can prescribe to this patient
+            if (option?.value) {
+              await checkPrescriptionEligibility(option.value);
+            } else {
+              // Reset when cleared
+              setCanPrescribe({ allowed: true });
+            }
+          }}
+          placeholder="Select a patient"
+          isClearable
+          isSearchable
+          styles={selectStyles}
+          theme={selectTheme}
+          menuPortalTarget={document.body}
+          menuPosition="fixed"
+        />
+        
+        {/* Warning display when cannot prescribe */}
+        {!canPrescribe.allowed && prescriptionForm.patient_id && (
+          <div className="alert alert-warning mt-3" role="alert">
+            <div className="d-flex align-items-start">
+              <Clock size={24} className="me-3 flex-shrink-0" />
+              <div>
+                <strong>⏰ {t('doctor.cannot_prescribe_yet')}</strong>
+                <p className="mb-0 mt-2">{canPrescribe.reason || t('doctor.no_active_appointment')}</p>
+                {canPrescribe.appointmentTime && (
+                  <small className="text-muted d-block mt-1">
+                    {t('doctor.scheduled_appointment')}: {canPrescribe.appointmentTime}
+                  </small>
                 )}
+              </div>
+            </div>
+          </div>
+        )}
+        
+        {/* Validation message when no patient selected */}
+        {!prescriptionForm.patient_id && (
+          <div className="form-text text-danger fst-italic small">
+            {t('doctor.select_patient')}
+          </div>
+        )}
+      </div>
+
+      {/* Medications */}
+      <div className="mb-3">
+        <div className="d-flex justify-content-between align-items-center mb-2">
+          <label className="form-label fw-semibold">
+            {t('doctor.medications')} <span className="text-danger">*</span>
+          </label>
+          <button
+            type="button"
+            className="btn btn-sm btn-outline-primary"
+            onClick={addMedication}
+          >
+            <Plus size={16} className="me-1" />
+            {t('doctor.add_medication')}
+          </button>
+        </div>
+
+        {prescriptionForm.medications.map((medication, index) => (
+          <div key={index} className="card mb-2">
+            <div className="card-body p-3">
+              <div className="d-flex justify-content-between align-items-start mb-2">
+                <h6 className="mb-0">Medication {index + 1}</h6>
+                {prescriptionForm.medications.length > 1 && (
+                  <button
+                    type="button"
+                    className="btn btn-sm btn-outline-danger"
+                    onClick={() => removeMedication(index)}
+                  >
+                    <X size={16} />
+                  </button>
+                )}
+              </div>
+
+              <div className="row">
+                <div className="col-md-6 mb-2">
+                  <input
+                    type="text"
+                    className="form-control form-control-sm"
+                    placeholder={t('doctor.medication_name') + ' *'}
+                    value={medication.name}
+                    onChange={(e) => {
+                      const newMedications = [...prescriptionForm.medications];
+                      newMedications[index].name = e.target.value;
+                      setPrescriptionForm((prev) => ({
+                        ...prev,
+                        medications: newMedications,
+                      }));
+                    }}
+                  />
+                  {!medication.name.trim() && (
+                    <div className="form-text text-danger small fst-italic">
+                      {t('doctor.medication_name_required')}
+                    </div>
+                  )}
+                </div>
+
+                <div className="col-md-6 mb-2">
+                  <input
+                    type="text"
+                    className="form-control form-control-sm"
+                    placeholder={t('doctor.dosage') + ' *'}
+                    value={medication.dosage}
+                    onChange={(e) => {
+                      const newMedications = [...prescriptionForm.medications];
+                      newMedications[index].dosage = e.target.value;
+                      setPrescriptionForm((prev) => ({
+                        ...prev,
+                        medications: newMedications,
+                      }));
+                    }}
+                  />
+                  {!medication.dosage.trim() && (
+                    <div className="form-text text-danger small fst-italic">
+                      {t('doctor.dosage_required')}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="mb-2">
+                <input
+                  type="text"
+                  className="form-control form-control-sm"
+                  placeholder={t('doctor.instructions') + ' *'}
+                  value={medication.instructions}
+                  onChange={(e) => {
+                    const newMedications = [...prescriptionForm.medications];
+                    newMedications[index].instructions = e.target.value;
+                    setPrescriptionForm(prev => ({ ...prev, medications: newMedications }));
+                  }}
+                />
+                {!medication.instructions.trim() && (
+                  <div className="form-text text-danger small fst-italic">
+                    {t('doctor.instructions_required')}
+                  </div>
+                )}
+              </div>
+
+              <div className="row">
+                <div className="col-md-6 mb-2">
+                  <label className="form-label small">{t('doctor.start_date')}</label>
+                  <input
+                    type="date"
+                    className="form-control form-control-sm"
+                    value={medication.start_date}
+                    onChange={(e) => {
+                      const newMedications = [...prescriptionForm.medications];
+                      newMedications[index].start_date = e.target.value;
+                      setPrescriptionForm(prev => ({ ...prev, medications: newMedications }));
+                    }}
+                  />
+                </div>
+
+                <div className="col-md-6 mb-2">
+                  <label className="form-label small">{t('doctor.end_date')}</label>
+                  <input
+                    type="date"
+                    className="form-control form-control-sm"
+                    value={medication.end_date}
+                    onChange={(e) => {
+                      const newMedications = [...prescriptionForm.medications];
+                      newMedications[index].end_date = e.target.value;
+                      setPrescriptionForm(prev => ({ ...prev, medications: newMedications }));
+                    }}
+                  />
+                </div>
+
+                <div className="col-md-4 mb-2">
+                  <label className="form-label small">{t('doctor.frequency')}</label>
+                  <Select
+                    options={[
+                      { value: 'daily', label: t('doctor.daily') },
+                      { value: 'twice_daily', label: t('doctor.twice_daily') },
+                      { value: 'weekly', label: t('doctor.weekly') },
+                      { value: 'as_needed', label: t('doctor.as_needed') }
+                    ]}
+                    value={{
+                      value: medication.frequency || 'daily',
+                      label: t(`doctor.${medication.frequency || 'daily'}`)
+                    }}
+                    onChange={(option) => {
+                      const newMedications = [...prescriptionForm.medications];
+                      newMedications[index].frequency = option?.value || 'daily';
+                      setPrescriptionForm(prev => ({ ...prev, medications: newMedications }));
+                    }}
+                    styles={selectStyles}
+                    theme={selectTheme}
+                    menuPortalTarget={document.body}
+                    menuPosition="fixed"
+                    isSearchable={false}
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Additional Notes */}
+      <div className="mb-3">
+        <label className="form-label fw-semibold">{t('doctor.prescription_notes')}</label>
+        <textarea
+          className="form-control"
+          rows={3}
+          value={prescriptionForm.notes}
+          onChange={(e) => setPrescriptionForm(prev => ({ ...prev, notes: e.target.value }))}
+          placeholder={t('doctor.prescription_notes_placeholder')}
+        />
+      </div>
+    </div>
+
+    {/* Modal Footer */}
+    <div className="modal-footer">
+      <button
+        type="button"
+        className="btn btn-secondary"
+        onClick={() => {
+          setShowModal('');
+          setCanPrescribe({ allowed: true }); // Reset on close
+        }}
+      >
+        {t('doctor.cancel')}
+      </button>
+      <button
+        type="button"
+        className="btn btn-primary"
+        onClick={() => {
+          if (!prescriptionForm.patient_id ||
+              prescriptionForm.medications.some(m => !m.name.trim() || !m.dosage.trim() || !m.instructions.trim())
+          ) {
+            setMessage({ type: 'error', text: t('doctor.fill_medication_fields') });
+            setTimeout(() => setMessage({ type: '', text: '' }), 4000);
+            return;
+          }
+          createPrescription();
+        }}
+        disabled={!canPrescribe.allowed || loading}
+        style={{ background: universityTheme.gradient, border: 'none' }}
+      >
+        {loading ? (
+          <>
+            <span className="spinner-border spinner-border-sm me-2" />
+            {t('doctor.creating')}
+          </>
+        ) : (
+          t('doctor.create_prescription')
+        )}
+      </button>
+    </div>
+  </>
+)}
 
 
 
@@ -5320,7 +5617,7 @@ const Sidebar = () => {
       <div className="alert alert-info">
         <strong>Appointment Details:</strong><br />
         Date: {formatDate(selectedAppointment.date)}<br />
-        Time: {formatTime(selectedAppointment.date)}<br />
+        Time: {formatTime(selectedAppointment.time)}<br />
         Reason: {selectedAppointment.reason}
       </div>
 
@@ -5530,7 +5827,7 @@ const Sidebar = () => {
       <div className="alert alert-info">
         <strong>Current Appointment:</strong><br />
         Date: {formatDate(selectedAppointment.date)}<br />  {/* ← CHANGED */}
-        Time: {formatTime(selectedAppointment.date)}<br />  {/* ← CHANGED */}
+        Time: {formatTime(selectedAppointment.time)}<br /> {/* ← CHANGED */}
         Reason: {selectedAppointment.reason}
       </div>
       <div className="row">
@@ -5696,6 +5993,19 @@ const Sidebar = () => {
       </div>
     </div>
   </div>
+)}
+{/* Medical Card Modal */}
+{showMedicalCard && selectedPatientForCard && (
+  <EnhancedMedicalCardViewer
+    patientId={selectedPatientForCard.id}
+    onClose={() => {
+      setShowMedicalCard(false);
+      setSelectedPatientForCard(null);
+    }}
+    authToken={localStorage.getItem('token') || ''}
+    apiBaseUrl={API_BASE_URL}
+    userRole="doctor"
+  />
 )}
       </div>
     </div>

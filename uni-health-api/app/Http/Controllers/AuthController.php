@@ -105,7 +105,7 @@ public function register(Request $request)
         'role' => $validated['role'],
         'phone_number' => $validated['phone_number'] ?? null,
         'preferred_language' => $request->header('X-Locale', 'en'),
-        'status' => 'active',
+        'status' => 'active', // ✅ UPDATED: Auto-approve all registrations
         'email_verified_at' => now(),
     ];
 
@@ -146,11 +146,11 @@ public function register(Request $request)
         }
 
     return response()->json([
-        'message' => __('messages.registration_successful'), // ✅ Localized
+        'message' => __('messages.registration_successful'),
         'user' => $user->getFormattedUserData(),
-        'token' => $token, // Add this line
-        'role' => $user->role, // Add this line
-        'permissions' => $this->getUserPermissions($user), // Add this line
+        'token' => $token,
+        'role' => $user->role,
+        'permissions' => $this->getUserPermissions($user),
     ], 201);
 }
 
@@ -175,7 +175,7 @@ public function register(Request $request)
     }
 
     /**
- * Login (Email-only version)
+ * Login (Email-only version) - UPDATED
  */
 public function login(Request $request)
 {
@@ -188,13 +188,20 @@ public function login(Request $request)
 
     if (!$user) {
         throw ValidationException::withMessages([
-            'email' => [__('messages.user_not_found')], // ✅ Localized
+            'email' => [__('messages.user_not_found')],
         ]);
     }
 
+    // ✅ UPDATED: Check all status types
     if ($user->status !== 'active') {
+        $message = match($user->status) {
+            'inactive' => __('auth.account_deactivated'),
+            'pending_verification' => __('auth.account_pending_verification'),
+            default => __('auth.account_not_active')
+        };
+        
         throw ValidationException::withMessages([
-            'email' => [__('auth.account_not_active')], // ✅ Localized
+            'email' => [$message]
         ]);
     }
 
@@ -208,9 +215,9 @@ public function login(Request $request)
     $token = $user->createToken('api-token')->plainTextToken;
 
     return response()->json([
-        'message' => __('messages.login_successful'), // ✅ Localized
+        'message' => __('messages.login_successful'),
         'user' => $user->getFormattedUserData(),
-        'role' => $user->role, // ✅ This works without Spatie
+        'role' => $user->role,
         'token' => $token,
         'permissions' => $this->getUserPermissions($user),
     ]);
@@ -473,7 +480,6 @@ public function updateProfile(Request $request)
                 'view_medical_history', 
                 'cancel_appointments'
             ],
-            // Remove doctor, clinical_staff, and admin permissions
         ];
 
         return $permissions[$user->role] ?? [];
