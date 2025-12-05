@@ -1,5 +1,6 @@
 <?php
 // app/Http/Controllers/AppointmentController.php
+// SIMPLIFIED VERSION - Email only (no in-app notifications)
 
 namespace App\Http\Controllers;
 
@@ -7,14 +8,16 @@ use App\Models\Appointment;
 use App\Models\User;
 use App\Models\AcademicHoliday;
 use App\Models\StaffSchedule;
+use App\Mail\AppointmentRequestNotification;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Support\Facades\Mail;
 use Carbon\Carbon;
 
 class AppointmentController extends Controller
 {
     /**
-     * Create new appointment with holiday validation
+     * Create new appointment with holiday validation AND send notifications
      */
     public function store(Request $request): JsonResponse
     {
@@ -74,16 +77,63 @@ class AppointmentController extends Controller
 
             $appointment->load(['patient', 'doctor']);
 
+            // 🔔 SEND EMAIL NOTIFICATIONS TO CLINICAL STAFF
+            $this->sendAppointmentRequestNotifications($appointment);
+
             return response()->json([
                 'message' => 'Appointment scheduled successfully',
                 'appointment' => $appointment
             ], 201);
 
         } catch (\Exception $e) {
+            \Log::error('Failed to create appointment', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+
             return response()->json([
                 'message' => 'Failed to create appointment',
                 'error' => $e->getMessage()
             ], 500);
+        }
+    }
+
+    /**
+     * Send email notifications to clinical staff when appointment is requested
+     * SIMPLIFIED VERSION - No NotificationService dependency
+     */
+    protected function sendAppointmentRequestNotifications(Appointment $appointment)
+    {
+        try {
+            // Get all clinical staff members
+            $clinicalStaff = User::where('role', 'clinical_staff')
+                ->orWhere('role', 'admin')
+                ->get();
+
+            // Also notify the assigned doctor
+            $recipients = $clinicalStaff->push($appointment->doctor)->unique('id');
+
+            foreach ($recipients as $staff) {
+                // Determine locale based on staff preference or default to English
+                $locale = $staff->locale ?? 'en';
+
+                // Send email notification
+                Mail::to($staff->email)->send(
+                    new AppointmentRequestNotification($appointment, $locale)
+                );
+            }
+
+            \Log::info('Appointment request notifications sent', [
+                'appointment_id' => $appointment->id,
+                'recipients_count' => $recipients->count()
+            ]);
+
+        } catch (\Exception $e) {
+            // Log error but don't fail the appointment creation
+            \Log::error('Failed to send appointment notifications', [
+                'appointment_id' => $appointment->id,
+                'error' => $e->getMessage()
+            ]);
         }
     }
 
@@ -277,7 +327,7 @@ class AppointmentController extends Controller
             $patient = $request->user();
             
             $appointments = Appointment::where('patient_id', $patient->id)
-                ->with(['doctor', 'blockedByHoliday'])
+                ->with(['doctor'])
                 ->orderBy('date', 'desc')
                 ->orderBy('time', 'desc')
                 ->paginate(20);
@@ -287,62 +337,6 @@ class AppointmentController extends Controller
         } catch (\Exception $e) {
             return response()->json([
                 'message' => 'Failed to fetch appointments',
-                'error' => $e->getMessage()
-            ], 500);
-        }
-    }
-
-    /**
-     * Get doctor's schedule with holiday information
-     */
-    public function getDoctorSchedule(Request $request): JsonResponse
-    {
-        $request->validate([
-            'doctor_id' => 'required|exists:users,id',
-            'start_date' => 'required|date',
-            'end_date' => 'required|date|after_or_equal:start_date'
-        ]);
-
-        try {
-            $doctor = User::findOrFail($request->doctor_id);
-            $startDate = Carbon::parse($request->start_date);
-            $endDate = Carbon::parse($request->end_date);
-
-            // Get appointments in date range
-            $appointments = Appointment::where('doctor_id', $doctor->id)
-                ->whereBetween('date', [$startDate, $endDate])
-                ->with('patient')
-                ->get();
-
-            // Get holidays in date range
-            $holidays = AcademicHoliday::active()
-                ->forDateRange($startDate, $endDate)
-                ->get()
-                ->filter(function($holiday) use ($doctor) {
-                    $doctorStaffType = $doctor->staff_type ?? 'clinical';
-                    $doctorDepartmentId = $doctor->department_id;
-                    return $holiday->affectsStaff($doctorStaffType) && 
-                           $holiday->affectsDepartment($doctorDepartmentId);
-                });
-
-            return response()->json([
-                'doctor' => $doctor->only(['id', 'name', 'specialization', 'department']),
-                'date_range' => [
-                    'start' => $startDate->format('Y-m-d'),
-                    'end' => $endDate->format('Y-m-d')
-                ],
-                'appointments' => $appointments,
-                'holidays' => $holidays,
-                'statistics' => [
-                    'total_appointments' => $appointments->count(),
-                    'holiday_days' => $holidays->sum('duration_in_days'),
-                    'available_days' => $startDate->diffInDays($endDate) + 1 - $holidays->sum('duration_in_days')
-                ]
-            ]);
-
-        } catch (\Exception $e) {
-            return response()->json([
-                'message' => 'Failed to fetch doctor schedule',
                 'error' => $e->getMessage()
             ], 500);
         }

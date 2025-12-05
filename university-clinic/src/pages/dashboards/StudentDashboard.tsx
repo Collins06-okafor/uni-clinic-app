@@ -677,6 +677,7 @@ const canCancelAppointment = (appointment: Appointment): boolean => {
   return canCancel;
 };
 
+
 const canRescheduleAppointment = (appointment: Appointment): boolean => {
   console.log('🔍 Checking reschedule for:', appointment.status);
   

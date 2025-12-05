@@ -6,29 +6,21 @@ use Illuminate\Foundation\Http\Kernel as HttpKernel;
 
 class Kernel extends HttpKernel
 {
-    /**
-     * The application's global HTTP middleware stack.
-     *
-     * @var array<int, class-string|string>
-     */
     protected $middleware = [
-        // \App\Http\Middleware\TrustHosts::class,
         \App\Http\Middleware\TrustProxies::class,
-        \Fruitcake\Cors\HandleCors::class,
+        // ❌ REMOVE THIS LINE - it's the old package
+        // \Fruitcake\Cors\HandleCors::class,
+        
         \App\Http\Middleware\PreventRequestsDuringMaintenance::class,
         \Illuminate\Foundation\Http\Middleware\ValidatePostSize::class,
         \App\Http\Middleware\TrimStrings::class,
         \Illuminate\Foundation\Http\Middleware\ConvertEmptyStringsToNull::class,
-        // ✅ ADD: SetLocale middleware globally (recommended for API-focused app)
         \App\Http\Middleware\SetLocale::class,
-        \App\Http\Middleware\CorsMiddleware::class, // ✅ ADD: Custom CORS middleware
+        
+        // ❌ REMOVE THIS LINE - conflicts with Laravel's built-in CORS
+        // \App\Http\Middleware\CorsMiddleware::class,
     ];
 
-    /**
-     * The application's route middleware groups.
-     *
-     * @var array<string, array<int, class-string|string>>
-     */
     protected $middlewareGroups = [
         'web' => [
             \App\Http\Middleware\EncryptCookies::class,
@@ -40,20 +32,13 @@ class Kernel extends HttpKernel
         ],
 
         'api' => [
-            // \Laravel\Sanctum\Http\Middleware\EnsureFrontendRequestsAreStateful::class,
+            // ✅ ADD HandleCors HERE for API routes
+            \Illuminate\Http\Middleware\HandleCors::class,
             \Illuminate\Routing\Middleware\ThrottleRequests::class.':api',
             \Illuminate\Routing\Middleware\SubstituteBindings::class,
-            
-            // ✅ ALTERNATIVE: Add SetLocale here if you prefer group-specific
-            // \App\Http\Middleware\SetLocale::class,
         ],
     ];
 
-    /**
-     * The application's middleware aliases.
-     *
-     * @var array<string, class-string|string>
-     */
     protected $middlewareAliases = [
         'auth' => \App\Http\Middleware\Authenticate::class,
         'auth.basic' => \Illuminate\Auth\Middleware\AuthenticateWithBasicAuth::class,
@@ -65,11 +50,8 @@ class Kernel extends HttpKernel
         'signed' => \Illuminate\Routing\Middleware\ValidateSignature::class,
         'throttle' => \Illuminate\Routing\Middleware\ThrottleRequests::class,
         'verified' => \Illuminate\Auth\Middleware\EnsureEmailIsVerified::class,
-
-        // ✅ Custom middleware aliases (for route-specific use)
         'role' => \App\Http\Middleware\RoleMiddleware::class,
         'permission' => \App\Http\Middleware\PermissionMiddleware::class,
-        'locale' => \App\Http\Middleware\SetLocale::class, // ✅ ADD: For manual route application
+        'locale' => \App\Http\Middleware\SetLocale::class,
     ];
-    
 }

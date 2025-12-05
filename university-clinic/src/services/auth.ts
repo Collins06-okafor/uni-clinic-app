@@ -2,10 +2,8 @@ import axios from 'axios';
 import type { AxiosResponse } from 'axios';
 import type { User, LoginCredentials, RegisterData, AuthResponse, ApiError } from '../types/user';
 
-// Use the proxy setup from vite.config.ts
-const API_BASE_URL = '/api'; // This will be proxied to http://127.0.0.1:8000
+const API_BASE_URL = '/api';
 
-// Create axios instance with default config
 const apiClient = axios.create({
   baseURL: API_BASE_URL,
   headers: {
@@ -15,7 +13,7 @@ const apiClient = axios.create({
   timeout: 10000,
 });
 
-// Add request interceptor to include auth token
+// Add request interceptor
 apiClient.interceptors.request.use(
   (config) => {
     const token = localStorage.getItem('token');
@@ -29,7 +27,7 @@ apiClient.interceptors.request.use(
   }
 );
 
-// Add response interceptor to handle errors
+// Add response interceptor
 apiClient.interceptors.response.use(
   (response) => response,
   (error) => {
@@ -40,14 +38,11 @@ apiClient.interceptors.response.use(
       window.location.href = '/';
     }
     
-    // Handle network errors
     if (error.code === 'ECONNABORTED') {
-      console.error('Request timeout');
       return Promise.reject(new Error('Request timeout. Please try again.'));
     }
     
     if (error.code === 'ERR_NETWORK') {
-      console.error('Network error - check if backend is running');
       return Promise.reject(new Error('Network error. Please check if the server is running.'));
     }
     
@@ -69,10 +64,8 @@ export const login = async (credentials: LoginCredentials): Promise<AuthResponse
     console.error('Login error:', error);
     
     if (error.response?.data) {
-      // Handle Laravel validation errors
       const errorData: ApiError = error.response.data;
       if (errorData.errors) {
-        // Extract first validation error
         const firstError = Object.values(errorData.errors)[0];
         if (Array.isArray(firstError)) {
           throw new Error(firstError[0]);
@@ -83,12 +76,41 @@ export const login = async (credentials: LoginCredentials): Promise<AuthResponse
       }
     }
     
-    // Handle network errors
     if (error.message.includes('Network error')) {
       throw error;
     }
     
     throw new Error('Login failed. Please check your credentials.');
+  }
+};
+
+/**
+ * Google OAuth Login
+ * Sends the Google credential token to backend for verification
+ */
+export const googleLogin = async (googleToken: string): Promise<AuthResponse> => {
+  try {
+    console.log('Attempting Google login...');
+    const response: AxiosResponse<AuthResponse> = await apiClient.post('/auth/google/token', {
+      token: googleToken
+    });
+    
+    if (response.data.token) {
+      localStorage.setItem('token', response.data.token);
+    }
+    
+    return response.data;
+  } catch (error: any) {
+    console.error('Google login error:', error);
+    
+    if (error.response?.data) {
+      const errorData: ApiError = error.response.data;
+      if (errorData.message) {
+        throw new Error(errorData.message);
+      }
+    }
+    
+    throw new Error('Google authentication failed. Please try again.');
   }
 };
 
@@ -104,14 +126,12 @@ export const register = async (userData: RegisterData): Promise<AuthResponse> =>
     if (error.response?.data) {
       const errorData: ApiError = error.response.data;
       if (errorData.errors) {
-        // Return Laravel validation errors as object
         throw new Error(JSON.stringify(errorData.errors));
       } else if (errorData.message) {
         throw new Error(errorData.message);
       }
     }
     
-    // Handle network errors
     if (error.message.includes('Network error')) {
       throw error;
     }
@@ -127,24 +147,16 @@ export const fetchUser = async (): Promise<User> => {
     
     console.log('Raw API response:', response.data);
     
-    // Handle different response structures
     let userData: User;
     
     if (response.data.data) {
-      // If the response is wrapped in a 'data' property
       userData = response.data.data;
-      console.log('User data extracted from data property:', userData);
     } else if (response.data.user) {
-      // If the response is wrapped in a 'user' property
       userData = response.data.user;
-      console.log('User data extracted from user property:', userData);
     } else {
-      // If the response is the user data directly
       userData = response.data;
-      console.log('User data used directly:', userData);
     }
     
-    // Validate that we have the required user data
     if (!userData || !userData.role) {
       console.error('Invalid user data structure:', userData);
       throw new Error('Invalid user data received from server');
@@ -191,8 +203,6 @@ export const requestPasswordReset = async (email: string): Promise<void> => {
     return;
   } catch (error: any) {
     console.error('Password reset request error:', error);
-    console.error('Error response data:', error.response?.data); // ADD THIS LINE
-    console.error('Error status:', error.response?.status); // ADD THIS LINE
     
     if (error.response?.data) {
       const errorData: ApiError = error.response.data;
@@ -200,7 +210,6 @@ export const requestPasswordReset = async (email: string): Promise<void> => {
         throw new Error(errorData.message);
       }
       if (errorData.errors) {
-        // Handle validation errors
         const firstError = Object.values(errorData.errors)[0];
         if (Array.isArray(firstError)) {
           throw new Error(firstError[0]);
@@ -226,7 +235,6 @@ export const resetPassword = async (token: string, email: string, password: stri
     return;
   } catch (error: any) {
     console.error('Password reset error:', error);
-    console.error('Error response data:', error.response?.data);
     
     if (error.response?.data) {
       const errorData: ApiError = error.response.data;

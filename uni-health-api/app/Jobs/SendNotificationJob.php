@@ -5,6 +5,7 @@ namespace App\Jobs;
 use App\Models\Notification;
 use App\Mail\PatientRegistrationConfirmation;
 use App\Mail\AppointmentConfirmation;
+use App\Mail\AppointmentRequestNotification;
 use App\Mail\ClinicalStaffNewPatientNotification;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -90,15 +91,25 @@ class SendNotificationJob implements ShouldQueue
                 break;
 
             case 'appointment':
-                $appointmentId = $notification->data['appointment_id'] ?? null;
-                if ($appointmentId) {
-                    $appointment = \App\Models\Appointment::with(['patient', 'doctor'])->find($appointmentId);
-                    if ($appointment) {
-                        $recipientType = $user->id === $appointment->patient_id ? 'patient' : 'doctor';
-                        Mail::to($user->email)->send(new AppointmentConfirmation($appointment, $recipientType, $locale));
-                    }
-                }
-                break;
+    $appointmentId = $notification->data['appointment_id'] ?? null;
+    if ($appointmentId) {
+        $appointment = \App\Models\Appointment::with(['patient', 'doctor'])->find($appointmentId);
+        if ($appointment) {
+            // Check if this is a new appointment request notification (for staff)
+            // or a confirmation notification (for patient/doctor)
+            $isRequestNotification = $notification->data['is_request'] ?? false;
+            
+            if ($isRequestNotification) {
+                // Send appointment REQUEST notification to clinical staff
+                Mail::to($user->email)->send(new AppointmentRequestNotification($appointment, $locale));
+            } else {
+                // Send appointment CONFIRMATION to patient/doctor
+                $recipientType = $user->id === $appointment->patient_id ? 'patient' : 'doctor';
+                Mail::to($user->email)->send(new AppointmentConfirmation($appointment, $recipientType, $locale));
+            }
+        }
+    }
+    break;
 
             default:
                 // Generic email for other categories

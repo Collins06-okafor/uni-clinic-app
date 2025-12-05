@@ -9,6 +9,8 @@ use App\Models\Appointment;
 use App\Models\MedicalRecord;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Log;
+use App\Mail\AppointmentRequestNotification;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Validator;
 
 class AcademicStaffController extends Controller
@@ -118,6 +120,99 @@ class AcademicStaffController extends Controller
         
         return 'Clinic is not operating on this date';
     }
+
+    /**
+ * Send email notifications when appointment is requested
+ * Enhanced version with detailed logging
+ */
+protected function sendAppointmentRequestNotifications(Appointment $appointment)
+{
+    \Log::info('=== ACADEMIC STAFF - SEND NOTIFICATIONS METHOD STARTED ===', [
+        'appointment_id' => $appointment->id
+    ]);
+
+    try {
+        // Get all clinical staff members
+        $clinicalStaff = User::where('role', 'clinical_staff')
+            ->orWhere('role', 'admin')
+            ->get();
+
+        \Log::info('Clinical staff query result:', [
+            'count' => $clinicalStaff->count(),
+            'clinical_staff' => $clinicalStaff->pluck('email')->toArray()
+        ]);
+
+        // Check if doctor exists
+        if (!$appointment->doctor) {
+            \Log::warning('No doctor assigned to appointment', [
+                'appointment_id' => $appointment->id,
+                'doctor_id' => $appointment->doctor_id
+            ]);
+        }
+
+        // Also notify the assigned doctor
+        $recipients = $clinicalStaff->push($appointment->doctor)->unique('id');
+
+        \Log::info('Total recipients:', [
+            'count' => $recipients->count(),
+            'emails' => $recipients->pluck('email')->toArray()
+        ]);
+
+        $emailsSent = 0;
+        $emailsFailed = 0;
+
+        foreach ($recipients as $staff) {
+            try {
+                // Determine locale based on staff preference or default to English
+                $locale = $staff->preferred_language ?? 'en';
+
+                \Log::info('Sending email to:', [
+                    'recipient' => $staff->email,
+                    'name' => $staff->name,
+                    'role' => $staff->role,
+                    'locale' => $locale
+                ]);
+
+                // Send email notification
+                Mail::to($staff->email)->send(
+                    new AppointmentRequestNotification($appointment, $locale)
+                );
+
+                $emailsSent++;
+
+                \Log::info('✅ Email sent successfully', [
+                    'recipient' => $staff->email
+                ]);
+
+            } catch (\Exception $emailError) {
+                $emailsFailed++;
+                
+                \Log::error('❌ Failed to send individual email', [
+                    'recipient' => $staff->email,
+                    'error' => $emailError->getMessage()
+                ]);
+            }
+        }
+
+        \Log::info('=== ACADEMIC STAFF - EMAIL SENDING COMPLETE ===', [
+            'appointment_id' => $appointment->id,
+            'recipients_count' => $recipients->count(),
+            'emails_sent' => $emailsSent,
+            'emails_failed' => $emailsFailed,
+            'source' => 'AcademicStaffController'
+        ]);
+
+    } catch (\Exception $e) {
+        // Log error but don't fail the appointment creation
+        \Log::error('=== ACADEMIC STAFF - CRITICAL ERROR IN SEND NOTIFICATIONS ===', [
+            'appointment_id' => $appointment->id,
+            'error' => $e->getMessage(),
+            'trace' => $e->getTraceAsString()
+        ]);
+    }
+
+    \Log::info('=== ACADEMIC STAFF - SEND NOTIFICATIONS METHOD ENDED ===');
+}
 
    /**
  * Schedule a new appointment with clinic hours validation
@@ -265,7 +360,16 @@ public function scheduleAppointment(Request $request): JsonResponse
             'type' => 'staff_request'
         ]);
 
-        $appointment->load('doctor');
+        // 🔔 Load relationships for email
+        $appointment->load(['patient', 'doctor']);
+        
+        // 🔔 Send email notifications to clinical staff
+        \Log::info('Academic staff appointment created, sending notifications', [
+            'appointment_id' => $appointment->id,
+            'staff_name' => $appointment->patient->name
+        ]);
+        
+        $this->sendAppointmentRequestNotifications($appointment);
 
         // ✅ Broadcast event
         try {

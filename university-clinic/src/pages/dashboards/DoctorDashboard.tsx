@@ -1,5 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { Calendar, Clock, Users, FileText, Pill, User, Plus, Search, Eye, Edit, CheckCircle, XCircle, Stethoscope, Heart, Brain, Thermometer, BarChart3, Activity, TrendingUp, Check, Globe, X, Archive, Settings, Save, Camera, AlertTriangle, LogOut, Phone, Mail, Menu } from 'lucide-react';
+import { 
+  Calendar, Clock, Users, FileText, Pill, User, Plus, Search, Eye, Edit, 
+  CheckCircle, XCircle, Stethoscope, Heart, Brain, Thermometer, BarChart3, 
+  Activity, TrendingUp, Check, Globe, X, Archive, Settings, Save, Camera, 
+  AlertTriangle, LogOut, Phone, Mail, Menu, AlertCircle, Droplets // ← Add Droplets here
+} from 'lucide-react';
 import RealTimeDashboard from '../../components/RealTimeDashboard';
 import { useTranslation } from 'react-i18next';
 import LanguageSwitcher from '../../components/LanguageSwitcher';
@@ -342,6 +347,22 @@ const [canPrescribe, setCanPrescribe] = useState<{
   reason?: string;
   appointmentTime?: string;
 }>({ allowed: true });
+
+// Consultation Form State
+const [consultationForm, setConsultationForm] = useState({
+  symptoms: [''],
+  recordVitals: false,
+  vitals: {
+    blood_pressure: '',
+    heart_rate: '',
+    temperature: '',
+    respiratory_rate: '',
+    oxygen_saturation: '',
+    weight: '',
+    height: '',
+  },
+  notes: ''
+});
   
   // Form states
   const [availabilityForm, setAvailabilityForm] = useState<AvailabilityForm>({
@@ -2156,6 +2177,122 @@ const unarchiveSelectedPatients = async (): Promise<void> => {
     console.error('Error creating prescription:', error);
     setMessage({ type: 'error', text: error.message || 'Failed to create prescription. Please check console for details.' });
     setTimeout(() => setMessage({ type: '', text: '' }), 5000);
+  }
+};
+
+/**
+ * Record consultation with symptoms and vitals
+ */
+const recordConsultation = async (): Promise<void> => {
+  if (!selectedPatient) return;
+  
+  try {
+    // Filter out empty symptoms
+    const validSymptoms = consultationForm.symptoms.filter(s => s.trim());
+    
+    if (validSymptoms.length === 0) {
+      setMessage({ type: 'error', text: 'Please add at least one symptom' });
+      setTimeout(() => setMessage({ type: '', text: '' }), 5000);
+      return;
+    }
+
+    setLoading(true);
+    
+    // Build request body
+    const requestBody: any = {
+      symptoms_observed: validSymptoms,
+      consultation_notes: consultationForm.notes
+    };
+
+    // Add vitals if checkbox is checked and vitals are provided
+    if (consultationForm.recordVitals) {
+      const vitals: any = {};
+      Object.entries(consultationForm.vitals).forEach(([key, value]) => {
+        if (value) vitals[key] = value;
+      });
+      
+      if (Object.keys(vitals).length > 0) {
+        requestBody.vitals = vitals;
+      }
+    }
+
+    const response = await fetch(
+      `${DOCTOR_API_BASE}/patients/${selectedPatient.id}/consultation`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        },
+        body: JSON.stringify(requestBody)
+      }
+    );
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      
+      // Handle appointment time restriction (403 Forbidden)
+      if (response.status === 403) {
+        setAppointmentTimeError({
+          message: errorData.reason || 'Cannot record consultation at this time',
+          appointmentTime: errorData.appointment_time,
+          canAttendFrom: errorData.can_attend_from
+        });
+        
+        setMessage({ 
+          type: 'error', 
+          text: errorData.reason || 'Cannot record consultation at this time' 
+        });
+        
+        setTimeout(() => {
+          setAppointmentTimeError(null);
+          setMessage({ type: '', text: '' });
+        }, 8000);
+        return;
+      }
+      
+      throw new Error(errorData.message || 'Failed to record consultation');
+    }
+
+    setMessage({ 
+      type: 'success', 
+      text: 'Consultation recorded successfully!' 
+    });
+    
+    setShowModal('viewPatient');
+    
+    // Reset form
+    setConsultationForm({
+      symptoms: [''],
+      recordVitals: false,
+      vitals: {
+        blood_pressure: '',
+        heart_rate: '',
+        temperature: '',
+        respiratory_rate: '',
+        oxygen_saturation: '',
+        weight: '',
+        height: '',
+      },
+      notes: ''
+    });
+    
+    // Refresh patient data if viewing history
+    if (showPatientHistory) {
+      fetchPatientMedicalRecords(selectedPatient.id);
+    }
+    
+    setTimeout(() => setMessage({ type: '', text: '' }), 5000);
+  } catch (error) {
+    console.error('Error recording consultation:', error);
+    setMessage({ 
+      type: 'error', 
+      text: getErrorMessage(error) || 'Failed to record consultation' 
+    });
+    setTimeout(() => setMessage({ type: '', text: '' }), 5000);
+  } finally {
+    setLoading(false);
   }
 };
 
@@ -4978,7 +5115,8 @@ const Sidebar = () => {
                   setPatientMedicalRecords([]);
                   setPatientPrescriptions([]);
                 }}
-              ></button>
+              >
+              </button>
             </div>
             <div className="modal-body p-4" style={{ maxHeight: '80vh', overflowY: 'auto' }}>
               {/* Basic Patient Information */}
@@ -5060,7 +5198,7 @@ const Sidebar = () => {
                       ) : (
                         <div>
                           {patientMedicalRecords.slice(0, 3).map((record) => (
-        <div key={record.id} className="card mb-2 border">
+                           <div key={record.id} className="card mb-2 border">
                               <div className="card-body p-3">
                                 <div className="d-flex justify-content-between align-items-start mb-2">
                                   <small className="text-muted">
@@ -5202,6 +5340,16 @@ const Sidebar = () => {
               >
                 {t('doctor.close')}
               </button>
+              {/* Record Consultation Button */}
+              <button
+                type="button"
+                className="btn btn-success"
+                onClick={() => setShowModal('recordConsultation')}
+              >
+                <Stethoscope size={16} className="me-1" />
+                Record Consultation
+              </button>
+              {/* Add Medical Record Button */}
               <button
                 type="button"
                 className="btn btn-primary"
@@ -5216,6 +5364,369 @@ const Sidebar = () => {
             </div>
           </>
         )}
+
+        {/* Record Consultation Modal */}
+{showModal === 'recordConsultation' && selectedPatient && (
+  <>
+    <div className="modal-header" style={{ background: universityTheme.gradient }}>
+      <h5 className="modal-title text-white">
+        <Stethoscope size={20} className="me-2" />
+        Record Consultation - {selectedPatient.name}
+      </h5>
+      <button
+        type="button"
+        className="btn-close btn-close-white"
+        onClick={() => setShowModal('')}
+      ></button>
+    </div>
+
+    <div className="modal-body p-4" style={{ maxHeight: '70vh', overflowY: 'auto' }}>
+      {/* Patient Info Banner */}
+      <div className="alert alert-info mb-4">
+        <div className="d-flex align-items-center">
+          <User size={20} className="me-2" />
+          <div>
+            <strong>Patient:</strong> {selectedPatient.name}<br />
+            <small>
+              {selectedPatient.student_id ? `Student ID: ${selectedPatient.student_id}` : `Staff No: ${selectedPatient.staff_no}`}
+            </small>
+          </div>
+        </div>
+      </div>
+
+      {/* Symptoms Observed Section */}
+      <div className="mb-4">
+        <label className="form-label fw-semibold">
+          Symptoms Observed <span className="text-danger">*</span>
+        </label>
+        <small className="text-muted d-block mb-2">
+          Record all symptoms observed during this consultation
+        </small>
+        
+        <div className="mb-2">
+          {consultationForm.symptoms.map((symptom, index) => (
+            <div key={index} className="input-group mb-2">
+              <span className="input-group-text">
+                <AlertCircle size={16} />
+              </span>
+              <input
+                type="text"
+                className="form-control"
+                value={symptom}
+                onChange={(e) => {
+                  const newSymptoms = [...consultationForm.symptoms];
+                  newSymptoms[index] = e.target.value;
+                  setConsultationForm(prev => ({ ...prev, symptoms: newSymptoms }));
+                }}
+                placeholder="e.g., Fever, Headache, Cough, etc."
+              />
+              {consultationForm.symptoms.length > 1 && (
+                <button
+                  className="btn btn-outline-danger"
+                  type="button"
+                  onClick={() => {
+                    const newSymptoms = consultationForm.symptoms.filter((_, i) => i !== index);
+                    setConsultationForm(prev => ({ ...prev, symptoms: newSymptoms }));
+                  }}
+                  title="Remove symptom"
+                >
+                  <X size={16} />
+                </button>
+              )}
+            </div>
+          ))}
+        </div>
+        
+        <button
+          className="btn btn-sm btn-outline-primary"
+          type="button"
+          onClick={() => {
+            setConsultationForm(prev => ({
+              ...prev,
+              symptoms: [...prev.symptoms, '']
+            }));
+          }}
+        >
+          <Plus size={16} className="me-1" />
+          Add Another Symptom
+        </button>
+        
+        {consultationForm.symptoms.filter(s => s.trim()).length === 0 && (
+          <div className="form-text text-danger fst-italic small">
+            Please add at least one symptom
+          </div>
+        )}
+      </div>
+
+      {/* Record Vitals Toggle */}
+      <div className="form-check mb-3 p-3 bg-light rounded">
+        <input
+          className="form-check-input"
+          type="checkbox"
+          id="recordVitalsCheckbox"
+          checked={consultationForm.recordVitals}
+          onChange={(e) => setConsultationForm(prev => ({
+            ...prev,
+            recordVitals: e.target.checked
+          }))}
+        />
+        <label className="form-check-label fw-semibold" htmlFor="recordVitalsCheckbox">
+          <Heart size={16} className="me-2 text-danger" />
+          Record Vital Signs
+        </label>
+        <small className="text-muted d-block mt-1">
+          Check this box if you want to record vital signs during this consultation
+        </small>
+      </div>
+
+      {/* Vitals Form (shown if checkbox is checked) */}
+      {consultationForm.recordVitals && (
+        <div className="card mb-4 border">
+          <div className="card-header bg-light">
+            <h6 className="card-title mb-0 d-flex align-items-center">
+              <Activity size={18} className="me-2 text-primary" />
+              Vital Signs
+            </h6>
+          </div>
+          <div className="card-body">
+            <div className="row">
+              {/* Blood Pressure */}
+              <div className="col-md-6 mb-3">
+                <label className="form-label">
+                  <Heart size={14} className="me-1 text-danger" />
+                  Blood Pressure (mmHg)
+                </label>
+                <input
+                  type="text"
+                  className="form-control"
+                  placeholder="120/80"
+                  value={consultationForm.vitals.blood_pressure}
+                  onChange={(e) => setConsultationForm(prev => ({
+                    ...prev,
+                    vitals: { ...prev.vitals, blood_pressure: e.target.value }
+                  }))}
+                />
+                <small className="form-text text-muted">Format: systolic/diastolic</small>
+              </div>
+
+              {/* Heart Rate */}
+              <div className="col-md-6 mb-3">
+                <label className="form-label">
+                  <Activity size={14} className="me-1 text-success" />
+                  Heart Rate (bpm)
+                </label>
+                <input
+                  type="number"
+                  className="form-control"
+                  placeholder="72"
+                  value={consultationForm.vitals.heart_rate}
+                  onChange={(e) => setConsultationForm(prev => ({
+                    ...prev,
+                    vitals: { ...prev.vitals, heart_rate: e.target.value }
+                  }))}
+                />
+              </div>
+
+              {/* Temperature */}
+              <div className="col-md-6 mb-3">
+                <label className="form-label">
+                  <Thermometer size={14} className="me-1 text-warning" />
+                  Temperature (°C)
+                </label>
+                <input
+                  type="number"
+                  step="0.1"
+                  className="form-control"
+                  placeholder="37.0"
+                  value={consultationForm.vitals.temperature}
+                  onChange={(e) => setConsultationForm(prev => ({
+                    ...prev,
+                    vitals: { ...prev.vitals, temperature: e.target.value }
+                  }))}
+                />
+              </div>
+
+              {/* Respiratory Rate */}
+              <div className="col-md-6 mb-3">
+                <label className="form-label">
+                  <Activity size={14} className="me-1 text-info" />
+                  Respiratory Rate (breaths/min)
+                </label>
+                <input
+                  type="number"
+                  className="form-control"
+                  placeholder="16"
+                  value={consultationForm.vitals.respiratory_rate}
+                  onChange={(e) => setConsultationForm(prev => ({
+                    ...prev,
+                    vitals: { ...prev.vitals, respiratory_rate: e.target.value }
+                  }))}
+                />
+              </div>
+
+              {/* Oxygen Saturation */}
+              <div className="col-md-6 mb-3">
+                <label className="form-label">
+                  <Droplets size={14} className="me-1 text-primary" />
+                  Oxygen Saturation (%)
+                </label>
+                <input
+                  type="number"
+                  className="form-control"
+                  placeholder="98"
+                  min="0"
+                  max="100"
+                  value={consultationForm.vitals.oxygen_saturation}
+                  onChange={(e) => setConsultationForm(prev => ({
+                    ...prev,
+                    vitals: { ...prev.vitals, oxygen_saturation: e.target.value }
+                  }))}
+                />
+              </div>
+
+              {/* Weight */}
+              <div className="col-md-6 mb-3">
+                <label className="form-label">
+                  <TrendingUp size={14} className="me-1" />
+                  Weight (kg)
+                </label>
+                <input
+                  type="number"
+                  step="0.1"
+                  className="form-control"
+                  placeholder="70.5"
+                  value={consultationForm.vitals.weight}
+                  onChange={(e) => setConsultationForm(prev => ({
+                    ...prev,
+                    vitals: { ...prev.vitals, weight: e.target.value }
+                  }))}
+                />
+              </div>
+
+              {/* Height */}
+              <div className="col-md-6 mb-3">
+                <label className="form-label">
+                  <TrendingUp size={14} className="me-1" />
+                  Height (cm)
+                </label>
+                <input
+                  type="number"
+                  className="form-control"
+                  placeholder="175"
+                  value={consultationForm.vitals.height}
+                  onChange={(e) => setConsultationForm(prev => ({
+                    ...prev,
+                    vitals: { ...prev.vitals, height: e.target.value }
+                  }))}
+                />
+              </div>
+            </div>
+
+            {/* BMI Auto-calculation Display */}
+            {consultationForm.vitals.weight && consultationForm.vitals.height && (
+              <div className="alert alert-info">
+                <strong>Calculated BMI:</strong>{' '}
+                {(
+                  parseFloat(consultationForm.vitals.weight) /
+                  Math.pow(parseFloat(consultationForm.vitals.height) / 100, 2)
+                ).toFixed(2)}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Consultation Notes */}
+      <div className="mb-3">
+        <label className="form-label fw-semibold">
+          <FileText size={16} className="me-2" />
+          Consultation Notes (Optional)
+        </label>
+        <textarea
+          className="form-control"
+          rows={4}
+          value={consultationForm.notes}
+          onChange={(e) => setConsultationForm(prev => ({
+            ...prev,
+            notes: e.target.value
+          }))}
+          placeholder="Add any additional observations, patient complaints, or notes about this consultation..."
+        />
+      </div>
+
+      {/* Summary */}
+      <div className="alert alert-secondary">
+        <h6 className="alert-heading">
+          <FileText size={16} className="me-2" />
+          Summary
+        </h6>
+        <ul className="mb-0">
+          <li>
+            <strong>Symptoms:</strong>{' '}
+            {consultationForm.symptoms.filter(s => s.trim()).length > 0
+              ? consultationForm.symptoms.filter(s => s.trim()).join(', ')
+              : 'None added yet'}
+          </li>
+          <li>
+            <strong>Vital Signs:</strong>{' '}
+            {consultationForm.recordVitals ? 'Will be recorded' : 'Not recording'}
+          </li>
+          {consultationForm.notes && (
+            <li>
+              <strong>Notes:</strong> Added
+            </li>
+          )}
+        </ul>
+      </div>
+    </div>
+
+    <div className="modal-footer">
+      <button
+        type="button"
+        className="btn btn-secondary"
+        onClick={() => {
+          setShowModal('');
+          // Reset form on cancel
+          setConsultationForm({
+            symptoms: [''],
+            recordVitals: false,
+            vitals: {
+              blood_pressure: '',
+              heart_rate: '',
+              temperature: '',
+              respiratory_rate: '',
+              oxygen_saturation: '',
+              weight: '',
+              height: '',
+            },
+            notes: ''
+          });
+        }}
+      >
+        Cancel
+      </button>
+      <button
+        type="button"
+        className="btn btn-primary"
+        onClick={recordConsultation}
+        disabled={loading || consultationForm.symptoms.filter(s => s.trim()).length === 0}
+        style={{ background: universityTheme.gradient, border: 'none' }}
+      >
+        {loading ? (
+          <>
+            <span className="spinner-border spinner-border-sm me-2" />
+            Recording...
+          </>
+        ) : (
+          <>
+            <Save size={16} className="me-2" />
+            Record Consultation
+          </>
+        )}
+      </button>
+    </div>
+  </>
+)}
                 
                 {/* Prescription Modal */}
 {showModal === 'prescription' && (

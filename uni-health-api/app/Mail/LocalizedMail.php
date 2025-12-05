@@ -12,7 +12,7 @@ abstract class LocalizedMail extends Mailable
 {
     use SerializesModels;
 
-    protected $locale;
+    public $locale;
     
     public function __construct($locale = 'en')
     {

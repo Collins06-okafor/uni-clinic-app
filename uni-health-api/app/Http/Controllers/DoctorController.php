@@ -1484,7 +1484,7 @@ public function updateAppointmentStatus(Request $request, $id): JsonResponse
  */
 private function canAttendToPatient($doctorId, $patientId): array
 {
-    // Get the patient's appointment with this doctor
+    // Get the patient's most recent appointment with this doctor
     $appointment = Appointment::where('doctor_id', $doctorId)
         ->where('patient_id', $patientId)
         ->whereIn('status', ['scheduled', 'confirmed'])
@@ -1500,7 +1500,7 @@ private function canAttendToPatient($doctorId, $patientId): array
         ];
     }
     
-    // ✅ NEW CHECK: For walk-ins, only allow if status is 'confirmed'
+    // ✅ CHECK 1: For walk-ins, only allow if status is 'confirmed'
     if ($appointment->priority === 'urgent' || isset($appointment->is_walk_in)) {
         if ($appointment->status !== 'confirmed') {
             return [
@@ -1517,53 +1517,50 @@ private function canAttendToPatient($doctorId, $patientId): array
         ];
     }
     
-    // ✅ STRICT TIME CHECK for regular appointments
+    // ✅ CHECK 2: RELAXED time validation for regular appointments
     try {
-        $timeString = $appointment->time instanceof \Carbon\Carbon 
-            ? $appointment->time->format('H:i:s')
-            : trim((string) $appointment->time);
+        $appointmentDate = Carbon::parse($appointment->date);
+        $today = Carbon::today();
         
-        $dateTimeString = $appointment->date . ' ' . $timeString;
-        $appointmentDateTime = Carbon::parse($dateTimeString);
+        // Allow consultations if appointment is today or in the past
+        if ($appointmentDate->lte($today)) {
+            \Log::info('Consultation allowed - appointment date check passed', [
+                'appointment_id' => $appointment->id,
+                'appointment_date' => $appointmentDate->format('Y-m-d'),
+                'today' => $today->format('Y-m-d'),
+                'patient_id' => $patientId,
+                'doctor_id' => $doctorId
+            ]);
+            
+            return [
+                'can_attend' => true,
+                'appointment' => $appointment
+            ];
+        }
+        
+        // Only block if appointment is in the future
+        return [
+            'can_attend' => false,
+            'reason' => "Appointment is scheduled for {$appointmentDate->format('F j, Y')}. You cannot record consultations for future appointments.",
+            'appointment_time' => $appointment->date,
+            'current_time' => $today->format('Y-m-d')
+        ];
         
     } catch (\Exception $e) {
-        Log::error('Error parsing appointment datetime', [
+        \Log::error('Error in canAttendToPatient time validation', [
             'appointment_id' => $appointment->id,
             'date' => $appointment->date,
             'time' => $appointment->time,
             'error' => $e->getMessage()
         ]);
         
-        // If parsing fails, block access for safety
+        // If date parsing fails, allow access if we can't determine it's in the future
         return [
-            'can_attend' => false,
-            'reason' => 'It is not possible to attend to this patient at this time',
-            'appointment' => $appointment
+            'can_attend' => true,
+            'appointment' => $appointment,
+            'warning' => 'Date validation warning - allowing access'
         ];
     }
-    
-    $now = Carbon::now();
-    
-    // ✅ STRICT RULE: Allow attendance 15 minutes before appointment
-    $gracePeriod = 15; // minutes
-    $canAttendFrom = $appointmentDateTime->copy()->subMinutes($gracePeriod);
-    
-    // ✅ Block if appointment time hasn't arrived yet
-    if ($now->lt($canAttendFrom)) {
-        return [
-            'can_attend' => false,
-            'reason' => "Appointment is scheduled for {$appointmentDateTime->format('F j, Y')} at {$appointmentDateTime->format('g:i A')}. You can start attending from {$canAttendFrom->format('g:i A')}.",
-            'appointment_time' => $appointmentDateTime->format('Y-m-d H:i'),
-            'can_attend_from' => $canAttendFrom->format('Y-m-d H:i'),
-            'current_time' => $now->format('Y-m-d H:i')
-        ];
-    }
-    
-    // ✅ Time has arrived - allow attendance
-    return [
-        'can_attend' => true,
-        'appointment' => $appointment
-    ];
 }
 
 /**
@@ -1696,6 +1693,125 @@ public function getPatientPrescriptions(Request $request, $patientId): JsonRespo
         return response()->json([
             'error' => 'Failed to load prescriptions',
             'message' => $e->getMessage()
+        ], 500);
+    }
+}
+
+/**
+ * Record consultation with symptoms and vitals
+ */
+public function recordConsultation(Request $request, $patientId): JsonResponse
+{
+    $validated = $request->validate([
+        'symptoms_observed' => 'required|array|min:1',
+        'symptoms_observed.*' => 'required|string',
+        'vitals' => 'sometimes|array',
+        'vitals.blood_pressure' => 'nullable|string',
+        'vitals.heart_rate' => 'nullable|numeric',
+        'vitals.temperature' => 'nullable|numeric',
+        'vitals.respiratory_rate' => 'nullable|numeric',
+        'vitals.oxygen_saturation' => 'nullable|numeric',
+        'vitals.weight' => 'nullable|numeric',
+        'vitals.height' => 'nullable|numeric',
+        'vitals.notes' => 'nullable|string',
+        'consultation_notes' => 'nullable|string',
+    ]);
+
+    try {
+        // ✅ CHANGE 1: Check for ANY appointment (past or present), not just active ones
+        $hasAppointment = Appointment::where('doctor_id', $request->user()->id)
+            ->where('patient_id', $patientId)
+            ->exists();
+        
+        if (!$hasAppointment) {
+            \Log::warning('No appointment history found', [
+                'patient_id' => $patientId,
+                'doctor_id' => $request->user()->id
+            ]);
+            
+            // ✅ CHANGE 2: More helpful error message
+            return response()->json([
+                'message' => 'No appointment history found with this patient. Please ensure the patient has an appointment with you.',
+                'patient_id' => $patientId,
+                'doctor_id' => $request->user()->id,
+                'hint' => 'The patient needs to have at least one appointment (any status) with you before you can record consultations.'
+            ], 403);
+        }
+        
+        // ✅ CHANGE 3: Get most recent appointment (any status)
+        $recentAppointment = Appointment::where('doctor_id', $request->user()->id)
+            ->where('patient_id', $patientId)
+            ->orderBy('date', 'desc')
+            ->orderBy('time', 'desc')
+            ->first();
+
+        DB::beginTransaction();
+
+        // Create medical record with symptoms and vitals
+        $recordData = [
+            'patient_id' => $patientId,
+            'doctor_id' => $request->user()->id,
+            'appointment_id' => $recentAppointment ? $recentAppointment->id : null,
+            'created_by' => $request->user()->id,
+            'diagnosis' => 'Symptoms recorded: ' . implode(', ', $validated['symptoms_observed']),
+            'treatment' => 'Under observation',
+            'notes' => $validated['consultation_notes'] ?? null,
+            'visit_date' => now()->format('Y-m-d'),
+        ];
+
+        // Add vitals if provided
+        if (isset($validated['vitals'])) {
+            $vitals = $validated['vitals'];
+            $recordData['blood_pressure'] = $vitals['blood_pressure'] ?? null;
+            $recordData['heart_rate'] = $vitals['heart_rate'] ?? null;
+            $recordData['temperature'] = $vitals['temperature'] ?? null;
+            $recordData['respiratory_rate'] = $vitals['respiratory_rate'] ?? null;
+            $recordData['oxygen_saturation'] = $vitals['oxygen_saturation'] ?? null;
+            $recordData['weight'] = $vitals['weight'] ?? null;
+            $recordData['height'] = $vitals['height'] ?? null;
+            
+            // Calculate BMI if height and weight provided
+            if (!empty($vitals['weight']) && !empty($vitals['height'])) {
+                $heightInMeters = $vitals['height'] / 100;
+                $recordData['bmi'] = round($vitals['weight'] / ($heightInMeters * $heightInMeters), 2);
+            }
+        }
+
+        $record = MedicalRecord::create($recordData);
+        
+        // ✅ CHANGE 4: Log success for debugging
+        \Log::info('Consultation recorded successfully', [
+            'record_id' => $record->id,
+            'patient_id' => $patientId,
+            'doctor_id' => $request->user()->id,
+            'symptoms_count' => count($validated['symptoms_observed']),
+            'vitals_recorded' => isset($validated['vitals']),
+            'appointment_id' => $recentAppointment ? $recentAppointment->id : null
+        ]);
+
+        DB::commit();
+
+        return response()->json([
+            'message' => 'Consultation recorded successfully',
+            'record' => $record->load('doctor:id,name'),
+            'vitals_recorded' => isset($validated['vitals']),
+        ], 201);
+
+    } catch (\Exception $e) {
+        DB::rollBack();
+        \Log::error('Error recording consultation: ' . $e->getMessage(), [
+            'patient_id' => $patientId,
+            'doctor_id' => $request->user()->id,
+            'trace' => $e->getTraceAsString()
+        ]);
+        
+        return response()->json([
+            'message' => 'Failed to record consultation',
+            'error' => config('app.debug') ? $e->getMessage() : 'An error occurred',
+            'debug_info' => config('app.debug') ? [
+                'file' => $e->getFile(),
+                'line' => $e->getLine()
+            ] : null
         ], 500);
     }
 }

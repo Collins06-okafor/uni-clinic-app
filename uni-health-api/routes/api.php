@@ -17,6 +17,7 @@ use App\Http\Controllers\DepartmentController;
 use App\Http\Controllers\LanguageController;
 use App\Http\Controllers\CalendarSourceController;
 use App\Http\Controllers\Api\ClinicSettingsController;
+use App\Http\Controllers\GoogleAuthController;
 
 /*
 |--------------------------------------------------------------------------
@@ -31,6 +32,11 @@ Route::prefix('auth')->group(function () {
     Route::post('/forgot-password', [AuthController::class, 'forgotPassword']);
     Route::post('/reset-password', [AuthController::class, 'resetPassword']);
     Route::post('/verify-email', [AuthController::class, 'verifyEmail']);
+
+    // 🔴 ADD GOOGLE OAUTH ROUTES HERE (in the public auth group)
+    Route::get('/google', [GoogleAuthController::class, 'redirectToGoogle']);
+    Route::get('/google/callback', [GoogleAuthController::class, 'handleGoogleCallback']);
+    Route::post('/google/token', [GoogleAuthController::class, 'handleGoogleToken']);
 });
 
 // Password reset routes (required for Laravel's built-in functionality)
@@ -204,6 +210,7 @@ Route::middleware('role:doctor')->prefix('doctor')->group(function () {
     Route::post('/patients/{id}/records', [DoctorController::class, 'createMedicalRecord']);
     Route::get('/patients/{id}/medical-records', [DoctorController::class, 'getPatientMedicalRecords']);
     Route::get('/patients/{patientId}/medical-card', [DoctorController::class, 'getPatientMedicalCard']);
+    Route::post('/patients/{patientId}/consultation', [DoctorController::class, 'recordConsultation']);
     
     // ✅ FIX: Use consistent parameter name and add latest vitals route
     Route::get('/patients/{patientId}/vitals-history', [DoctorController::class, 'getPatientVitalsHistory']);

@@ -1,12 +1,18 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { login, isAuthenticated } from '../services/auth';
+import { login, isAuthenticated, googleLogin } from '../services/auth';
 import LanguageSwitcher from '../components/LanguageSwitcher';
 import './LoginPage.css';
 
 interface LoginPageProps {
   onLoginSuccess: () => Promise<void>;
+}
+
+declare global {
+  interface Window {
+    google: any;
+  }
 }
 
 const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
@@ -16,32 +22,108 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [googleLoading, setGoogleLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(false);
 
-  // Check if user is already authenticated
   useEffect(() => {
     if (isAuthenticated()) {
       navigate('/dashboard');
     }
     
-    // Load remembered credentials if they exist
+    // Load remembered credentials
     const rememberedEmail = localStorage.getItem('rememberedEmail');
     const rememberedPassword = localStorage.getItem('rememberedPassword');
     
     if (rememberedEmail && rememberedPassword) {
       setEmail(rememberedEmail);
-      // Decrypt password (simple base64 for demo - use better encryption in production)
       try {
         setPassword(atob(rememberedPassword));
         setRememberMe(true);
       } catch (e) {
-        // If decryption fails, clear stored data
         localStorage.removeItem('rememberedEmail');
         localStorage.removeItem('rememberedPassword');
       }
     }
+
+    // Load Google Sign-In script
+    const script = document.createElement('script');
+    script.src = 'https://accounts.google.com/gsi/client';
+    script.async = true;
+    script.defer = true;
+    document.body.appendChild(script);
+
+    script.onload = () => {
+      if (window.google) {
+        window.google.accounts.id.initialize({
+          client_id: import.meta.env.VITE_GOOGLE_CLIENT_ID,
+          callback: handleGoogleResponse,
+        });
+
+        window.google.accounts.id.renderButton(
+          document.getElementById('google-signin-button'),
+          { 
+            theme: 'outline', 
+            size: 'large',
+            width: 400,
+            text: 'continue_with',
+            shape: 'rectangular',
+            logo_alignment: 'left'
+          }
+        );
+      }
+    };
+
+    return () => {
+      document.body.removeChild(script);
+    };
   }, [navigate]);
+
+  const handleGoogleResponse = async (response: any) => {
+    setGoogleLoading(true);
+    setError('');
+
+    try {
+      const result = await googleLogin(response.credential);
+      
+      if (result.token) {
+        await onLoginSuccess();
+        
+        // Navigate based on role
+        if (result.user?.role) {
+          switch (result.user.role) {
+            case 'student':
+              navigate('/student/dashboard', { replace: true });
+              break;
+            case 'admin':
+              navigate('/admin/dashboard', { replace: true });
+              break;
+            case 'doctor':
+              navigate('/doctor/dashboard', { replace: true });
+              break;
+            case 'clinical_staff':
+              navigate('/clinical/dashboard', { replace: true });
+              break;
+            case 'academic_staff':
+              navigate('/academic-staff/dashboard', { replace: true });
+              break;
+            case 'superadmin':
+              navigate('/superadmin/dashboard', { replace: true });
+              break;
+            default:
+              navigate('/dashboard', { replace: true });
+          }
+        } else {
+          navigate('/dashboard', { replace: true });
+        }
+      }
+    } catch (err: any) {
+      console.error('Google login error:', err);
+      setError(err.message || t('error.google_login_failed'));
+    } finally {
+      setGoogleLoading(false);
+    }
+  };
 
   const handleLogin = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -49,31 +131,21 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
     setLoading(true);
 
     try {
-      console.log('Attempting login with:', { email });
       const response = await login({ email, password });
-      console.log('Login response received:', response);
       
       if (response.token) {
-        console.log('Login successful, refreshing user data');
-        
         // Handle Remember Me
         if (rememberMe) {
           localStorage.setItem('rememberedEmail', email);
-          // Simple base64 encoding (use better encryption in production)
           localStorage.setItem('rememberedPassword', btoa(password));
         } else {
-          // Clear remembered credentials if unchecked
           localStorage.removeItem('rememberedEmail');
           localStorage.removeItem('rememberedPassword');
         }
         
-        try {
-          await onLoginSuccess();
-        } catch (userError) {
-          console.error('Failed to refresh user data:', userError);
-        }
+        await onLoginSuccess();
         
-        // Role-based navigation after successful login
+        // Role-based navigation
         if (response.user?.role) {
           switch (response.user.role) {
             case 'student':
@@ -100,8 +172,6 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
         } else {
           navigate('/dashboard', { replace: true });
         }
-      } else {
-        setError(t('error.login_failed'));
       }
     } catch (err: any) {
       console.error('Login error:', err);
@@ -132,6 +202,28 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
                 {error}
               </div>
             )}
+
+            {/* Google Sign-In Button */}
+            <div style={{ marginBottom: '20px' }}>
+              <div id="google-signin-button" style={{ width: '100%' }}></div>
+              {googleLoading && (
+                <div style={{ textAlign: 'center', marginTop: '10px' }}>
+                  <span className="spinner"></span>
+                </div>
+              )}
+            </div>
+
+            {/* Divider */}
+            <div style={{ 
+              display: 'flex', 
+              alignItems: 'center', 
+              margin: '20px 0',
+              gap: '10px'
+            }}>
+              <div style={{ flex: 1, height: '1px', background: '#e5e7eb' }}></div>
+              <span style={{ color: '#6b7280', fontSize: '14px' }}>or</span>
+              <div style={{ flex: 1, height: '1px', background: '#e5e7eb' }}></div>
+            </div>
 
             <form onSubmit={handleLogin} className="login-form">
               <div className="form-group">
@@ -183,7 +275,7 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
                 </Link>
               </div>
 
-              <button type="submit" disabled={loading} className="login-button">
+              <button type="submit" disabled={loading || googleLoading} className="login-button">
                 {loading && (
                   <span className="spinner"></span>
                 )}

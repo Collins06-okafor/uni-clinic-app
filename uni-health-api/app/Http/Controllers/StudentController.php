@@ -9,6 +9,8 @@ use App\Models\MedicalRecord;
 use App\Models\User;
 use Carbon\Carbon;
 use App\Rules\MinimumAge;
+use App\Mail\AppointmentRequestNotification;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Storage;
 
 class StudentController extends Controller
@@ -422,6 +424,102 @@ public function getAppointments(Request $request): JsonResponse
 }
 
 /**
+ * Send email notifications when appointment is requested
+ */
+protected function sendAppointmentRequestNotifications(Appointment $appointment)
+{
+    \Log::info('=== SEND NOTIFICATIONS METHOD STARTED ===', [
+        'appointment_id' => $appointment->id
+    ]);
+
+    try {
+        // Get all clinical staff members
+        $clinicalStaff = User::where('role', 'clinical_staff')
+            ->orWhere('role', 'admin')
+            ->get();
+
+        \Log::info('Clinical staff query result:', [
+            'count' => $clinicalStaff->count(),
+            'clinical_staff' => $clinicalStaff->pluck('email')->toArray()
+        ]);
+
+        // Check if doctor exists
+        if (!$appointment->doctor) {
+            \Log::warning('No doctor assigned to appointment', [
+                'appointment_id' => $appointment->id,
+                'doctor_id' => $appointment->doctor_id
+            ]);
+        }
+
+        // Also notify the assigned doctor
+        $recipients = $clinicalStaff->push($appointment->doctor)->unique('id');
+
+        \Log::info('Total recipients:', [
+            'count' => $recipients->count(),
+            'emails' => $recipients->pluck('email')->toArray()
+        ]);
+
+        $emailsSent = 0;
+        $emailsFailed = 0;
+
+        foreach ($recipients as $staff) {
+            try {
+                // Determine locale based on staff preference or default to English
+                $locale = $staff->preferred_language ?? 'en';
+
+                \Log::info('Attempting to send email', [
+                    'recipient' => $staff->email,
+                    'name' => $staff->name,
+                    'role' => $staff->role,
+                    'locale' => $locale
+                ]);
+
+                // Send email notification
+                Mail::to($staff->email)->send(
+                    new AppointmentRequestNotification($appointment, $locale)
+                );
+
+                $emailsSent++;
+
+                \Log::info('✅ Email sent successfully', [
+                    'recipient' => $staff->email
+                ]);
+
+            } catch (\Exception $emailError) {
+                $emailsFailed++;
+                
+                \Log::error('❌ Failed to send individual email', [
+                    'recipient' => $staff->email,
+                    'error' => $emailError->getMessage(),
+                    'trace' => $emailError->getTraceAsString()
+                ]);
+            }
+        }
+
+        \Log::info('=== EMAIL SENDING COMPLETE ===', [
+            'appointment_id' => $appointment->id,
+            'recipients_count' => $recipients->count(),
+            'emails_sent' => $emailsSent,
+            'emails_failed' => $emailsFailed,
+            'source' => 'StudentController'
+        ]);
+
+    } catch (\Exception $e) {
+        // Log error but don't fail the appointment creation
+        \Log::error('=== CRITICAL ERROR IN SEND NOTIFICATIONS ===', [
+            'appointment_id' => $appointment->id,
+            'error' => $e->getMessage(),
+            'trace' => $e->getTraceAsString()
+        ]);
+    }
+
+    \Log::info('=== SEND NOTIFICATIONS METHOD ENDED ===');
+}
+
+/**
+ * Schedule a new appointment with clinic hours validation
+ */
+/**
  * Schedule a new appointment with clinic hours validation
  */
 public function scheduleAppointment(Request $request): JsonResponse
@@ -523,6 +621,10 @@ public function scheduleAppointment(Request $request): JsonResponse
         ]);
 
         \Log::info('Appointment created:', $appointment->toArray());
+
+        // 🔔 ADDED THESE TWO LINES
+        $appointment->load(['patient', 'doctor']);
+        $this->sendAppointmentRequestNotifications($appointment);
 
         // Try to broadcast
         try {
