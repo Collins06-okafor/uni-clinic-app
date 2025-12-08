@@ -1512,7 +1512,6 @@ const Sidebar = () => {
     </div>
 
     {/* Prescription Activity */}
-    // Replace the prescription activity section with proper null checks
 {kpiStats?.prescription_stats && (
   <div className="row mb-4">
     <div className="col-12">
