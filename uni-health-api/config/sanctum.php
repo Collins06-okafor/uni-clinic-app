@@ -1,9 +1,8 @@
 <?php
-
 use Laravel\Sanctum\Sanctum;
 
 return [
-    'stateful' => [], // Empty array for token-only authentication
+    'stateful' => explode(',', env('SANCTUM_STATEFUL_DOMAINS', 'fiu-health.cmpespace.top,localhost:5173,localhost:3000')),  // ✅ UPDATE THIS
 
     'guard' => ['web'],
 
@@ -14,7 +13,5 @@ return [
     'middleware' => [
         'authenticate_session' => Laravel\Sanctum\Http\Middleware\AuthenticateSession::class,
         'encrypt_cookies' => Illuminate\Cookie\Middleware\EncryptCookies::class,
-        // Comment out CSRF validation for token-only auth
-        // 'validate_csrf_token' => Illuminate\Foundation\Http\Middleware\ValidateCsrfToken::class,
     ],
 ];
