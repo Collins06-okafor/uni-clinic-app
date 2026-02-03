@@ -1,0 +1,12 @@
+# Frontend
+university-clinic/node_modules
+university-clinic/.env
+
+# Laravel backend
+uni-health-api/vendor
+uni-health-api/.env
+uni-health-api/storage/*.key
+
+# General
+node_modules
+.env
