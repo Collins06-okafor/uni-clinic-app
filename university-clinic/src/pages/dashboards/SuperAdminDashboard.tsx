@@ -1994,9 +1994,9 @@ const Sidebar = () => {
           </span>
         </td>
         <td>
-          {typeof systemUser.department === 'object' && systemUser.department !== null
-            ? systemUser.department.name
-            : systemUser.department || '-'}
+          {String(typeof systemUser.department === 'object' && systemUser.department !== null
+  ? systemUser.department.name
+  : systemUser.department || '-')}
         </td>
         
         {/* ✅ UPDATED: Clickable status badge */}

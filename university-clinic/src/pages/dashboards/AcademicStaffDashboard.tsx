@@ -1,13 +1,14 @@
 // src/pages/dashboards/AcademicStaffDashboard.tsx
 import React, { useState, useEffect } from 'react';
 import { 
-  Calendar, Clock, User, FileText, History, Edit, X, CheckCircle, 
+  Calendar, Clock, User as UserIcon, FileText, History, Edit, X, CheckCircle, 
   Stethoscope, Heart, Brain, Thermometer, BarChart3, Activity, 
   Users, TrendingUp, Phone, Mail, LogOut, Globe, Plus, UserCog, Camera, AlertTriangle, Save
 } from 'lucide-react';
 import Select from 'react-select';
 import { APPOINTMENT_STATUSES, getStatusText, getStatusBadgeClass } from '../../constants/appointmentStatuses';
 import type { AppointmentStatus } from '../../constants/appointmentStatuses';
+import type { User as BaseUser } from '../../types/user';
 import { useTranslation } from 'react-i18next';
 import i18n from '../../services/i18n';
 import PhoneInput from "react-phone-input-2";
@@ -19,10 +20,10 @@ import './AcademicStaffDashboard.css'
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://127.0.0.1:8000";
 
 // Type definitions
-interface User {
+interface User extends BaseUser {
   name: string;
   email: string;
-  staff_no: string;
+  staff_no?: string;
   phone?: string;
   department?: string;
   bio?: string;
@@ -623,7 +624,7 @@ if (!allowedTypes.includes(file.type)) {
           overflow: 'hidden'
         }}
       >
-        <User size={size * 0.4} />
+        <UserIcon size={size * 0.4} />
       </div>
     );
   }
@@ -1386,7 +1387,7 @@ const Sidebar = () => {
               }
             }}
           >
-            <User size={isMobile ? 15 : 18} />
+            <UserIcon size={isMobile ? 15 : 18} />
             {!(sidebarCollapsed && !isMobile) && (
               <span style={{ marginLeft: isMobile ? '9px' : '14px' }}>{t('nav.profile')}</span>
             )}
@@ -1911,7 +1912,7 @@ const Sidebar = () => {
           {appointments.slice(0, 3).map((appointment) => (
             <div key={appointment.id} className="d-flex align-items-center p-3 bg-light rounded-3 mb-3">
               <div className="me-3">
-                <User size={24} className="text-primary" />
+                <UserIcon size={24} className="text-primary" />
               </div>
               <div className="flex-grow-1">
                 <h6 className="mb-1 fw-semibold">Dr. {appointment.doctor}</h6>
@@ -1947,7 +1948,7 @@ const Sidebar = () => {
                 <div className="d-flex justify-content-between align-items-start mb-2">
                   <div className="flex-grow-1">
                     <div className="d-flex align-items-center mb-1">
-                      <User size={20} className="text-primary me-2 flex-shrink-0" />
+                      <UserIcon size={20} className="text-primary me-2 flex-shrink-0" />
                       <h6 className="mb-0 fw-semibold" style={{ fontSize: '0.95rem' }}>
                         Dr. {appointment.doctor}
                       </h6>
@@ -2511,7 +2512,7 @@ const Sidebar = () => {
                             <tr key={appointment.id}>
                               <td>
                                 <div className="d-flex align-items-center">
-                                  <User size={20} className="me-2 text-primary" />
+                                  <UserIcon size={20} className="me-2 text-primary" />
                                   <span className="fw-semibold">Dr. {appointment.doctor}</span>
                                 </div>
                               </td>
@@ -3205,7 +3206,7 @@ const Sidebar = () => {
                             </td>
                             <td>
                               <div className="d-flex align-items-center">
-                                <User size={20} className="me-2 text-primary" />
+                                <UserIcon size={20} className="me-2 text-primary" />
                                 <span>Dr. {record.doctor}</span>
                               </div>
                             </td>
@@ -3250,7 +3251,7 @@ const Sidebar = () => {
                           <div className="flex-grow-1">
                             <h6 className="mb-1 fw-semibold">{record.diagnosis}</h6>
                             <div className="d-flex align-items-center small text-muted mb-1">
-                              <User size={12} className="me-1" />
+                              <UserIcon size={12} className="me-1" />
                               <span>Dr. {record.doctor}</span>
                               <Calendar size={12} className="ms-3 me-1" />
                               <span>{new Date(record.date).toLocaleDateString()}</span>

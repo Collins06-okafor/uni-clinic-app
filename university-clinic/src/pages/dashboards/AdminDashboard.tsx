@@ -2,9 +2,10 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
   Users, Settings, Activity, CheckCircle, Clock, Calendar,
-  AlertTriangle, Trash2, User, X, Upload, UserX, LogOut, UserCog, LayoutGrid, Globe, Image as ImageIcon
+  AlertTriangle, Trash2, User as UserIcon, X, Upload, UserX, LogOut, UserCog, LayoutGrid, Globe, Image as ImageIcon
 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
+import type { User as BaseUser } from '../../types/user';
 import i18n from '../../services/i18n';
 import PhoneInput from "react-phone-input-2";
 import "react-phone-input-2/lib/style.css";
@@ -19,14 +20,10 @@ const PROFILE_API_BASE = `${API_BASE_URL}/api`;
 const PROFILE_ENDPOINT = '/profile';
 
 // Type definitions
-interface User {
-  id: string;
-  name: string;
-  email: string;
+interface User extends BaseUser {
   avatar?: string;
   avatar_url?: string;
-  role: string;
-  status: string;
+  status?: string;
   phone?: string;
   department?: string;
   bio?: string;
@@ -111,7 +108,8 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
   name: 'Admin User', 
   email: 'admin@university.edu', 
   role: 'admin', 
-  status: 'active' 
+  status: 'active',
+  avatar: undefined
 };
 
 
@@ -480,7 +478,7 @@ const customSelectStyles = {
           className={`rounded-circle d-flex align-items-center justify-content-center ${className}`}
           style={{ width: size, height: size, backgroundColor: '#fef2f2', color: '#e53e3e' }}
         >
-          <User size={size * 0.5} />
+          <UserIcon size={size * 0.5} />
         </div>
     );
   };
@@ -1084,7 +1082,7 @@ const Sidebar = () => {
             }}
           />
         ) : (
-          <User size={18} />
+          <UserIcon size={18} />
         )}
       </div>
       {/* Removed name display */}
@@ -1133,7 +1131,7 @@ const Sidebar = () => {
                 }}
               />
             ) : (
-              <User size={20} />
+              <UserIcon size={20} />
             )}
           </div>
           <div>
@@ -2002,18 +2000,17 @@ const renderUsers = () => {
                       className="rounded-circle d-flex align-items-center justify-content-center"
                       style={{ width: 32, height: 32, backgroundColor: '#fef2f2', color: '#e53e3e' }}
                     >
-                      <User size={16} />
+                      <UserIcon size={16} />
                     </div>
                   )}
                   {u.name}
                 </td>
                 <td>{u.email}</td>
                 <td>
-                  <span className={`badge ${u.role === 'admin' ? 'bg-primary' : u.role === 'doctor' ? 'bg-success' : u.role === 'student' ? 'bg-info' : 'bg-secondary'}`}>
-                    {u.role === 'student' ? t('admin.student') : 
-                     u.role === 'doctor' ? t('admin.doctor') :
-                     u.role === 'admin' ? t('admin.admin') :
-                     u.role === 'nurse' ? t('admin.nurse') : u.role}
+                  <span className={`badge ${u.role === 'superadmin' ? 'bg-primary' : u.role === 'clinical_staff' ? 'bg-success' : u.role === 'academic_staff' ? 'bg-info' : 'bg-secondary'}`}>
+                    {u.role === 'academic_staff' ? t('admin.student') : 
+                     u.role === 'clinical_staff' ? t('admin.doctor') :
+                     u.role === 'superadmin' ? t('admin.admin') : u.role}
                   </span>
                 </td>
                 <td>
@@ -2024,10 +2021,10 @@ const renderUsers = () => {
                   </span>
                 </td>
                 <td className="d-flex gap-2">
-                  <button className="btn btn-sm btn-outline-secondary" onClick={() => updateUserStatus(u.id, u.status === 'active' ? 'suspended' : 'active')}>
+                  <button className="btn btn-sm btn-outline-secondary" onClick={() => updateUserStatus(String(u.id), u.status === 'active' ? 'suspended' : 'active')}>
                     {u.status === 'active' ? t('admin.suspend') : t('admin.activate')}
                   </button>
-                  <button className="btn btn-sm btn-outline-danger" onClick={() => deleteUser(u.id, 'admin_action')}>
+                  <button className="btn btn-sm btn-outline-danger" onClick={() => deleteUser(String(u.id), 'admin_action')}>
                     {t('admin.delete')}
                   </button>
                 </td>

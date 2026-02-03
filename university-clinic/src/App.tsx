@@ -173,7 +173,7 @@ function App() {
             path="/dashboard"
             element={
               <ProtectedRoute user={user}>
-                <Dashboard user={user} />
+                <Dashboard user={user} onLogout={handleLogout} />
               </ProtectedRoute>
             }
           />

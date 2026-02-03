@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { Calendar, Clock, User, FileText, History, Edit, X, CheckCircle, Stethoscope, Heart, Brain, Thermometer, BarChart3, Activity, Users, TrendingUp, Upload, Camera, AlertTriangle, Globe, Save, Bell, LogOut, Phone } from 'lucide-react';
+import { Calendar, Clock, User as UserIcon, FileText, History, Edit, X, CheckCircle, Stethoscope, Heart, Brain, Thermometer, BarChart3, Activity, Users, TrendingUp, Upload, Camera, AlertTriangle, Globe, Save, Bell, LogOut, Phone } from 'lucide-react';
 import PhoneInput from "react-phone-input-2";
 import "react-phone-input-2/lib/style.css";
 import { APPOINTMENT_STATUSES, getStatusText } from '../../constants/appointmentStatuses';
 import './StudentAppointmentSystem.css'; // Import the CSS file
 import { useTranslation } from 'react-i18next';
+import type { User as BaseUser } from '../../types/user';
 import i18n from '../../services/i18n';
 import RealTimeDashboard from '../../components/RealTimeDashboard';
 import NotificationSystem from '../../components/NotificationSystem';
@@ -18,18 +19,9 @@ import { ClinicHoursCard, AppointmentTipsCard, EmergencyContactsCard } from '../
 //const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'http://127.0.0.1:8000';
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://127.0.0.1:8000";
 
-
-interface StudentDashboardProps {
-  user: User | null;
-  onLogout: () => void;
-}
-
 // Type Definitions
-interface User {
-  id?: string;
+interface User extends BaseUser {
   student_id?: string;
-  name?: string;
-  email?: string;
   department?: string;
   phone?: string;
   date_of_birth?: string;
@@ -145,6 +137,10 @@ interface PrescriptionItem {
   duration: string;
 }
 
+interface StudentDashboardProps {
+  user: User | null;
+  onLogout: () => void;
+}
 
 interface Props {
   user?: User;
@@ -1761,7 +1757,7 @@ const Sidebar = () => {
               }
             }}
           >
-            <User size={isMobile ? 15 : 18} />
+            <UserIcon size={isMobile ? 15 : 18} />
             {!(sidebarCollapsed && !isMobile) && (
               <span style={{ marginLeft: isMobile ? '9px' : '14px' }}>Profile</span>
             )}
@@ -2213,7 +2209,7 @@ const Sidebar = () => {
                             className="quick-action-btn quick-action-btn-outline"
                             onClick={() => setActiveTab('profile')}
                           >
-                            <User size={24} className="mb-2" />
+                            <UserIcon size={24} className="mb-2" />
                             <div className="fw-semibold">
                             {profileComplete ? t('student.update_profile') : t('student.complete_profile')}
                             </div>
@@ -2348,7 +2344,7 @@ const Sidebar = () => {
               <div className="card card-custom" style={{ border: 'none' }}>
                 <div className="card-header card-header-custom" style={{ borderBottom: 'none' }}>
                   <h3 className="card-title-custom">
-                    <User size={24} className="me-2" />
+                    <UserIcon size={24} className="me-2" />
                     {t('student.profile')}
                   </h3>
                 </div>
@@ -2382,7 +2378,7 @@ const Sidebar = () => {
           justifyContent: 'center'
         }}
       >
-        <User size={60} className="text-university-primary" />
+        <UserIcon size={60} className="text-university-primary" />
       </div>
     )}
     
@@ -3470,7 +3466,7 @@ const Sidebar = () => {
                               className="doctor-image"
                             />
                           ) : (
-                            <User size={20} className="me-2" />
+                            <UserIcon size={20} className="me-2" />
                           )}
                           {appointment.doctor}
                         </div>
@@ -3599,7 +3595,7 @@ const Sidebar = () => {
                     <div className="flex-grow-1">
                       <h6 className="mb-1 fw-semibold">{record.diagnosis}</h6>
                       <div className="d-flex align-items-center small text-muted mb-1">
-                        <User size={12} className="me-1" />
+                        <UserIcon size={12} className="me-1" />
                         <span>Dr. {record.doctor}</span>
                         <Calendar size={12} className="ms-3 me-1" />
                         <span>{new Date(record.date).toLocaleDateString()}</span>
@@ -3671,7 +3667,7 @@ const Sidebar = () => {
                       </td>
                       <td>
                         <div className="d-flex align-items-center">
-                          <User size={20} className="me-2 text-primary" />
+                          <UserIcon size={20} className="me-2 text-primary" />
                           <span>Dr. {record.doctor}</span>
                         </div>
                       </td>
