@@ -240,6 +240,40 @@ interface DoctorDashboardProps {
 
 // API Configuration - Fixed to use Vite environment variables
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000';
+
+// ── CSRF helpers ──────────────────────────────────────────────────────────────
+const getXsrfToken = (): string => {
+  const match = document.cookie
+    .split('; ')
+    .find(row => row.startsWith('XSRF-TOKEN='));
+  return match ? decodeURIComponent(match.split('=')[1]) : '';
+};
+
+const fetchCsrfCookie = async (): Promise<void> => {
+  await fetch(`${API_BASE_URL}/sanctum/csrf-cookie`, {
+    method: 'GET',
+    credentials: 'include',
+    headers: { 'Accept': 'application/json' },
+  });
+  await new Promise(resolve => setTimeout(resolve, 80));
+};
+
+const getMutatingHeaders = (
+  token: string,
+  includeContentType = true
+): Record<string, string> => {
+  const headers: Record<string, string> = {
+    'Authorization': `Bearer ${token}`,
+    'Accept': 'application/json',
+    'X-Requested-With': 'XMLHttpRequest',
+    'X-XSRF-TOKEN': getXsrfToken(),
+  };
+  if (includeContentType) {
+    headers['Content-Type'] = 'application/json';
+  }
+  return headers;
+};
+// ─────────────────────────────────────────────────────────────────────────────
 const DOCTOR_API_BASE = `${API_BASE_URL}/api/doctor`;
 
 // Constants
@@ -739,13 +773,11 @@ const cancelAppointment = async (): Promise<void> => {
 
     setLoading(true);
     
+    await fetchCsrfCookie();
     const response = await fetch(`${DOCTOR_API_BASE}/appointments/${selectedAppointment.id}/cancel`, {
       method: 'DELETE',
-      headers: {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json',
-        'Authorization': `Bearer ${localStorage.getItem('token')}`
-      },
+      credentials: 'include',
+      headers: getMutatingHeaders(localStorage.getItem('token') || ''),
       body: JSON.stringify(cancellationForm)
     });
     
@@ -812,13 +844,13 @@ const fetchUrgentRequests = async (): Promise<void> => {
       };
       
       console.log('Saving profile data:', profileData); // DEBUG LINE
+
+      await fetchCsrfCookie();
       
       const response = await fetch(`${DOCTOR_API_BASE}/profile`, {
         method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        },
+        credentials: 'include',
+        headers: getMutatingHeaders(localStorage.getItem('token') || ''),
         body: JSON.stringify(profileData)
       });
       
@@ -847,111 +879,72 @@ const fetchUrgentRequests = async (): Promise<void> => {
   const file = event.target.files?.[0];
   if (!file) return;
   
-  try {
-    // Validate file type
-    const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp'];
-    if (!allowedTypes.includes(file.type)) {
-      setMessage({ 
-        type: 'error', 
-        text: 'Please select a valid image file (JPEG, PNG, GIF, or WebP)' 
-      });
-      setTimeout(() => setMessage({ type: '', text: '' }), 5000);
-      return;
-    }
+  const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp'];
+  const maxSize = 5 * 1024 * 1024;
+  
+  if (!allowedTypes.includes(file.type)) {
+    setMessage({ type: 'error', text: 'Please select a valid image file (JPEG, PNG, GIF, or WebP)' });
+    setTimeout(() => setMessage({ type: '', text: '' }), 5000);
+    return;
+  }
 
-    // Validate file size (5MB limit)
-    const maxSize = 5 * 1024 * 1024; // 5MB in bytes
-    if (file.size > maxSize) {
-      setMessage({ 
-        type: 'error', 
-        text: 'Image file size must be less than 5MB' 
-      });
-      setTimeout(() => setMessage({ type: '', text: '' }), 5000);
-      return;
-    }
-    
+  if (file.size > maxSize) {
+    setMessage({ type: 'error', text: 'Image file size must be less than 5MB' });
+    setTimeout(() => setMessage({ type: '', text: '' }), 5000);
+    return;
+  }
+
+  const previousAvatar = doctorProfile.avatar_url;
+
+  try {
+    const reader = new FileReader();
+    reader.onload = (e: ProgressEvent<FileReader>) => {
+      setDoctorProfile(prev => ({ ...prev, avatar_url: e.target?.result as string }));
+    };
+    reader.readAsDataURL(file);
+
+    // ✅ Get CSRF and WAIT
+    await fetchCsrfCookie();
+
     setLoading(true);
     
     const formData = new FormData();
     formData.append('avatar', file);
     
-    // Log the request details for debugging
-    console.log('Uploading avatar:', {
-      fileName: file.name,
-      fileSize: file.size,
-      fileType: file.type,
-      endpoint: `${DOCTOR_API_BASE}/avatar`
-    });
-    
     const response = await fetch(`${DOCTOR_API_BASE}/avatar`, {
       method: 'POST',
+      credentials: 'include',
       headers: { 
         'Authorization': `Bearer ${localStorage.getItem('token')}`,
-        // Don't set Content-Type header for FormData - browser sets it automatically with boundary
+        'Accept': 'application/json',
+        'X-Requested-With': 'XMLHttpRequest',
+        'X-XSRF-TOKEN': getXsrfToken(),
       },
       body: formData
     });
     
-    console.log('Upload response status:', response.status);
-    
     if (!response.ok) {
-      let errorMessage = `Upload failed: HTTP ${response.status}`;
-      
-      try {
-        const errorData = await response.json();
-        console.error('Server error response:', errorData);
-        errorMessage = errorData.message || errorData.error || errorMessage;
-        
-        // Handle specific error cases
-        if (response.status === 413) {
-          errorMessage = 'File is too large. Please choose a smaller image.';
-        } else if (response.status === 415) {
-          errorMessage = 'Unsupported file type. Please choose a JPEG, PNG, GIF, or WebP image.';
-        } else if (response.status === 422) {
-          errorMessage = errorData.errors ? 
-            Object.values(errorData.errors).flat().join(', ') : 
-            'Invalid file data provided.';
-        }
-      } catch (parseError) {
-        console.error('Could not parse error response:', parseError);
-        // Try to get text response if JSON parsing fails
-        try {
-          const textResponse = await response.text();
-          console.error('Error response text:', textResponse);
-          if (textResponse.includes('File too large')) {
-            errorMessage = 'File is too large. Please choose a smaller image.';
-          }
-        } catch (textError) {
-          console.error('Could not get text response:', textError);
-        }
-      }
-      
-      throw new Error(errorMessage);
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.message || `Upload failed: HTTP ${response.status}`);
     }
     
     const data = await response.json();
-    console.log('Upload successful:', data);
     
-    // Update the profile with new avatar URL
-    setDoctorProfile(prev => ({ 
-      ...prev, 
-      avatar_url: data.avatar_url || data.url || data.path 
-    }));
+    let imageUrl = data.avatar_url || data.url || data.path || data.image_url;
     
-    setMessage({ 
-      type: 'success', 
-      text: 'Profile image updated successfully!' 
-    });
+    if (imageUrl && !imageUrl.startsWith('http://') && !imageUrl.startsWith('https://')) {
+      const cleanPath = imageUrl.startsWith('/') ? imageUrl.substring(1) : imageUrl;
+      imageUrl = `${API_BASE_URL}/${cleanPath}`;
+    }
     
-    // Clear the file input
+    setDoctorProfile(prev => ({ ...prev, avatar_url: imageUrl }));
+    setMessage({ type: 'success', text: 'Profile image updated successfully!' });
     event.target.value = '';
     
   } catch (error) {
     console.error('Image upload error:', error);
-    setMessage({ 
-      type: 'error', 
-      text: getErrorMessage(error) || 'Failed to upload image. Please try again.' 
-    });
+    setDoctorProfile(prev => ({ ...prev, avatar_url: previousAvatar }));
+    setMessage({ type: 'error', text: getErrorMessage(error) || 'Failed to upload image. Please try again.' });
   } finally {
     setLoading(false);
     setTimeout(() => setMessage({ type: '', text: '' }), 5000);
@@ -964,51 +957,40 @@ const fetchUrgentRequests = async (): Promise<void> => {
     setTimeout(() => setMessage({ type: '', text: '' }), 3000);
     return;
   }
+
+  if (!window.confirm('Are you sure you want to remove your profile photo?')) {
+    return;
+  }
   
   try {
+    await fetchCsrfCookie();
+
     setLoading(true);
-    
-    console.log('Removing avatar from:', `${DOCTOR_API_BASE}/avatar`);
     
     const response = await fetch(`${DOCTOR_API_BASE}/avatar`, { 
       method: 'DELETE',
+      credentials: 'include',
       headers: { 
         'Authorization': `Bearer ${localStorage.getItem('token')}`,
         'Content-Type': 'application/json',
-        'Accept': 'application/json'
+        'Accept': 'application/json',
+        'X-Requested-With': 'XMLHttpRequest',
+        'X-XSRF-TOKEN': getXsrfToken(),
       }
+      
     });
-    
-    console.log('Remove response status:', response.status);
     
     if (!response.ok) {
-      let errorMessage = `Remove failed: HTTP ${response.status}`;
-      
-      try {
-        const errorData = await response.json();
-        console.error('Remove error response:', errorData);
-        errorMessage = errorData.message || errorData.error || errorMessage;
-      } catch (parseError) {
-        console.error('Could not parse remove error response:', parseError);
-      }
-      
-      throw new Error(errorMessage);
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.message || `Remove failed: HTTP ${response.status}`);
     }
     
-    // Update profile to remove avatar
     setDoctorProfile(prev => ({ ...prev, avatar_url: null }));
-    
-    setMessage({ 
-      type: 'success', 
-      text: 'Profile photo removed successfully!' 
-    });
+    setMessage({ type: 'success', text: 'Profile photo removed successfully!' });
     
   } catch (error) {
     console.error('Photo removal error:', error);
-    setMessage({ 
-      type: 'error', 
-      text: getErrorMessage(error) || 'Failed to remove photo. Please try again.' 
-    });
+    setMessage({ type: 'error', text: getErrorMessage(error) || 'Failed to remove photo. Please try again.' });
   } finally {
     setLoading(false);
     setTimeout(() => setMessage({ type: '', text: '' }), 5000);
@@ -1102,13 +1084,11 @@ const rescheduleAppointment = async (): Promise<void> => {
     setLoading(true);
     
     // Use the existing status endpoint
+    await fetchCsrfCookie();
     const response = await fetch(`${DOCTOR_API_BASE}/appointments/${selectedAppointment.id}/status`, {
       method: 'PUT',
-      headers: {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json',
-        'Authorization': `Bearer ${localStorage.getItem('token')}`
-      },
+      credentials: 'include',
+      headers: getMutatingHeaders(localStorage.getItem('token') || ''),
       body: JSON.stringify({
         date: rescheduleForm.new_date,
         time: rescheduleForm.new_time,
@@ -1149,13 +1129,11 @@ const archiveSelectedPatients = async (): Promise<void> => {
   try {
     setLoading(true);
     
+    await fetchCsrfCookie();
     const response = await fetch(`${DOCTOR_API_BASE}/patients/archive`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json',
-        'Authorization': `Bearer ${localStorage.getItem('token')}`
-      },
+      credentials: 'include',
+      headers: getMutatingHeaders(localStorage.getItem('token') || ''),
       body: JSON.stringify({ patient_ids: Array.from(selectedPatients) })
     });
     
@@ -1384,13 +1362,11 @@ const updateAvailability = async (): Promise<void> => {
     }
 
     setLoading(true);
+    await fetchCsrfCookie();
     const response = await fetch(`${DOCTOR_API_BASE}/availability`, {
       method: 'PUT',
-      headers: {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json',
-        'Authorization': `Bearer ${localStorage.getItem('token')}`
-      },
+      credentials: 'include',
+      headers: getMutatingHeaders(localStorage.getItem('token') || ''),
       body: JSON.stringify({
         available_days: availabilityForm.available_days,
         working_hours_start: availabilityForm.working_hours_start,
@@ -1464,13 +1440,11 @@ const getAvailableTimeSlots = (selectedDate: string): string[] => {
         throw new Error('Invalid action');
     }
     
+    await fetchCsrfCookie();
     const response = await fetch(`${DOCTOR_API_BASE}/appointments/${appointment.id}/status`, {
       method: 'PUT',
-      headers: {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json',
-        'Authorization': `Bearer ${localStorage.getItem('token')}`
-      },
+      credentials: 'include',
+      headers: getMutatingHeaders(localStorage.getItem('token') || ''),
       body: JSON.stringify(updateData)
     });
     
@@ -1531,13 +1505,11 @@ const completeAppointmentWithReport = async (): Promise<void> => {
     setLoading(true);
     
     // Use the existing status update endpoint
+    await fetchCsrfCookie();
     const response = await fetch(`${DOCTOR_API_BASE}/appointments/${selectedAppointment.id}/status`, {
       method: 'PUT',
-      headers: {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json',
-        'Authorization': `Bearer ${localStorage.getItem('token')}`
-      },
+      credentials: 'include',
+      headers: getMutatingHeaders(localStorage.getItem('token') || ''),
       body: JSON.stringify({
         status: 'completed',
         completion_report: completionReport
@@ -1877,13 +1849,11 @@ const createAppointment = async (): Promise<void> => {
       return;
     }
 
+    await fetchCsrfCookie();
     const response = await fetch(`${API_BASE_URL}/appointments`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json',
-        'Authorization': `Bearer ${localStorage.getItem('token')}`
-      },
+      credentials: 'include',
+      headers: getMutatingHeaders(localStorage.getItem('token') || ''),
       body: JSON.stringify({
         patient_id: appointmentForm.patient_id,
         date: appointmentForm.date,
@@ -1915,13 +1885,11 @@ const unarchiveSelectedPatients = async (): Promise<void> => {
   try {
     setLoading(true);
     
+    await fetchCsrfCookie();
     const response = await fetch(`${DOCTOR_API_BASE}/patients/unarchive`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json',
-        'Authorization': `Bearer ${localStorage.getItem('token')}`
-      },
+      credentials: 'include',
+      headers: getMutatingHeaders(localStorage.getItem('token') || ''),
       body: JSON.stringify({ patient_ids: Array.from(selectedPatients) })
     });
     
@@ -1991,13 +1959,11 @@ const unarchiveSelectedPatients = async (): Promise<void> => {
       }
     }
 
+    await fetchCsrfCookie();
     const response = await fetch(`${DOCTOR_API_BASE}/patients/${selectedPatient.id}/records`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json',
-        'Authorization': `Bearer ${localStorage.getItem('token')}`
-      },
+      credentials: 'include',
+      headers: getMutatingHeaders(localStorage.getItem('token') || ''),
       body: JSON.stringify(requestBody)
     });
     
@@ -2107,13 +2073,11 @@ const unarchiveSelectedPatients = async (): Promise<void> => {
 
     console.log('Sending prescription data:', formattedPrescription);
 
+    await fetchCsrfCookie();
     const response = await fetch(`${DOCTOR_API_BASE}/prescriptions`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json',
-        'Authorization': `Bearer ${localStorage.getItem('token')}`
-      },
+      credentials: 'include',
+      headers: getMutatingHeaders(localStorage.getItem('token') || ''),
       body: JSON.stringify(formattedPrescription)
     });
     
@@ -2220,11 +2184,8 @@ const recordConsultation = async (): Promise<void> => {
       `${DOCTOR_API_BASE}/patients/${selectedPatient.id}/consultation`,
       {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        },
+        credentials: 'include',
+        headers: getMutatingHeaders(localStorage.getItem('token') || ''),
         body: JSON.stringify(requestBody)
       }
     );

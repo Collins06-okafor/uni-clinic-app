@@ -10,6 +10,7 @@ const apiClient = axios.create({
     'Content-Type': 'application/json',
     'Accept': 'application/json',
   },
+  withCredentials: true,  // ← ADD THIS LINE - CRITICAL!
   timeout: 10000,
 });
 
@@ -38,6 +39,11 @@ apiClient.interceptors.response.use(
       window.location.href = '/';
     }
     
+    if (error.response?.status === 419) {
+      console.error('CSRF token mismatch');
+      // Optionally refresh CSRF token here
+    }
+    
     if (error.code === 'ECONNABORTED') {
       return Promise.reject(new Error('Request timeout. Please try again.'));
     }
@@ -50,8 +56,24 @@ apiClient.interceptors.response.use(
   }
 );
 
+// Helper function to get CSRF cookie
+export const getCsrfCookie = async (): Promise<void> => {
+  try {
+    await axios.get('/sanctum/csrf-cookie', {
+      withCredentials: true,
+      baseURL: '', // Use same domain
+    });
+  } catch (error) {
+    console.error('Failed to fetch CSRF cookie:', error);
+  }
+};
+
+// Rest of your code stays the same...
 export const login = async (credentials: LoginCredentials): Promise<AuthResponse> => {
   try {
+    // Get CSRF cookie before login
+    await getCsrfCookie();
+    
     console.log('Attempting login with:', credentials.email);
     const response: AxiosResponse<AuthResponse> = await apiClient.post('/auth/login', credentials);
     
@@ -84,38 +106,11 @@ export const login = async (credentials: LoginCredentials): Promise<AuthResponse
   }
 };
 
-/**
- * Google OAuth Login
- * Sends the Google credential token to backend for verification
- */
-export const googleLogin = async (googleToken: string): Promise<AuthResponse> => {
-  try {
-    console.log('Attempting Google login...');
-    const response: AxiosResponse<AuthResponse> = await apiClient.post('/auth/google/token', {
-      token: googleToken
-    });
-    
-    if (response.data.token) {
-      localStorage.setItem('token', response.data.token);
-    }
-    
-    return response.data;
-  } catch (error: any) {
-    console.error('Google login error:', error);
-    
-    if (error.response?.data) {
-      const errorData: ApiError = error.response.data;
-      if (errorData.message) {
-        throw new Error(errorData.message);
-      }
-    }
-    
-    throw new Error('Google authentication failed. Please try again.');
-  }
-};
-
 export const register = async (userData: RegisterData): Promise<AuthResponse> => {
   try {
+    // Get CSRF cookie before registration
+    await getCsrfCookie();
+    
     console.log('Attempting registration with:', userData);
     const response: AxiosResponse<AuthResponse> = await apiClient.post('/auth/register', userData);
     console.log('Registration successful:', response.data);
@@ -137,6 +132,34 @@ export const register = async (userData: RegisterData): Promise<AuthResponse> =>
     }
     
     throw new Error('Registration failed. Please try again.');
+  }
+};
+
+export const googleLogin = async (credential: string): Promise<AuthResponse> => {
+  try {
+    // Get CSRF cookie first
+    await getCsrfCookie();
+    
+    // Send to /auth/google/token with 'token' parameter
+    const response: AxiosResponse<AuthResponse> = await apiClient.post('/auth/google/token', {
+      token: credential,  // Backend expects 'token', not 'credential'
+    });
+    
+    // Store the auth token from response
+    if (response.data.token) {
+      localStorage.setItem('token', response.data.token);
+    }
+    
+    return response.data;
+  } catch (error: any) {
+    console.error('Google login error:', error);
+    
+    // Handle specific error messages from backend
+    if (error.response?.data?.message) {
+      throw new Error(error.response.data.message);
+    }
+    
+    throw new Error('Google login failed. Please try again.');
   }
 };
 

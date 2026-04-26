@@ -15,9 +15,53 @@ import PhoneInput from "react-phone-input-2";
 import "react-phone-input-2/lib/style.css";
 import { ClinicHoursCard, AppointmentTipsCard, EmergencyContactsCard } from '../../components/ClinicInfoSidebar';
 import './AcademicStaffDashboard.css'
+import { apiHelper } from '../../services/apiHelper';
 
 // API configuration
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://127.0.0.1:8000";
+
+// ── CSRF helpers ──────────────────────────────────────────────────────────────
+// Laravel Sanctum sets an XSRF-TOKEN cookie after GET /sanctum/csrf-cookie.
+// Every state-changing request (POST / PUT / DELETE) must echo it back as the
+// X-XSRF-TOKEN header, otherwise Laravel returns 419.
+const getXsrfToken = (): string => {
+  const match = document.cookie
+    .split('; ')
+    .find(row => row.startsWith('XSRF-TOKEN='));
+  return match ? decodeURIComponent(match.split('=')[1]) : '';
+};
+
+const fetchCsrfCookie = async (): Promise<void> => {
+  await fetch(`${API_BASE_URL}/sanctum/csrf-cookie`, {
+    method: 'GET',
+    credentials: 'include',
+    headers: { 'Accept': 'application/json' },
+  });
+  // Small delay so the browser has written the cookie before we read it
+  await new Promise(resolve => setTimeout(resolve, 80));
+};
+
+/**
+ * Returns the standard auth + CSRF headers needed for every mutating request.
+ * Reads the cookie that was already set by apiHelper or fetchCsrfCookie().
+ * Pass includeContentType=false for multipart/form-data uploads.
+ */
+const getMutatingHeaders = (
+  token: string,
+  includeContentType = true
+): Record<string, string> => {
+  const headers: Record<string, string> = {
+    'Authorization': `Bearer ${token}`,
+    'Accept': 'application/json',
+    'X-Requested-With': 'XMLHttpRequest',
+    'X-XSRF-TOKEN': getXsrfToken(),
+  };
+  if (includeContentType) {
+    headers['Content-Type'] = 'application/json';
+  }
+  return headers;
+};
+// ─────────────────────────────────────────────────────────────────────────────
 
 // Type definitions
 interface User extends BaseUser {
@@ -456,15 +500,15 @@ useEffect(() => {
       throw new Error('Authentication token not found. Please log in again.');
     }
 
+    // Ensure the XSRF-TOKEN cookie is fresh before the mutating request
+    await fetchCsrfCookie();
+
     console.log('📤 Sending profile update:', payload);
-    
+
     const response = await fetch(`${API_BASE_URL}/api/academic-staff/profile`, {
       method: 'PUT',
-      headers: {  
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`,
-        'Accept': 'application/json'
-      },
+      credentials: 'include',
+      headers: getMutatingHeaders(token),
       body: JSON.stringify(payload)
     });
     
@@ -526,45 +570,48 @@ useEffect(() => {
   const handleImageUpload = async (file: File | null): Promise<void> => {
   if (!file) return;
   
-  // Basic client-side validation
-  const maxSize = 5 * 1024 * 1024; // 5MB
-  const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif'];
+  // Validation
+  const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp'];
+  const maxSize = 5 * 1024 * 1024;
   
   if (file.size > maxSize) {
-  showMessage('error', t('academic.file_too_large'));
-  return;
-}
+    showMessage('error', t('academic.file_too_large'));
+    return;
+  }
+  if (!allowedTypes.includes(file.type)) {
+    showMessage('error', t('academic.invalid_file_type'));
+    return;
+  }
 
-if (!allowedTypes.includes(file.type)) {
-  showMessage('error', t('academic.invalid_file_type'));
-  return;
-}
-  
-  setProfileSaving(true);
-  const formData = new FormData();
-  formData.append('avatar', file);
-  
+  const previousImageUrl = userProfile.avatar_url;
+
   try {
-    const response = await fetch(`${API_BASE_URL}/api/academic-staff/profile/avatar`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${localStorage.getItem('token')}`
-      },
-      body: formData
-    });
+    // Show preview
+    const reader = new FileReader();
+    reader.onload = (e: ProgressEvent<FileReader>) => {
+      setUserProfile(prev => ({...prev, avatar_url: e.target?.result as string}));
+    };
+    reader.readAsDataURL(file);
 
-    if (response.ok) {
-      const data = await response.json();
-      setUserProfile(prev => ({ ...prev, avatar_url: data.avatar_url }));
-      setAvatarError(false); // Reset error state
-      showMessage('success', 'Profile photo updated successfully!');
-    } else {
-      const errorData = await response.json().catch(() => ({}));
-      showMessage('error', errorData.message || t('academic.photo_upload_failed'));
-    }
+    setProfileSaving(true);
+    
+    const token = localStorage.getItem('token');
+    if (!token) throw new Error('Authentication token not found.');
+
+    // ✅ Use helper
+    const data = await apiHelper.uploadAvatar(
+      `${API_BASE_URL}/api/academic-staff/profile/avatar`,
+      file,
+      token
+    );
+    
+    setUserProfile(prev => ({ ...prev, avatar_url: data.avatar_url }));
+    setAvatarError(false);
+    showMessage('success', 'Profile photo updated successfully!');
+    
   } catch (error) {
-    console.error('Error uploading photo:', error);
-    showMessage('error', 'Failed to upload photo. Please check your connection and try again.');
+    setUserProfile(prev => ({ ...prev, avatar_url: previousImageUrl }));
+    showMessage('error', error.message);
   } finally {
     setProfileSaving(false);
     if (fileInputRef.current) fileInputRef.current.value = '';
@@ -574,26 +621,23 @@ if (!allowedTypes.includes(file.type)) {
   const handlePhotoRemove = async (): Promise<void> => {
   if (!window.confirm(t('academic.confirm_remove_photo'))) return;
   
-  setProfileSaving(true);
   try {
-    const response = await fetch(`${API_BASE_URL}/api/academic-staff/profile/avatar`, {
-      method: 'DELETE',
-      headers: {
-        'Authorization': `Bearer ${localStorage.getItem('token')}`
-      }
-    });
+    setProfileSaving(true);
+    const token = localStorage.getItem('token');
+    if (!token) throw new Error('Authentication token not found.');
 
-    if (response.ok) {
-      setUserProfile(prev => ({ ...prev, avatar_url: null }));
-      setAvatarError(false); // Reset error state
-      showMessage('success', 'Profile photo removed successfully!');
-    } else {
-      const errorData = await response.json().catch(() => ({}));
-      showMessage('error', errorData.message || t('academic.photo_remove_failed'));
-    }
+    // ✅ Use helper
+    await apiHelper.deleteAvatar(
+      `${API_BASE_URL}/api/academic-staff/profile/avatar`,
+      token
+    );
+    
+    setUserProfile(prev => ({ ...prev, avatar_url: null }));
+    setAvatarError(false);
+    showMessage('success', 'Profile photo removed successfully!');
+    
   } catch (error) {
-    console.error('Error removing photo:', error);
-    showMessage('error', 'Failed to remove photo. Please try again.');
+    showMessage('error', error.message);
   } finally {
     setProfileSaving(false);
   }
@@ -851,10 +895,8 @@ if (safeDoctorId && safeDoctorId !== '') {
 
       const response = await fetch(`${API_BASE_URL}/api/academic-staff/schedule-appointment`, {
         method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`,
-          'Content-Type': 'application/json'
-        },
+        credentials: 'include',
+        headers: getMutatingHeaders(localStorage.getItem('token') || ''),
         body: JSON.stringify(payload)
       });
 
@@ -909,10 +951,8 @@ if (safeDoctorId && safeDoctorId !== '') {
     try {
       const response = await fetch(`${API_BASE_URL}/api/academic-staff/reschedule-appointment/${rescheduleForm.appointmentId}`, {
         method: 'PUT',
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`,
-          'Content-Type': 'application/json'
-        },
+        credentials: 'include',
+        headers: getMutatingHeaders(localStorage.getItem('token') || ''),
         body: JSON.stringify({
           date: rescheduleForm.date,
           time: rescheduleForm.time
@@ -994,10 +1034,8 @@ const formatTime = (timeString: string): string => {
     try {
       const response = await fetch(`${API_BASE_URL}/api/academic-staff/cancel-appointment/${appointmentId}`, {
         method: 'PUT',
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`,
-          'Content-Type': 'application/json'
-        }
+        credentials: 'include',
+        headers: getMutatingHeaders(localStorage.getItem('token') || ''),
       });
 
       const data = await response.json();
@@ -2604,559 +2642,440 @@ const Sidebar = () => {
             </div>
           </div>
         )}
-    
 
-        {/* Profile Tab */}
         {activeTab === 'profile' && (
-        <div className="row g-3 g-md-4">
-          {/* Personal Information */}
-          <div className="col-12 col-lg-8">
-            <div className="card shadow-sm border-0" style={{ borderRadius: '1rem' }}>
-              <div className="card-header border-0" style={{ background: universityTheme.gradient, borderRadius: '1rem 1rem 0 0' }}>
-                <h5 className="card-title mb-0 text-white d-flex align-items-center">
-                  <UserCog size={20} className="me-2" />
-                  {t('academic.personal_information')}
-                </h5>
-              </div>
-              <div className="card-body p-3 p-md-4 card-body-overflow-visible">
-                {profileLoading ? (
-                  <div className="text-center py-4">
-                    <div className="spinner-border text-primary mb-3" role="status">
-                      <span className="visually-hidden">{t('common.loading')}</span>
-                    </div>
-                    <p className="text-muted">{t('academic.loading_profile')}</p>
-                  </div>
-                ) : (
-                  <form onSubmit={saveProfile}>
-                    <div className="row g-3 row-overflow-visible">
-                      <div className="col-12 col-md-6">
-                        <label className="form-label fw-semibold">{t('academic.full_name')}</label>
-                        <input
-                          type="text"
-                          className="form-control"
-                          value={userProfile.name}
-                          onChange={(e) => setUserProfile({ ...userProfile, name: e.target.value })}
-                          required
-                          placeholder="Enter your full name"
-                        />
-                      </div>
-                      <div className="col-12 col-md-6">
-                        <label className="form-label fw-semibold">{t('academic.email_address')}</label>
-                        <input
-                          type="email"
-                          className="form-control"
-                          value={userProfile.email}
-                          disabled
-                          style={{ backgroundColor: '#f8f9fa' }}
-                        />
-                        <div className="form-text">{t('academic.email_cannot_change')}</div>
-                      </div>
-                      <div className="col-12 col-md-6">
-                        <label className="form-label fw-semibold">{t('academic.staff_number')}</label>
-                        <input
-                          type="text"
-                          className="form-control"
-                          value={userProfile.staff_no}
-                          disabled
-                          style={{ backgroundColor: '#f8f9fa' }}
-                        />
-                        <div className="form-text">{t('academic.staff_no_cannot_change')}</div>
-                      </div>
-                      
-                      {/* Phone Number with responsive PhoneInput */}
-                      <div className="col-12 col-md-6">
-                        <label className="form-label fw-semibold">{t('academic.phone_number')}</label>
-                        <PhoneInput
-                          country={'tr'}
-                          value={userProfile.phone}
-                          onChange={(phone) => setUserProfile({ ...userProfile, phone })}
-                          placeholder="Enter your phone number"
-                          inputProps={{
-                            className: 'form-control',
-                            required: false
-                          }}
-                          containerClass="phone-input-container w-100"
-                          inputClass="phone-input-field"
-                          dropdownClass="phone-dropdown"
-                          searchClass="phone-search"
-                        />
-                      </div>
-                      
-                      <div className="col-12 col-md-6">
-                        <label className="form-label fw-semibold">{t('academic.department')}</label>
-                        <Select
-                          value={departmentOptions.find(option => option.value === userProfile.department)}
-                          onChange={(option) => setUserProfile({ ...userProfile, department: option?.value || '' })}
-                          options={departmentOptions}
-                          placeholder="Select Department"
-                          styles={{
-                            control: (base) => ({
-                              ...base,
-                              borderRadius: '0.5rem',
-                              border: '1px solid #dee2e6',
-                              minHeight: '38px'
-                            }),
-                            menu: (base) => ({
-                              ...base,
-                              maxHeight: window.innerWidth < 768 ? '200px' : '300px',
-                              zIndex: 9999
-                            }),
-                            menuList: (base) => ({
-                              ...base,
-                              maxHeight: window.innerWidth < 768 ? '200px' : '300px',
-                            })
-                          }}
-                        />
-                      </div>
-                      {/* Add after the existing fields like phone, department, bio */}
-
-                      {/* Date of Birth */}
-<div className="col-12 col-md-6 col-overflow-visible">
-  <label className="form-label fw-semibold">{t('academic.date_of_birth')}</label>
-  <div className="date-input-wrapper">
-    <input
-      type="date"
-      className="form-control"
-      value={userProfile.date_of_birth}
-      onChange={(e) => setUserProfile({ ...userProfile, date_of_birth: e.target.value })}
-      max={new Date(new Date().setFullYear(new Date().getFullYear() - 18)).toISOString().split('T')[0]}
-    />
-  </div>
-  <div className="form-text">{t('academic.must_be_18')}</div>
-</div>
-
-                      {/* Gender */}
-                      <div className="col-12 col-md-6">
-                        <label className="form-label fw-semibold">{t('academic.gender')}</label>
-                        <Select
-                          value={genderOptions.find(option => option.value === userProfile.gender)}
-                          onChange={(option) => setUserProfile({ ...userProfile, gender: option?.value || '' })}
-                          options={[
-                            { value: '', label: t('academic.select_gender') },
-                            { value: 'male', label: t('academic.male') },
-                            { value: 'female', label: t('academic.female') }
-                          ]}
-                          placeholder={t('academic.select_gender')}
-                          styles={{
-                            control: (base) => ({
-                              ...base,
-                              borderRadius: '0.5rem',
-                              border: '1px solid #dee2e6',
-                              minHeight: '38px'
-                            }),
-                            menu: (base) => ({
-                              ...base,
-                              zIndex: 9999
-                            })
-                          }}
-                        />
-                      </div>
-
-                      {/* Blood Type */}
-                      <div className="col-12 col-md-6">
-                        <label className="form-label fw-semibold">{t('academic.blood_type')}</label>
-                        <Select
-                          value={bloodTypeOptions.find(option => option.value === userProfile.blood_type)}
-                          onChange={(option) => setUserProfile({ ...userProfile, blood_type: option?.value || '' })}
-                          options={bloodTypeOptions}
-                          placeholder={t('academic.select_blood_type')}
-                          styles={{
-                            control: (base) => ({
-                              ...base,
-                              borderRadius: '0.5rem',
-                              border: '1px solid #dee2e6',
-                              minHeight: '38px'
-                            }),
-                            menu: (base) => ({
-                              ...base,
-                              maxHeight: window.innerWidth < 768 ? '200px' : '300px',
-                              zIndex: 9999
-                            }),
-                            menuList: (base) => ({
-                              ...base,
-                              maxHeight: window.innerWidth < 768 ? '200px' : '300px',
-                            })
-                          }}
-                        />
-                      </div>
-
-                      {/* Medical Information Section Header */}
-                      <div className="col-12 mt-3">
-                        <h6 className="fw-bold text-primary">
-                          <Stethoscope size={18} className="me-2" />
-                          {t('academic.medical_information')}
-                        </h6>
-                        <hr />
-                      </div>
-
-                      {/* Allergies */}
-                      <div className="col-12">
-                        <label className="form-label fw-semibold">{t('academic.allergies')}</label>
-                        <div className="mb-2">
-                          <div className="form-check">
-                            <input 
-                              className="form-check-input" 
-                              type="checkbox" 
-                              id="hasKnownAllergies"
-                              checked={userProfile.has_known_allergies}
-                              onChange={() => setUserProfile({
-                                ...userProfile,
-                                has_known_allergies: !userProfile.has_known_allergies,
-                                allergies_uncertain: false,
-                                allergies: !userProfile.has_known_allergies ? userProfile.allergies : ''
-                              })}
-                            />
-                            <label className="form-check-label" htmlFor="hasKnownAllergies">
-                              {t('academic.has_known_allergies')}
-                            </label>
-                          </div>
-                          <div className="form-check">
-                            <input 
-                              className="form-check-input" 
-                              type="checkbox" 
-                              id="allergiesUncertain"
-                              checked={userProfile.allergies_uncertain}
-                              onChange={() => setUserProfile({
-                                ...userProfile,
-                                allergies_uncertain: !userProfile.allergies_uncertain,
-                                has_known_allergies: false,
-                                allergies: ''
-                              })}
-                            />
-                            <label className="form-check-label" htmlFor="allergiesUncertain">
-                              {t('academic.not_sure_allergies')}
-                            </label>
-                          </div>
-                        </div>
-                        {userProfile.has_known_allergies && (
-                          <textarea
-                            className="form-control"
-                            rows={2}
-                            value={userProfile.allergies}
-                            onChange={(e) => setUserProfile({ ...userProfile, allergies: e.target.value })}
-                            placeholder={t('academic.list_allergies')}
-                          />
-                        )}
-                      </div>
-
-                      {/* Addictions */}
-                      <div className="col-12 col-md-6">
-                        <label className="form-label fw-semibold">{t('academic.addictions')}</label>
-                        <input
-                          type="text"
-                          className="form-control"
-                          value={userProfile.addictions}
-                          onChange={(e) => setUserProfile({ ...userProfile, addictions: e.target.value })}
-                          placeholder={t('academic.addictions_placeholder')}
-                        />
-                      </div>
-
-                      {/* Medical History */}
-                      <div className="col-12">
-                        <label className="form-label fw-semibold">{t('academic.medical_history')}</label>
-                        <textarea
-                          className="form-control"
-                          rows={3}
-                          value={userProfile.medical_history}
-                          onChange={(e) => setUserProfile({ ...userProfile, medical_history: e.target.value })}
-                          placeholder={t('academic.medical_history_placeholder')}
-                          maxLength={1000}
-                        />
-                        <div className="form-text">
-                          {userProfile.medical_history ? userProfile.medical_history.length : 0}/1000 {t('academic.characters')}
-                        </div>
-                      </div>
-
-                      {/* Emergency Contact Section Header */}
-                      <div className="col-12 mt-3">
-                        <h6 className="fw-bold text-danger">
-                          <Phone size={18} className="me-2" />
-                          {t('academic.emergency_contact_info')}
-                        </h6>
-                        <hr />
-                      </div>
-
-                      {/* Emergency Contact Name */}
-                      <div className="col-12 col-md-6">
-                        <label className="form-label fw-semibold">{t('academic.emergency_contact_name')}</label>
-                        <input
-                          type="text"
-                          className="form-control"
-                          value={userProfile.emergency_contact_name}
-                          onChange={(e) => setUserProfile({ ...userProfile, emergency_contact_name: e.target.value })}
-                          placeholder={t('common.full_name')}
-                        />
-                      </div>
-
-                      {/* Emergency Contact Phone */}
-                      <div className="col-12 col-md-6">
-                        <label className="form-label fw-semibold">{t('academic.emergency_contact_phone')}</label>
-                        <PhoneInput
-                          country={'tr'}
-                          value={userProfile.emergency_contact_phone}
-                          onChange={(phone) => setUserProfile({ ...userProfile, emergency_contact_phone: phone })}
-                          placeholder={t('academic.enter_phone')}
-                          inputProps={{
-                            className: 'form-control',
-                            required: false
-                          }}
-                          containerClass="phone-input-container w-100"
-                        />
-                      </div>
-
-                      {/* Emergency Contact Relationship */}
-                      <div className="col-12 col-md-6">
-                        <label className="form-label fw-semibold">{t('academic.relationship')}</label>
-                        <Select
-                          value={relationshipOptions.find(option => option.value === userProfile.emergency_contact_relationship)}
-                          onChange={(option) => setUserProfile({ ...userProfile, emergency_contact_relationship: option?.value || '' })}
-                          options={[
-                            { value: '', label: t('academic.select_relationship') },
-                            { value: 'spouse', label: t('academic.spouse') },
-                            { value: 'parent', label: t('academic.parent') },
-                            { value: 'sibling', label: t('academic.sibling') },
-                            { value: 'child', label: t('academic.child') },
-                            { value: 'friend', label: t('academic.friend') },
-                            { value: 'colleague', label: t('academic.colleague') },
-                            { value: 'other', label: t('academic.other') }
-                          ]}
-                          placeholder={t('academic.select_relationship')}
-                          styles={{
-                            control: (base) => ({
-                              ...base,
-                              borderRadius: '0.5rem',
-                              border: '1px solid #dee2e6',
-                              minHeight: '38px'
-                            }),
-                            menu: (base) => ({
-                              ...base,
-                              zIndex: 9999
-                            })
-                          }}
-                        />
-                      </div>
-
-                      {/* Emergency Contact Email */}
-                      <div className="col-12 col-md-6">
-                        <label className="form-label fw-semibold">{t('academic.emergency_contact_email')}</label>
-                        <input
-                          type="email"
-                          className="form-control"
-                          value={userProfile.emergency_contact_email}
-                          onChange={(e) => setUserProfile({ ...userProfile, emergency_contact_email: e.target.value })}
-                          placeholder={t('academic.emergency_contact_email')}
-                        />
-                      </div>
-                    </div>
-
-                    <div className="mt-4 d-flex gap-2">
-  <button 
-    type="submit" 
-    className="btn btn-primary btn-lg"
-    disabled={profileSaving}
-    style={{ 
-      background: universityTheme.secondary, 
-      border: 'none',
-      minWidth: '150px',
-      borderRadius: '0.75rem'
-    }}
-    onClick={saveProfile}
-  >
-    {profileSaving ? (
-      <>
-        <span className="spinner-border spinner-border-sm me-2" role="status"></span>
-        {t('academic.saving')}
-      </>
-    ) : (
-      <>
-        <Save size={18} className="me-2" />
-        {t('academic.save_profile')}
-      </>
-    )}
-  </button>
-  
-  
-</div>
-                  </form>
-                )}
-              </div>
-            </div>
-          </div>
-
-              {/* Profile Picture */}
-              <div className="col-lg-4">
-                <div className="card shadow-sm border-0" style={{ borderRadius: '1rem' }}>
-                  <div className="card-header border-0" style={{ background: '#fee2e2', borderRadius: '1rem 1rem 0 0' }}>
-                    <h5 className="card-title mb-0 text-danger d-flex align-items-center">
-                      <Camera size={20} className="me-2" />
-                      {t('academic.profile_picture')}
-                    </h5>
-                  </div>
-                  <div className="card-body p-4 text-center">
-                    <div className="mb-3">
-                      <AvatarDisplay 
-                        src={userProfile.avatar_url} 
-                        size={120}
-                        className="mx-auto"
-                        fallbackColor={universityTheme.primary}
-                      />
-                    </div>
-                    
-                    <input
-                      ref={fileInputRef}
-                      type="file"
-                      accept="image/jpeg,image/jpg,image/png,image/gif,image/webp"
-                      style={{ display: 'none' }}
-                      onChange={(e) => handleImageUpload(e.target.files?.[0] || null)}
+          <div className="row g-3 g-md-4">
+            
+            {/* LEFT COLUMN: Profile Picture */}
+            <div className="col-12 col-lg-4">
+              <div className="card shadow-sm border-0" style={{ borderRadius: '1rem' }}>
+                <div className="card-header border-0" style={{ background: '#fee2e2', borderRadius: '1rem 1rem 0 0' }}>
+                  <h5 className="card-title mb-0 text-danger d-flex align-items-center">
+                    <Camera size={20} className="me-2" />
+                    {t('academic.profile_picture')}
+                  </h5>
+                </div>
+                <div className="card-body p-4 text-center">
+                  <div className="mb-3">
+                    <AvatarDisplay 
+                      src={userProfile.avatar_url} 
+                      size={120}
+                      className="mx-auto"
+                      fallbackColor={universityTheme.primary}
                     />
-                    
+                  </div>
+                  
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/jpeg,image/jpg,image/png,image/gif,image/webp"
+                    style={{ display: 'none' }}
+                    onChange={(e) => handleImageUpload(e.target.files?.[0] || null)}
+                  />
+                  
+                  <button 
+                    className="btn btn-outline-primary w-100 mb-2" 
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={profileSaving}
+                  >
+                    <Camera size={16} className="me-1" /> 
+                    {t('academic.upload_new_photo')}
+                  </button>
+                  
+                  {userProfile.avatar_url && (
                     <button 
-                      className="btn btn-outline-primary w-100 mb-2" 
-                      onClick={() => fileInputRef.current?.click()}
+                      className="btn btn-outline-danger w-100 mb-3" 
+                      onClick={handlePhotoRemove}
                       disabled={profileSaving}
                     >
-                      <Camera size={16} className="me-1" /> 
-                      {t('academic.upload_new_photo')}
+                      <X size={16} className="me-1" /> 
+                      {t('academic.remove_photo')}
                     </button>
-                    
-                    {userProfile.avatar_url && (
-                      <button 
-                        className="btn btn-outline-danger w-100 mb-3" 
-                        onClick={handlePhotoRemove}
-                        disabled={profileSaving}
+                  )}
+                  
+                  <div className="accordion" id="academicPhotoGuidelines">
+                    <div className="accordion-item" style={{ border: 'none', background: 'transparent' }}>
+                      <h2 className="accordion-header" id="academicPhotoGuidelinesHeading">
+                        <button 
+                          className="accordion-button collapsed"
+                          type="button" 
+                          data-bs-toggle="collapse" 
+                          data-bs-target="#academicPhotoGuidelinesCollapse" 
+                          aria-expanded="false" 
+                          aria-controls="academicPhotoGuidelinesCollapse"
+                          style={{
+                            background: 'transparent',
+                            border: '1px solid #dee2e6',
+                            borderRadius: '8px',
+                            padding: '8px 16px',
+                            fontSize: '0.875rem',
+                            color: '#6c757d',
+                            boxShadow: 'none'
+                          }}
+                        >
+                          <Camera size={16} className="me-2" />
+                          {t('academic.photo_upload_guidelines')}
+                        </button>
+                      </h2>
+                      <div 
+                        id="academicPhotoGuidelinesCollapse" 
+                        className="accordion-collapse collapse" 
+                        aria-labelledby="academicPhotoGuidelinesHeading" 
+                        data-bs-parent="#academicPhotoGuidelines"
                       >
-                        <X size={16} className="me-1" /> 
-                        {t('academic.remove_photo')}
-                      </button>
-                    )}
-                    
-                    {/* Photo Guidelines Dropdown */}
-                    <div className="accordion" id="academicPhotoGuidelines">
-                      <div className="accordion-item" style={{ border: 'none', background: 'transparent' }}>
-                        <h2 className="accordion-header" id="academicPhotoGuidelinesHeading">
-                          <button 
-                            className="accordion-button collapsed"
-                            type="button" 
-                            data-bs-toggle="collapse" 
-                            data-bs-target="#academicPhotoGuidelinesCollapse" 
-                            aria-expanded="false" 
-                            aria-controls="academicPhotoGuidelinesCollapse"
+                        <div className="accordion-body" style={{ padding: '16px 0' }}>
+                          <div 
+                            className="photo-requirements text-start"
                             style={{
-                              background: 'transparent',
-                              border: '1px solid #dee2e6',
+                              background: '#f8f9fa',
+                              border: '1px solid #e9ecef',
                               borderRadius: '8px',
-                              padding: '8px 16px',
-                              fontSize: '0.875rem',
-                              color: '#6c757d',
-                              boxShadow: 'none'
+                              padding: '16px'
                             }}
                           >
-                            <Camera size={16} className="me-2" />
-                            {t('academic.photo_upload_guidelines')}
-                          </button>
-                        </h2>
-                        <div 
-                          id="academicPhotoGuidelinesCollapse" 
-                          className="accordion-collapse collapse" 
-                          aria-labelledby="academicPhotoGuidelinesHeading" 
-                          data-bs-parent="#academicPhotoGuidelines"
-                        >
-                          <div className="accordion-body" style={{ padding: '16px 0' }}>
-                            <div 
-                              className="photo-requirements text-start"
-                              style={{
-                                background: '#f8f9fa',
-                                border: '1px solid #e9ecef',
-                                borderRadius: '8px',
-                                padding: '16px'
-                              }}
-                            >
-                              <div className="row g-2">
-                                <div className="col-12">
+                            <div className="row g-2">
+                              {[
+                                { key: 'file_types', descKey: 'file_types_desc' },
+                                { key: 'file_size', descKey: 'file_size_desc' },
+                                { key: 'dimensions', descKey: 'dimensions_desc' },
+                                { key: 'quality', descKey: 'quality_desc' },
+                                { key: 'content', descKey: 'content_desc' },
+                                { key: 'academic_standards', descKey: 'academic_standards_desc' },
+                              ].map(({ key, descKey }) => (
+                                <div className="col-12" key={key}>
                                   <div className="d-flex align-items-start">
                                     <CheckCircle size={16} className="text-success me-2 mt-1 flex-shrink-0" />
                                     <div>
-                                      <strong className="text-dark">{t('academic.file_types')}</strong>
+                                      <strong className="text-dark">{t(`academic.${key}`)}</strong>
                                       <br />
-                                      <small className="text-muted">{t('academic.file_types_desc')}</small>
+                                      <small className="text-muted">{t(`academic.${descKey}`)}</small>
                                     </div>
                                   </div>
                                 </div>
-                                
-                                <div className="col-12">
-                                  <div className="d-flex align-items-start">
-                                    <CheckCircle size={16} className="text-success me-2 mt-1 flex-shrink-0" />
-                                    <div>
-                                      <strong className="text-dark">{t('academic.file_size')}</strong>
-                                      <br />
-                                      <small className="text-muted">{t('academic.file_size_desc')}</small>
-                                    </div>
-                                  </div>
-                                </div>
-                                
-                                <div className="col-12">
-                                  <div className="d-flex align-items-start">
-                                    <CheckCircle size={16} className="text-success me-2 mt-1 flex-shrink-0" />
-                                    <div>
-                                      <strong className="text-dark">{t('academic.dimensions')}</strong>
-                                      <br />
-                                      <small className="text-muted">{t('academic.dimensions_desc')}</small>
-                                    </div>
-                                  </div>
-                                </div>
-                                
-                                <div className="col-12">
-                                  <div className="d-flex align-items-start">
-                                    <CheckCircle size={16} className="text-success me-2 mt-1 flex-shrink-0" />
-                                    <div>
-                                      <strong className="text-dark">{t('academic.quality')}</strong>
-                                      <br />
-                                      <small className="text-muted">{t('academic.quality_desc')}</small>
-                                    </div>
-                                  </div>
-                                </div>
-                                
-                                <div className="col-12">
-                                  <div className="d-flex align-items-start">
-                                    <CheckCircle size={16} className="text-success me-2 mt-1 flex-shrink-0" />
-                                    <div>
-                                      <strong className="text-dark">{t('academic.content')}</strong>
-                                      <br />
-                                      <small className="text-muted">{t('academic.content_desc')}</small>
-                                    </div>
-                                  </div>
-                                </div>
-                                
-                                <div className="col-12">
-                                  <div className="d-flex align-items-start">
-                                    <CheckCircle size={16} className="text-success me-2 mt-1 flex-shrink-0" />
-                                    <div>
-                                      <strong className="text-dark">{t('academic.academic_standards')}</strong>
-                                      <br />
-                                      <small className="text-muted">{t('academic.academic_standards_desc')}</small>
-                                    </div>
-                                  </div>
-                                </div>
-                              </div>
+                              ))}
                             </div>
                           </div>
                         </div>
                       </div>
                     </div>
-                    
-                    {/* Keep the old text as fallback - remove this section */}
-                    {/* <div className="mt-3">
-                      <small className="text-muted">
-                        Supported formats: JPG, PNG, GIF<br/>
-                        Maximum size: 5MB
-                      </small>
-                    </div> */}
                   </div>
                 </div>
               </div>
+            </div>
 
+            {/* RIGHT COLUMN: Personal Information Form */}
+            <div className="col-12 col-lg-8">
+              <div className="card shadow-sm border-0" style={{ borderRadius: '1rem' }}>
+                <div className="card-header border-0" style={{ background: universityTheme.gradient, borderRadius: '1rem 1rem 0 0' }}>
+                  <h5 className="card-title mb-0 text-white d-flex align-items-center">
+                    <UserCog size={20} className="me-2" />
+                    {t('academic.personal_information')}
+                  </h5>
+                </div>
+                <div className="card-body p-3 p-md-4 card-body-overflow-visible">
+                  {profileLoading ? (
+                    <div className="text-center py-4">
+                      <div className="spinner-border text-primary mb-3" role="status">
+                        <span className="visually-hidden">{t('common.loading')}</span>
+                      </div>
+                      <p className="text-muted">{t('academic.loading_profile')}</p>
+                    </div>
+                  ) : (
+                    <form onSubmit={saveProfile}>
+                      <div className="row g-3 row-overflow-visible">
+                        <div className="col-12 col-md-6">
+                          <label className="form-label fw-semibold">{t('academic.full_name')}</label>
+                          <input
+                            type="text"
+                            className="form-control"
+                            value={userProfile.name}
+                            onChange={(e) => setUserProfile({ ...userProfile, name: e.target.value })}
+                            required
+                            placeholder="Enter your full name"
+                          />
+                        </div>
+                        <div className="col-12 col-md-6">
+                          <label className="form-label fw-semibold">{t('academic.email_address')}</label>
+                          <input
+                            type="email"
+                            className="form-control"
+                            value={userProfile.email}
+                            disabled
+                            style={{ backgroundColor: '#f8f9fa' }}
+                          />
+                          <div className="form-text">{t('academic.email_cannot_change')}</div>
+                        </div>
+                        <div className="col-12 col-md-6">
+                          <label className="form-label fw-semibold">{t('academic.staff_number')}</label>
+                          <input
+                            type="text"
+                            className="form-control"
+                            value={userProfile.staff_no}
+                            disabled
+                            style={{ backgroundColor: '#f8f9fa' }}
+                          />
+                          <div className="form-text">{t('academic.staff_no_cannot_change')}</div>
+                        </div>
+                        
+                        <div className="col-12 col-md-6">
+                          <label className="form-label fw-semibold">{t('academic.phone_number')}</label>
+                          <PhoneInput
+                            country={'tr'}
+                            value={userProfile.phone}
+                            onChange={(phone) => setUserProfile({ ...userProfile, phone })}
+                            placeholder="Enter your phone number"
+                            inputProps={{ className: 'form-control', required: false }}
+                            containerClass="phone-input-container w-100"
+                            inputClass="phone-input-field"
+                            dropdownClass="phone-dropdown"
+                            searchClass="phone-search"
+                          />
+                        </div>
+                        
+                        <div className="col-12 col-md-6">
+                          <label className="form-label fw-semibold">{t('academic.department')}</label>
+                          <Select
+                            value={departmentOptions.find(option => option.value === userProfile.department)}
+                            onChange={(option) => setUserProfile({ ...userProfile, department: option?.value || '' })}
+                            options={departmentOptions}
+                            placeholder="Select Department"
+                            styles={{
+                              control: (base) => ({ ...base, borderRadius: '0.5rem', border: '1px solid #dee2e6', minHeight: '38px' }),
+                              menu: (base) => ({ ...base, maxHeight: window.innerWidth < 768 ? '200px' : '300px', zIndex: 9999 }),
+                              menuList: (base) => ({ ...base, maxHeight: window.innerWidth < 768 ? '200px' : '300px' })
+                            }}
+                          />
+                        </div>
+
+                        <div className="col-12 col-md-6 col-overflow-visible">
+                          <label className="form-label fw-semibold">{t('academic.date_of_birth')}</label>
+                          <div className="date-input-wrapper">
+                            <input
+                              type="date"
+                              className="form-control"
+                              value={userProfile.date_of_birth}
+                              onChange={(e) => setUserProfile({ ...userProfile, date_of_birth: e.target.value })}
+                              max={new Date(new Date().setFullYear(new Date().getFullYear() - 18)).toISOString().split('T')[0]}
+                            />
+                          </div>
+                          <div className="form-text">{t('academic.must_be_18')}</div>
+                        </div>
+
+                        <div className="col-12 col-md-6">
+                          <label className="form-label fw-semibold">{t('academic.gender')}</label>
+                          <Select
+                            value={genderOptions.find(option => option.value === userProfile.gender)}
+                            onChange={(option) => setUserProfile({ ...userProfile, gender: option?.value || '' })}
+                            options={[
+                              { value: '', label: t('academic.select_gender') },
+                              { value: 'male', label: t('academic.male') },
+                              { value: 'female', label: t('academic.female') }
+                            ]}
+                            placeholder={t('academic.select_gender')}
+                            styles={{
+                              control: (base) => ({ ...base, borderRadius: '0.5rem', border: '1px solid #dee2e6', minHeight: '38px' }),
+                              menu: (base) => ({ ...base, zIndex: 9999 })
+                            }}
+                          />
+                        </div>
+
+                        <div className="col-12 col-md-6">
+                          <label className="form-label fw-semibold">{t('academic.blood_type')}</label>
+                          <Select
+                            value={bloodTypeOptions.find(option => option.value === userProfile.blood_type)}
+                            onChange={(option) => setUserProfile({ ...userProfile, blood_type: option?.value || '' })}
+                            options={bloodTypeOptions}
+                            placeholder={t('academic.select_blood_type')}
+                            styles={{
+                              control: (base) => ({ ...base, borderRadius: '0.5rem', border: '1px solid #dee2e6', minHeight: '38px' }),
+                              menu: (base) => ({ ...base, maxHeight: window.innerWidth < 768 ? '200px' : '300px', zIndex: 9999 }),
+                              menuList: (base) => ({ ...base, maxHeight: window.innerWidth < 768 ? '200px' : '300px' })
+                            }}
+                          />
+                        </div>
+
+                        <div className="col-12 mt-3">
+                          <h6 className="fw-bold text-primary">
+                            <Stethoscope size={18} className="me-2" />
+                            {t('academic.medical_information')}
+                          </h6>
+                          <hr />
+                        </div>
+
+                        <div className="col-12">
+                          <label className="form-label fw-semibold">{t('academic.allergies')}</label>
+                          <div className="mb-2">
+                            <div className="form-check">
+                              <input 
+                                className="form-check-input" 
+                                type="checkbox" 
+                                id="hasKnownAllergies"
+                                checked={userProfile.has_known_allergies}
+                                onChange={() => setUserProfile({
+                                  ...userProfile,
+                                  has_known_allergies: !userProfile.has_known_allergies,
+                                  allergies_uncertain: false,
+                                  allergies: !userProfile.has_known_allergies ? userProfile.allergies : ''
+                                })}
+                              />
+                              <label className="form-check-label" htmlFor="hasKnownAllergies">
+                                {t('academic.has_known_allergies')}
+                              </label>
+                            </div>
+                            <div className="form-check">
+                              <input 
+                                className="form-check-input" 
+                                type="checkbox" 
+                                id="allergiesUncertain"
+                                checked={userProfile.allergies_uncertain}
+                                onChange={() => setUserProfile({
+                                  ...userProfile,
+                                  allergies_uncertain: !userProfile.allergies_uncertain,
+                                  has_known_allergies: false,
+                                  allergies: ''
+                                })}
+                              />
+                              <label className="form-check-label" htmlFor="allergiesUncertain">
+                                {t('academic.not_sure_allergies')}
+                              </label>
+                            </div>
+                          </div>
+                          {userProfile.has_known_allergies && (
+                            <textarea
+                              className="form-control"
+                              rows={2}
+                              value={userProfile.allergies}
+                              onChange={(e) => setUserProfile({ ...userProfile, allergies: e.target.value })}
+                              placeholder={t('academic.list_allergies')}
+                            />
+                          )}
+                        </div>
+
+                        <div className="col-12 col-md-6">
+                          <label className="form-label fw-semibold">{t('academic.addictions')}</label>
+                          <input
+                            type="text"
+                            className="form-control"
+                            value={userProfile.addictions}
+                            onChange={(e) => setUserProfile({ ...userProfile, addictions: e.target.value })}
+                            placeholder={t('academic.addictions_placeholder')}
+                          />
+                        </div>
+
+                        <div className="col-12">
+                          <label className="form-label fw-semibold">{t('academic.medical_history')}</label>
+                          <textarea
+                            className="form-control"
+                            rows={3}
+                            value={userProfile.medical_history}
+                            onChange={(e) => setUserProfile({ ...userProfile, medical_history: e.target.value })}
+                            placeholder={t('academic.medical_history_placeholder')}
+                            maxLength={1000}
+                          />
+                          <div className="form-text">
+                            {userProfile.medical_history ? userProfile.medical_history.length : 0}/1000 {t('academic.characters')}
+                          </div>
+                        </div>
+
+                        <div className="col-12 mt-3">
+                          <h6 className="fw-bold text-danger">
+                            <Phone size={18} className="me-2" />
+                            {t('academic.emergency_contact_info')}
+                          </h6>
+                          <hr />
+                        </div>
+
+                        <div className="col-12 col-md-6">
+                          <label className="form-label fw-semibold">{t('academic.emergency_contact_name')}</label>
+                          <input
+                            type="text"
+                            className="form-control"
+                            value={userProfile.emergency_contact_name}
+                            onChange={(e) => setUserProfile({ ...userProfile, emergency_contact_name: e.target.value })}
+                            placeholder={t('common.full_name')}
+                          />
+                        </div>
+
+                        <div className="col-12 col-md-6">
+                          <label className="form-label fw-semibold">{t('academic.emergency_contact_phone')}</label>
+                          <PhoneInput
+                            country={'tr'}
+                            value={userProfile.emergency_contact_phone}
+                            onChange={(phone) => setUserProfile({ ...userProfile, emergency_contact_phone: phone })}
+                            placeholder={t('academic.enter_phone')}
+                            inputProps={{ className: 'form-control', required: false }}
+                            containerClass="phone-input-container w-100"
+                          />
+                        </div>
+
+                        <div className="col-12 col-md-6">
+                          <label className="form-label fw-semibold">{t('academic.relationship')}</label>
+                          <Select
+                            value={relationshipOptions.find(option => option.value === userProfile.emergency_contact_relationship)}
+                            onChange={(option) => setUserProfile({ ...userProfile, emergency_contact_relationship: option?.value || '' })}
+                            options={[
+                              { value: '', label: t('academic.select_relationship') },
+                              { value: 'spouse', label: t('academic.spouse') },
+                              { value: 'parent', label: t('academic.parent') },
+                              { value: 'sibling', label: t('academic.sibling') },
+                              { value: 'child', label: t('academic.child') },
+                              { value: 'friend', label: t('academic.friend') },
+                              { value: 'colleague', label: t('academic.colleague') },
+                              { value: 'other', label: t('academic.other') }
+                            ]}
+                            placeholder={t('academic.select_relationship')}
+                            styles={{
+                              control: (base) => ({ ...base, borderRadius: '0.5rem', border: '1px solid #dee2e6', minHeight: '38px' }),
+                              menu: (base) => ({ ...base, zIndex: 9999 })
+                            }}
+                          />
+                        </div>
+
+                        <div className="col-12 col-md-6">
+                          <label className="form-label fw-semibold">{t('academic.emergency_contact_email')}</label>
+                          <input
+                            type="email"
+                            className="form-control"
+                            value={userProfile.emergency_contact_email}
+                            onChange={(e) => setUserProfile({ ...userProfile, emergency_contact_email: e.target.value })}
+                            placeholder={t('academic.emergency_contact_email')}
+                          />
+                        </div>
+                      </div>
+
+                      <div className="mt-4 d-flex gap-2">
+                        <button 
+                          type="submit" 
+                          className="btn btn-primary btn-lg"
+                          disabled={profileSaving}
+                          style={{ 
+                            background: universityTheme.secondary, 
+                            border: 'none',
+                            minWidth: '150px',
+                            borderRadius: '0.75rem'
+                          }}
+                        >
+                          {profileSaving ? (
+                            <>
+                              <span className="spinner-border spinner-border-sm me-2" role="status"></span>
+                              {t('academic.saving')}
+                            </>
+                          ) : (
+                            <>
+                              <Save size={18} className="me-2" />
+                              {t('academic.save_profile')}
+                            </>
+                          )}
+                        </button>             
+                      </div>
+                    </form>
+                  )}
+                </div>
               </div>
-          )}
+            </div>
+
+          </div>
+        )}
 
         {/* Medical History Tab - UNCHANGED */}
         {activeTab === 'medical-history' && (

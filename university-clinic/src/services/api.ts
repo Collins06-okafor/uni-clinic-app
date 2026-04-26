@@ -19,14 +19,15 @@ class ApiService {
   private client;
 
   constructor() {
-    this.client = axios.create({
-      baseURL: `${API_BASE_URL}/api`,
-      timeout: 30000,
-      headers: {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json',
-      },
-    });
+  this.client = axios.create({
+    baseURL: `${API_BASE_URL}/api`,
+    timeout: 30000,
+    withCredentials: true,  // ← ADD THIS LINE
+    headers: {
+      'Content-Type': 'application/json',
+      'Accept': 'application/json',
+    },
+  });
 
     this.client.interceptors.request.use(
       (config) => {
@@ -70,40 +71,52 @@ class ApiService {
   }
 
   async post<T = any>(url: string, data: any = {}, config: AxiosRequestConfig = {}): Promise<T> {
-    try {
-      const response: AxiosResponse<T> = await this.client.post(url, data, config);
-      return response.data;
-    } catch (error) {
-      throw this.handleError(error as AxiosError);
-    }
+  try {
+    // ✅ FETCH CSRF COOKIE BEFORE EVERY POST REQUEST
+    await this.getCsrfCookie();
+    
+    const response: AxiosResponse<T> = await this.client.post(url, data, config);
+    return response.data;
+  } catch (error) {
+    throw this.handleError(error as AxiosError);
   }
+}
 
   async put<T = any>(url: string, data: any = {}, config: AxiosRequestConfig = {}): Promise<T> {
-    try {
-      const response: AxiosResponse<T> = await this.client.put(url, data, config);
-      return response.data;
-    } catch (error) {
-      throw this.handleError(error as AxiosError);
-    }
+  try {
+    // ✅ ADD THIS
+    await this.getCsrfCookie();
+    
+    const response: AxiosResponse<T> = await this.client.put(url, data, config);
+    return response.data;
+  } catch (error) {
+    throw this.handleError(error as AxiosError);
   }
+}
 
   async patch<T = any>(url: string, data: any = {}, config: AxiosRequestConfig = {}): Promise<T> {
-    try {
-      const response: AxiosResponse<T> = await this.client.patch(url, data, config);
-      return response.data;
-    } catch (error) {
-      throw this.handleError(error as AxiosError);
-    }
+  try {
+    // ✅ ADD THIS
+    await this.getCsrfCookie();
+    
+    const response: AxiosResponse<T> = await this.client.patch(url, data, config);
+    return response.data;
+  } catch (error) {
+    throw this.handleError(error as AxiosError);
   }
+}
 
   async delete<T = any>(url: string, config: AxiosRequestConfig = {}): Promise<T> {
-    try {
-      const response: AxiosResponse<T> = await this.client.delete(url, config);
-      return response.data;
-    } catch (error) {
-      throw this.handleError(error as AxiosError);
-    }
+  try {
+    // ✅ ADD THIS
+    await this.getCsrfCookie();
+    
+    const response: AxiosResponse<T> = await this.client.delete(url, config);
+    return response.data;
+  } catch (error) {
+    throw this.handleError(error as AxiosError);
   }
+}
 
   async upload<T = any>(
     url: string, 
@@ -130,6 +143,17 @@ class ApiService {
       return response.data;
     } catch (error) {
       throw this.handleError(error as AxiosError);
+    }
+  }
+
+  // ==================== CSRF PROTECTION ====================
+  async getCsrfCookie(): Promise<void> {
+    try {
+      await axios.get(`${API_BASE_URL}/sanctum/csrf-cookie`, {
+        withCredentials: true,
+      });
+    } catch (error) {
+      console.error('Failed to fetch CSRF cookie:', error);
     }
   }
 
@@ -344,10 +368,13 @@ class ApiService {
 
   // ==================== PROFILE ====================
   async uploadAvatar<T = any>(imageFile: File, onProgress?: (progress: UploadProgressEvent) => void): Promise<T> {
-    const formData = new FormData();
-    formData.append('avatar', imageFile);
-    return this.upload('/auth/profile/avatar', formData, onProgress);
-  }
+  // Get CSRF cookie first
+  await this.getCsrfCookie();
+  
+  const formData = new FormData();
+  formData.append('avatar', imageFile);
+  return this.upload('/auth/profile/avatar', formData, onProgress);
+}
 
   async removeAvatar<T = any>(): Promise<T> {
     return this.delete('/auth/profile/avatar');

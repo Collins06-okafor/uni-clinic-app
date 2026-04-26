@@ -15,6 +15,40 @@ import Select from 'react-select';
 
 // API configuration
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://127.0.0.1:8000";
+
+// ── CSRF helpers ──────────────────────────────────────────────────────────────
+const getXsrfToken = (): string => {
+  const match = document.cookie
+    .split('; ')
+    .find(row => row.startsWith('XSRF-TOKEN='));
+  return match ? decodeURIComponent(match.split('=')[1]) : '';
+};
+
+const fetchCsrfCookie = async (): Promise<void> => {
+  await fetch(`${API_BASE_URL}/sanctum/csrf-cookie`, {
+    method: 'GET',
+    credentials: 'include',
+    headers: { 'Accept': 'application/json' },
+  });
+  await new Promise(resolve => setTimeout(resolve, 80));
+};
+
+const getMutatingHeaders = (
+  token: string,
+  includeContentType = true
+): Record<string, string> => {
+  const headers: Record<string, string> = {
+    'Authorization': `Bearer ${token}`,
+    'Accept': 'application/json',
+    'X-Requested-With': 'XMLHttpRequest',
+    'X-XSRF-TOKEN': getXsrfToken(),
+  };
+  if (includeContentType) {
+    headers['Content-Type'] = 'application/json';
+  }
+  return headers;
+};
+// ─────────────────────────────────────────────────────────────────────────────
 const ADMIN_API_BASE = `${API_BASE_URL}/api/admin`;
 const PROFILE_API_BASE = `${API_BASE_URL}/api`;
 const PROFILE_ENDPOINT = '/profile';
@@ -184,32 +218,49 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
   // ---- Auth-aware fetch helper ----
   const fetchJson = async (url: string, opts: RequestInit = {}) => {
-    const token = localStorage.getItem('token');
-    const baseHeaders = {
-      Accept: 'application/json',
-      ...(opts.headers || {}),
-      ...(token ? { Authorization: `Bearer ${token}` } : {})
-    };
-
-    const res = await fetch(url, {
-      ...opts,
-      headers: baseHeaders,
-      credentials: 'omit',
-    });
-
-    const text = await res.text().catch(() => '');
-    let data = null;
-    try { data = text ? JSON.parse(text) : null; } catch {}
-
-    if (!res.ok) {
-      const detail = data?.message || data?.error || text || res.statusText;
-      const err = new Error(`${res.status} ${res.statusText} – ${detail}`);
-      (err as any).status = res.status;
-      (err as any).body = data || text;
-      throw err;
-    }
-    return data;
+  const token = localStorage.getItem('token');
+  
+  // Fetch CSRF cookie for mutating requests
+  const isMutation = opts.method && ['POST', 'PUT', 'DELETE', 'PATCH'].includes(opts.method.toUpperCase());
+  if (isMutation) {
+    await fetchCsrfCookie();
+  }
+  
+  const baseHeaders: Record<string, string> = {
+    Accept: 'application/json',
+    'X-Requested-With': 'XMLHttpRequest',
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    ...(isMutation ? { 'X-XSRF-TOKEN': getXsrfToken() } : {})
   };
+
+  if (!(opts.body instanceof FormData)) {
+    baseHeaders['Content-Type'] = 'application/json';
+  }
+
+  const res = await fetch(url, {
+    ...opts,
+    credentials: 'include',
+    headers: {
+      ...baseHeaders,
+      ...(opts.headers || {})
+    }
+  });
+
+  const text = await res.text().catch(() => '');
+  let data = null;
+  try { 
+    data = text ? JSON.parse(text) : null; 
+  } catch {}
+
+  if (!res.ok) {
+    const detail = data?.message || data?.error || text || res.statusText;
+    const err = new Error(`${res.status}  – ${detail}`);
+    (err as any).status = res.status;
+    (err as any).body = data || text;
+    throw err;
+  }
+  return data;
+};
 
   // ---- Dashboard data ----
   const [dashboardData, setDashboardData] = useState<DashboardData | null>(null);
@@ -404,9 +455,8 @@ const customSelectStyles = {
   const handlePhotoUpload = async (file: File | null) => {
   if (!file) return;
   
-  // Validation
   const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp'];
-  const maxSize = 5 * 1024 * 1024; // 5MB
+  const maxSize = 5 * 1024 * 1024;
   
   if (!allowedTypes.includes(file.type)) {
     addNotification('Invalid file type. Please upload a JPEG, PNG, GIF, or WebP image.', 'error');
@@ -417,19 +467,51 @@ const customSelectStyles = {
     addNotification('File size must be less than 5MB. Please choose a smaller image.', 'error');
     return;
   }
-  
-  const formData = new FormData();
-  formData.append('avatar', file);
-  
+
+  const previousAvatar = profileAvatar;
+
   try {
+    const reader = new FileReader();
+    reader.onload = (e: ProgressEvent<FileReader>) => {
+      setProfileAvatar(e.target?.result as string);
+    };
+    reader.readAsDataURL(file);
+
+    // ✅ Get CSRF and WAIT
+    const csrfResponse = await fetch(`${API_BASE_URL}/sanctum/csrf-cookie`, {
+      credentials: 'include',
+      headers: {
+        'Accept': 'application/json'
+      }
+    });
+    
+    if (!csrfResponse.ok) {
+      throw new Error('Failed to initialize CSRF protection');
+    }
+
+    await new Promise(resolve => setTimeout(resolve, 100));
+  
+    const formData = new FormData();
+    formData.append('avatar', file);
+    
     const data = await fetchJson(`${PROFILE_API_BASE}${PROFILE_ENDPOINT}/avatar`, {
       method: 'POST',
       body: formData,
     });
-    setProfileAvatar(data.avatar_url);
+    
+    let imageUrl = data.avatar_url || data.url || data.path || data.image_url;
+    
+    if (imageUrl && !imageUrl.startsWith('http://') && !imageUrl.startsWith('https://')) {
+      const cleanPath = imageUrl.startsWith('/') ? imageUrl.substring(1) : imageUrl;
+      imageUrl = `${API_BASE_URL}/${cleanPath}`;
+    }
+    
+    setProfileAvatar(imageUrl);
     addNotification('Profile photo updated successfully!', 'success');
+    
   } catch (error) {
     console.error('Photo upload error:', error);
+    setProfileAvatar(previousAvatar);
     addNotification((error as Error).message || 'Failed to upload photo', 'error');
   } finally {
     if (fileInputRef.current) fileInputRef.current.value = '';
@@ -437,15 +519,32 @@ const customSelectStyles = {
 };
 
   const handlePhotoRemove = async () => {
-    try {
-      await fetchJson(`${PROFILE_API_BASE}${PROFILE_ENDPOINT}/avatar`, { method: 'DELETE' });
-      setProfileAvatar(null);
-      addNotification('Profile photo removed successfully!', 'success');
-    } catch (error) {
-      console.error('Photo removal error:', error);
-      addNotification((error as Error).message || 'Failed to remove photo', 'error');
+  if (!window.confirm('Are you sure you want to remove your profile photo?')) return;
+
+  try {
+    const csrfResponse = await fetch(`${API_BASE_URL}/sanctum/csrf-cookie`, {
+      credentials: 'include',
+      headers: {
+        'Accept': 'application/json'
+      }
+    });
+    
+    if (!csrfResponse.ok) {
+      throw new Error('Failed to initialize CSRF protection');
     }
-  };
+
+    await new Promise(resolve => setTimeout(resolve, 100));
+
+    await fetchJson(`${PROFILE_API_BASE}${PROFILE_ENDPOINT}/avatar`, { 
+      method: 'DELETE' 
+    });
+    
+    setProfileAvatar(null);
+    addNotification('Profile photo removed successfully!', 'success');
+  } catch (error) {
+    addNotification((error as Error).message || 'Failed to remove photo', 'error');
+  }
+};
 
   // ---- Effects ----
   useEffect(() => {
@@ -1683,86 +1782,6 @@ const renderProfile = () => {
   return (
     <div className="container py-4">
       <div className="row g-4">
-        {/* Personal Information */}
-        <div className="col-lg-8">
-          <div className="rounded-4 shadow-sm bg-white">
-            <div className="px-4 py-3 rounded-top-4" style={{ background: '#ef4444', color: 'white' }}>
-              <strong><UserCog size={18} className="me-2" /> {t('admin.personal_information')}</strong>
-            </div>
-            <div className="p-4">
-              {profileLoading ? (
-                <div className="text-muted">{t('admin.loading_profile')}</div>
-              ) : (
-                <form onSubmit={saveProfile}>
-                  <div className="row g-3">
-                    <div className="col-md-6">
-                      <label className="form-label">{t('admin.full_name')}</label>
-                      <input
-                        type="text"
-                        className="form-control"
-                        value={profile.name}
-                        onChange={(e) => setProfile({ ...profile, name: e.target.value })}
-                        required
-                        placeholder={t('admin.enter_name')}
-                      />
-                    </div>
-                    <div className="col-md-6">
-                      <label className="form-label">{t('admin.email_address')}</label>
-                      <input
-                        type="email"
-                        className="form-control"
-                        value={profile.email}
-                        disabled
-                      />
-                    </div>
-                    <div className="col-md-6">
-                      <label className="form-label">{t('admin.phone_number')}</label>
-                      <PhoneInput
-                        country={'tr'}
-                        value={profile.phone}
-                        onChange={(phone) => setProfile({ ...profile, phone })}
-                        placeholder={t('admin.enter_phone')}
-                        inputProps={{
-                          className: 'form-control',
-                          required: false
-                        }}
-                        containerClass="mb-3"
-                      />
-                    </div>
-                    <div className="col-md-6">
-                      <label className="form-label">{t('admin.department')}</label>
-                      <Select
-                        options={departmentOptions}
-                        value={departmentOptions.find(opt => opt.value === profile.department)}
-                        onChange={(option) => setProfile({ ...profile, department: option?.value || '' })}
-                        styles={customSelectStyles}
-                        menuPortalTarget={document.body}
-                        placeholder={t('admin.select_department')}
-                      />
-                    </div>
-                    {/*<div className="col-12">
-                      <label className="form-label">{t('admin.bio')}</label>
-                      <textarea
-                        className="form-control"
-                        rows={4}
-                        value={profile.bio}
-                        onChange={(e) => setProfile({ ...profile, bio: e.target.value })}
-                        placeholder={t('admin.tell_about_yourself')}
-                      />
-                    </div>*/}
-                  </div>
-
-                  <div className="mt-3 text-end">
-                    <button type="submit" className="btn btn-success" disabled={profileSaving}>
-                      {profileSaving ? t('admin.saving') : t('admin.save_changes')}
-                    </button>
-                  </div>
-                </form>
-              )}
-            </div>
-          </div>
-        </div>
-
         {/* Profile Picture */}
         <div className="col-lg-4">
           <div className="rounded-4 shadow-sm bg-white">
@@ -1907,6 +1926,86 @@ const renderProfile = () => {
                   </div>
                 </div>
               </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Personal Information */}
+        <div className="col-lg-8">
+          <div className="rounded-4 shadow-sm bg-white">
+            <div className="px-4 py-3 rounded-top-4" style={{ background: '#ef4444', color: 'white' }}>
+              <strong><UserCog size={18} className="me-2" /> {t('admin.personal_information')}</strong>
+            </div>
+            <div className="p-4">
+              {profileLoading ? (
+                <div className="text-muted">{t('admin.loading_profile')}</div>
+              ) : (
+                <form onSubmit={saveProfile}>
+                  <div className="row g-3">
+                    <div className="col-md-6">
+                      <label className="form-label">{t('admin.full_name')}</label>
+                      <input
+                        type="text"
+                        className="form-control"
+                        value={profile.name}
+                        onChange={(e) => setProfile({ ...profile, name: e.target.value })}
+                        required
+                        placeholder={t('admin.enter_name')}
+                      />
+                    </div>
+                    <div className="col-md-6">
+                      <label className="form-label">{t('admin.email_address')}</label>
+                      <input
+                        type="email"
+                        className="form-control"
+                        value={profile.email}
+                        disabled
+                      />
+                    </div>
+                    <div className="col-md-6">
+                      <label className="form-label">{t('admin.phone_number')}</label>
+                      <PhoneInput
+                        country={'tr'}
+                        value={profile.phone}
+                        onChange={(phone) => setProfile({ ...profile, phone })}
+                        placeholder={t('admin.enter_phone')}
+                        inputProps={{
+                          className: 'form-control',
+                          required: false
+                        }}
+                        containerClass="mb-3"
+                      />
+                    </div>
+                    <div className="col-md-6">
+                      <label className="form-label">{t('admin.department')}</label>
+                      <Select
+                        options={departmentOptions}
+                        value={departmentOptions.find(opt => opt.value === profile.department)}
+                        onChange={(option) => setProfile({ ...profile, department: option?.value || '' })}
+                        styles={customSelectStyles}
+                        menuPortalTarget={document.body}
+                        placeholder={t('admin.select_department')}
+                      />
+                    </div>
+                    {/*<div className="col-12">
+                      <label className="form-label">{t('admin.bio')}</label>
+                      <textarea
+                        className="form-control"
+                        rows={4}
+                        value={profile.bio}
+                        onChange={(e) => setProfile({ ...profile, bio: e.target.value })}
+                        placeholder={t('admin.tell_about_yourself')}
+                      />
+                    </div>*/}
+                  </div>
+
+                  <div className="mt-3 text-end">
+                    <button type="submit" className="btn btn-success" disabled={profileSaving}>
+                      {profileSaving ? t('admin.saving') : t('admin.save_changes')}
+                    </button>
+                  </div>
+                </form>
+              )}
             </div>
           </div>
         </div>

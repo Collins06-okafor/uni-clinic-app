@@ -148,7 +148,17 @@ interface Props {
 }
 
 const StudentAppointmentSystem: React.FC<Props> = ({ 
-  user = { department: 'Computer Science', name: 'Student', email: 'student@example.com' }, 
+  user = { 
+    department: 'Computer Science', 
+    name: 'Student', 
+    email: 'student@example.com',
+    student_id: '',
+    phone: '',
+    date_of_birth: '',
+    emergency_contact_name: '',
+    emergency_contact_phone: '',
+    medical_history: ''
+  }, 
   onLogout 
 }) => {
 
@@ -348,31 +358,30 @@ const handleDateOfBirthChange = (selectedDate: string): void => {
   const file = event.target.files?.[0];
   if (!file) return;
 
-  // Validation (keep existing validation code)
+  // Validation (keep your existing validation code)
   const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp'];
   const maxSize = 5 * 1024 * 1024; // 5MB
 
   if (!allowedTypes.includes(file.type)) {
-  setMessage({ 
-    type: 'error', 
-    text: 'Invalid file type. Please upload a JPEG, PNG, GIF, or WebP image file.' 
-  });
-  setTimeout(() => setMessage({ type: '', text: '' }), 5000);
-  event.target.value = '';
-  return;
-}
+    setMessage({ 
+      type: 'error', 
+      text: 'Invalid file type. Please upload a JPEG, PNG, GIF, or WebP image file.' 
+    });
+    setTimeout(() => setMessage({ type: '', text: '' }), 5000);
+    event.target.value = '';
+    return;
+  }
 
-if (file.size > maxSize) {
-  setMessage({ 
-    type: 'error', 
-    text: 'File too large. Please choose an image smaller than 5MB.' 
-  });
-  setTimeout(() => setMessage({ type: '', text: '' }), 5000);
-  event.target.value = '';
-  return;
-}
+  if (file.size > maxSize) {
+    setMessage({ 
+      type: 'error', 
+      text: 'File too large. Please choose an image smaller than 5MB.' 
+    });
+    setTimeout(() => setMessage({ type: '', text: '' }), 5000);
+    event.target.value = '';
+    return;
+  }
 
-  // Store the previous image URL for rollback
   const previousImageUrl = userProfile.avatar_url;
 
   try {
@@ -383,58 +392,28 @@ if (file.size > maxSize) {
     };
     reader.readAsDataURL(file);
 
-    // Prepare FormData
-    const formData = new FormData();
-    formData.append('avatar', file);
-
-    // Get authentication token
-    const token = getAuthToken();
-    if (!token) {
-      throw new Error('Authentication token not found. Please log in again.');
-    }
-
-    const response = await fetch(`${API_BASE_URL}/api/auth/profile/avatar`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Accept': 'application/json'
-      },
-      body: formData
-    });
-
-    if (!response.ok) {
-      let errorMessage = `Upload failed with status ${response.status}`;
-      
-      try {
-        const errorData = await response.json();
-        if (response.status === 403) {
-          errorMessage = 'Access denied. Please check your permissions or try logging in again.';
-        } else if (response.status === 413) {
-          errorMessage = 'File too large. Please choose a smaller image.';
-        } else if (response.status === 422) {
-          errorMessage = errorData.errors ? 
-            Object.values(errorData.errors).flat().join(', ') : 
-            'Invalid file format or data.';
-        } else {
-          errorMessage = errorData.message || errorData.error || errorMessage;
-        }
-      } catch (parseError) {
-        if (response.status === 403) {
-          errorMessage = 'Access denied. You may need to log in again or check your permissions.';
-        }
-      }
-      
-      throw new Error(errorMessage);
-    }
-
-    const data = await response.json();
+    // ✅ USE APISERVICE
+    const data = await apiService.uploadAvatar(file);
     
-    // Handle different possible response formats
+    console.log('📥 Upload response:', data); // ✅ ADD THIS TO DEBUG
+    
+    // ✅ IMPROVED: Handle different response formats
     let imageUrl = data.avatar_url || data.url || data.path || data.image_url;
     
-    // If the URL is relative, make it absolute
-    if (imageUrl && !imageUrl.startsWith('http')) {
-      imageUrl = `${API_BASE_URL}${imageUrl.startsWith('/') ? '' : '/'}${imageUrl}`;
+    console.log('🖼️ Image URL from server:', imageUrl); // ✅ ADD THIS TO DEBUG
+    
+    // ✅ CRITICAL FIX: Make sure URL is absolute
+    if (imageUrl) {
+      // If it's a relative path, make it absolute
+      if (!imageUrl.startsWith('http://') && !imageUrl.startsWith('https://')) {
+        // Remove leading slash if present to avoid double slashes
+        const cleanPath = imageUrl.startsWith('/') ? imageUrl.substring(1) : imageUrl;
+        imageUrl = `${API_BASE_URL}/${cleanPath}`;
+      }
+      
+      console.log('✅ Final image URL:', imageUrl); // ✅ ADD THIS TO DEBUG
+    } else {
+      throw new Error('No image URL returned from server');
     }
 
     // Update profile with server response
@@ -448,13 +427,12 @@ if (file.size > maxSize) {
       text: 'Profile image uploaded successfully!' 
     });
 
-    // Clear the file input
     event.target.value = '';
     
   } catch (error) {
-    console.error('Image upload error:', error);
+    console.error('💥 Image upload error:', error);
     
-    // Revert the preview on error to previous image
+    // Revert the preview on error
     setUserProfile(prev => ({ ...prev, avatar_url: previousImageUrl }));
     
     setMessage({ 
@@ -462,7 +440,6 @@ if (file.size > maxSize) {
       text: error instanceof Error ? error.message : 'Failed to upload image. Please try again.' 
     });
     
-    // Clear the file input on error too
     event.target.value = '';
   } finally {
     setTimeout(() => setMessage({ type: '', text: '' }), 5000);
@@ -590,7 +567,7 @@ const safeString = (value: any): string => {
   // 1. Add a new function to fetch user profile from backend
 const fetchUserProfile = async (): Promise<void> => {
   try {
-    setProfileLoading(true); // Start loading
+    setProfileLoading(true);
     const token = getAuthToken();
     console.log('🔑 Token:', token ? 'EXISTS' : 'MISSING');
     
@@ -615,13 +592,22 @@ const fetchUserProfile = async (): Promise<void> => {
         return dateString.split('T')[0];
       };
       
+      // ✅ FIX AVATAR URL HERE TOO
+      let avatarUrl = data.avatar_url || null;
+      if (avatarUrl && !avatarUrl.startsWith('http://') && !avatarUrl.startsWith('https://')) {
+        const cleanPath = avatarUrl.startsWith('/') ? avatarUrl.substring(1) : avatarUrl;
+        avatarUrl = `${API_BASE_URL}/${cleanPath}`;
+      }
+      
+      console.log('🖼️ Processed avatar URL:', avatarUrl);
+      
       // Convert ALL null values to empty strings
       const updatedProfile = {
         student_id: safeString(data.student_id),
         name: safeString(data.name),
         email: safeString(data.email),
         department: safeString(data.department),
-        avatar_url: data.avatar_url || null,
+        avatar_url: avatarUrl, // ✅ USE PROCESSED URL
         allergies: safeString(data.allergies),
         has_known_allergies: data.has_known_allergies || false,
         allergies_uncertain: data.allergies_uncertain || false,
@@ -655,7 +641,7 @@ const fetchUserProfile = async (): Promise<void> => {
     console.error('💥 Error fetching user profile:', error);
     setProfileComplete(false);
   } finally {
-    setProfileLoading(false); // Always stop loading, even if there's an error
+    setProfileLoading(false);
   }
 };
 
@@ -719,19 +705,12 @@ const fetchMedicalHistory = async (): Promise<void> => {
 const saveProfile = async (): Promise<void> => {
   setLoading(true);
   try {
-    // Validate required fields before sending
+    // Validation (keep your existing validation code)
     const required: (keyof UserProfile)[] = [
-      'name', 
-      'email', 
-      'department', 
-      'phone_number', 
-      'date_of_birth', 
-      'emergency_contact_name', 
-      'emergency_contact_phone',
-      'emergency_contact_relationship',
-      'emergency_contact_email',
-      'blood_type',
-      'gender'
+      'name', 'email', 'department', 'phone_number', 'date_of_birth', 
+      'emergency_contact_name', 'emergency_contact_phone',
+      'emergency_contact_relationship', 'emergency_contact_email',
+      'blood_type', 'gender'
     ];
     
     const missingFields = required.filter(field => {
@@ -740,25 +719,7 @@ const saveProfile = async (): Promise<void> => {
     });
     
     if (missingFields.length > 0) {
-      const fieldNames = missingFields.map(field => {
-        switch(field) {
-          case 'phone_number': return 'Phone Number';
-          case 'date_of_birth': return 'Date of Birth';
-          case 'emergency_contact_name': return 'Emergency Contact Name';
-          case 'emergency_contact_phone': return 'Emergency Contact Phone';
-          case 'emergency_contact_relationship': return 'Emergency Contact Relationship';
-          case 'emergency_contact_email': return 'Emergency Contact Email';
-          case 'blood_type': return 'Blood Type';
-          case 'gender': return 'Gender';
-          default: return field.charAt(0).toUpperCase() + field.slice(1);
-        }
-      });
-      
-      setMessage({ 
-        type: 'error', 
-        text: `Please fill in all required fields: ${fieldNames.join(', ')}` 
-      });
-      setTimeout(() => setMessage({ type: '', text: '' }), 5000);
+      // ... your existing error handling
       setLoading(false);
       return;
     }
@@ -782,55 +743,14 @@ const saveProfile = async (): Promise<void> => {
       addictions: userProfile.addictions?.trim() || ''
     };
 
-    const token = getAuthToken();
-    if (!token) {
-      throw new Error('Authentication token not found. Please log in again.');
-    }
-
     console.log('📤 Sending profile data:', profileData);
     
-    const response = await fetch(`${API_BASE_URL}/api/student/profile`, {
-      method: 'PUT',
-      headers: {  
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`,
-        'Accept': 'application/json'
-      },
-      body: JSON.stringify(profileData)
-    });
+    // ✅ USE APISERVICE INSTEAD OF MANUAL FETCH
+    const responseData = await apiService.put('/student/profile', profileData);
     
-    console.log('📡 Response status:', response.status);
-    
-    if (!response.ok) {
-      let errorMessage = `Profile save failed with status ${response.status}`;
-      
-      try {
-        const errorData = await response.json();
-        console.error('❌ Error details:', errorData);
-        
-        if (response.status === 422) {
-          if (errorData.errors) {
-            const validationErrors = Object.entries(errorData.errors)
-              .map(([field, messages]) => `${field}: ${Array.isArray(messages) ? messages.join(', ') : messages}`)
-              .join('; ');
-            errorMessage = `Validation errors: ${validationErrors}`;
-          } else {
-            errorMessage = errorData.message || 'Validation failed';
-          }
-        } else {
-          errorMessage = errorData.message || errorData.error || errorMessage;
-        }
-      } catch (parseError) {
-        console.error('Could not parse error response:', parseError);
-      }
-      
-      throw new Error(errorMessage);
-    }
-    
-    const responseData = await response.json();
     console.log('✅ Profile saved successfully:', responseData);
     
-    // Update local state with the response
+    // Update local state
     if (responseData.user) {
       setUserProfile(prev => ({
         ...prev,

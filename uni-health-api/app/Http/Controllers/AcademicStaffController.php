@@ -684,54 +684,57 @@ public function getAvailableSlots(Request $request): JsonResponse
 }
 
     /**
-     * Get user profile - FIXED VERSION
-     */
-    public function getProfile(Request $request): JsonResponse
-    {
-        try {
-            $user = $request->user();
-            
-            // Ensure avatar_url is a full URL
-            $avatarUrl = null;
-            if ($user->avatar_url) {
-                if (filter_var($user->avatar_url, FILTER_VALIDATE_URL)) {
-                    $avatarUrl = $user->avatar_url;
-                } else {
-                    $avatarUrl = url($user->avatar_url);
-                }
+ * Get user profile - FIXED: builds URL from relative path stored in DB
+ */
+public function getProfile(Request $request): JsonResponse
+{
+    try {
+        $user = $request->user();
+
+        // Build avatar URL safely from whatever is stored
+        $avatarUrl = null;
+        if ($user->avatar_url) {
+            if (filter_var($user->avatar_url, FILTER_VALIDATE_URL)) {
+                // Already a full URL — use as-is (legacy rows not yet migrated)
+                // But fix the host if it still points to 127.0.0.1
+                $avatarUrl = str_replace(
+                    'http://127.0.0.1:8000',
+                    rtrim(config('app.url'), '/'),
+                    $user->avatar_url
+                );
+            } else {
+                // Relative path (new behaviour) — prepend APP_URL + /storage/
+                $avatarUrl = rtrim(config('app.url'), '/') . '/storage/' . ltrim($user->avatar_url, '/');
             }
-            
-            return response()->json([
-                'name' => $user->name,
-                'email' => $user->email,
-                'staff_no' => $user->staff_no,
-                'phone' => $user->phone,
-                'department' => $user->department,
-                'bio' => $user->bio,
-                'avatar_url' => $avatarUrl,
-                'date_of_birth' => $user->date_of_birth,
-                'emergency_contact_name' => $user->emergency_contact_name,
-                'emergency_contact_phone' => $user->emergency_contact_phone,
-                'emergency_contact_relationship' => $user->emergency_contact_relationship,
-                'emergency_contact_email' => $user->emergency_contact_email,
-                'blood_type' => $user->blood_type ?? 'Unknown',
-                'gender' => $user->gender,
-                'allergies' => $user->allergies,
-                'has_known_allergies' => $user->has_known_allergies ?? false,
-                'allergies_uncertain' => $user->allergies_uncertain ?? false,
-                'addictions' => $user->addictions,
-                'medical_history' => $user->medical_history,
-            ]);
-            
-        } catch (\Exception $e) {
-            Log::error('Profile fetch error: ' . $e->getMessage());
-            
-            return response()->json([
-                'message' => 'Failed to fetch profile',
-                'error' => 'An unexpected error occurred'
-            ], 500);
         }
+
+        return response()->json([
+            'name'                           => $user->name,
+            'email'                          => $user->email,
+            'staff_no'                       => $user->staff_no,
+            'phone'                          => $user->phone,
+            'department'                     => $user->department,
+            'bio'                            => $user->bio,
+            'avatar_url'                     => $avatarUrl,
+            'date_of_birth'                  => $user->date_of_birth,
+            'emergency_contact_name'         => $user->emergency_contact_name,
+            'emergency_contact_phone'        => $user->emergency_contact_phone,
+            'emergency_contact_relationship' => $user->emergency_contact_relationship,
+            'emergency_contact_email'        => $user->emergency_contact_email,
+            'blood_type'                     => $user->blood_type ?? 'Unknown',
+            'gender'                         => $user->gender,
+            'allergies'                      => $user->allergies,
+            'has_known_allergies'            => $user->has_known_allergies ?? false,
+            'allergies_uncertain'            => $user->allergies_uncertain ?? false,
+            'addictions'                     => $user->addictions,
+            'medical_history'                => $user->medical_history,
+        ]);
+
+    } catch (\Exception $e) {
+        Log::error('Profile fetch error: ' . $e->getMessage());
+        return response()->json(['message' => 'Failed to fetch profile', 'error' => 'An unexpected error occurred'], 500);
     }
+}
 
     /**
      * Update own profile - CRITICAL FIX FOR DATA PERSISTENCE
@@ -875,92 +878,80 @@ public function getAvailableSlots(Request $request): JsonResponse
     /**
      * Upload profile avatar
      */
-    public function uploadAvatar(Request $request): JsonResponse
+        public function uploadAvatar(Request $request): JsonResponse
     {
         try {
-            $validated = $request->validate([
+            $request->validate([
                 'avatar' => 'required|image|mimes:jpeg,png,jpg,gif,webp|max:5120',
             ]);
 
             $user = $request->user();
-            
+
+            // Delete old avatar if it exists
             if ($user->avatar_url) {
-                $oldPath = str_replace('/storage/', '', $user->avatar_url);
-                $oldPath = str_replace(url('/storage/'), '', $user->avatar_url);
-                
+                // Strip everything before /storage/ to get the disk-relative path
+                $oldPath = preg_replace('#^.*/storage/#', '', $user->avatar_url);
                 if (Storage::disk('public')->exists($oldPath)) {
                     Storage::disk('public')->delete($oldPath);
                 }
             }
 
-            $file = $request->file('avatar');
+            $file     = $request->file('avatar');
             $filename = $user->id . '_' . time() . '.' . $file->getClientOriginalExtension();
-            $path = $file->storeAs('avatars', $filename, 'public');
-            
-            $avatarUrl = url('/storage/' . $path);
-            
-            $user->update(['avatar_url' => $avatarUrl]);
+            $path     = $file->storeAs('avatars', $filename, 'public');   // e.g. "avatars/14_1761574163.png"
+
+            // ✅ Store ONLY the relative path in the DB — never a full URL
+            $user->update(['avatar_url' => $path]);
+
+            // Build the full URL for the response using the configured APP_URL
+            $fullUrl = rtrim(config('app.url'), '/') . '/storage/' . $path;
 
             Log::info('Avatar uploaded', [
-                'user_id' => $user->id,
-                'path' => $path,
-                'full_url' => $avatarUrl
+                'user_id'  => $user->id,
+                'path'     => $path,
+                'full_url' => $fullUrl,
             ]);
 
             return response()->json([
-                'message' => 'Avatar uploaded successfully',
-                'avatar_url' => $avatarUrl
+                'message'    => 'Avatar uploaded successfully',
+                'avatar_url' => $fullUrl,
             ]);
 
         } catch (\Illuminate\Validation\ValidationException $e) {
-            return response()->json([
-                'message' => 'Validation failed',
-                'errors' => $e->errors()
-            ], 422);
+            return response()->json(['message' => 'Validation failed', 'errors' => $e->errors()], 422);
         } catch (\Exception $e) {
             Log::error('Avatar upload error: ' . $e->getMessage());
-            
-            return response()->json([
-                'message' => 'Failed to upload avatar',
-                'error' => 'An unexpected error occurred'
-            ], 500);
+            return response()->json(['message' => 'Failed to upload avatar', 'error' => 'An unexpected error occurred'], 500);
         }
     }
 
     /**
-     * Remove profile avatar
-     */
-    public function removeAvatar(Request $request): JsonResponse
-    {
-        try {
-            $user = $request->user();
-            
-            if ($user->avatar_url) {
-                $oldPath = str_replace('/storage/', '', $user->avatar_url);
-                $oldPath = str_replace(url('/storage/'), '', $user->avatar_url);
-                
-                if (Storage::disk('public')->exists($oldPath)) {
-                    Storage::disk('public')->delete($oldPath);
-                }
-                
-                $user->update(['avatar_url' => null]);
-                
-                Log::info('Avatar removed', ['user_id' => $user->id]);
+ * Remove profile avatar - FIXED: handles both relative paths and full URLs
+ */
+public function removeAvatar(Request $request): JsonResponse
+{
+    try {
+        $user = $request->user();
+
+        if ($user->avatar_url) {
+            // Strip to disk-relative path regardless of whether stored value is
+            // a full URL (old) or a relative path (new)
+            $diskPath = preg_replace('#^.*/storage/#', '', $user->avatar_url);
+            if (Storage::disk('public')->exists($diskPath)) {
+                Storage::disk('public')->delete($diskPath);
             }
-
-            return response()->json([
-                'message' => 'Avatar removed successfully'
-            ]);
-
-        } catch (\Exception $e) {
-            Log::error('Avatar removal error: ' . $e->getMessage());
-            
-            return response()->json([
-                'message' => 'Failed to remove avatar',
-                'error' => 'An unexpected error occurred'
-            ], 500);
+            $user->update(['avatar_url' => null]);
+            Log::info('Avatar removed', ['user_id' => $user->id]);
         }
+
+        return response()->json(['message' => 'Avatar removed successfully']);
+
+    } catch (\Exception $e) {
+        Log::error('Avatar removal error: ' . $e->getMessage());
+        return response()->json(['message' => 'Failed to remove avatar', 'error' => 'An unexpected error occurred'], 500);
     }
+}
+
 
     /**
      * Helper method to format working hours

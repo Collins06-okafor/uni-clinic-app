@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { 
   Calendar, Clock, Users, FileText, Heart, Pill, AlertTriangle, Plus, 
@@ -49,6 +48,40 @@ ChartJS.register(
 
 // API Configuration - Environment-based with fallback
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://127.0.0.1:8000";
+
+// ── CSRF helpers ──────────────────────────────────────────────────────────────
+const getXsrfToken = (): string => {
+  const match = document.cookie
+    .split('; ')
+    .find(row => row.startsWith('XSRF-TOKEN='));
+  return match ? decodeURIComponent(match.split('=')[1]) : '';
+};
+
+const fetchCsrfCookie = async (): Promise<void> => {
+  await fetch(`${API_BASE_URL}/sanctum/csrf-cookie`, {
+    method: 'GET',
+    credentials: 'include',
+    headers: { 'Accept': 'application/json' },
+  });
+  await new Promise(resolve => setTimeout(resolve, 80));
+};
+
+const getMutatingHeaders = (
+  token: string,
+  includeContentType = true
+): Record<string, string> => {
+  const headers: Record<string, string> = {
+    'Authorization': `Bearer ${token}`,
+    'Accept': 'application/json',
+    'X-Requested-With': 'XMLHttpRequest',
+    'X-XSRF-TOKEN': getXsrfToken(),
+  };
+  if (includeContentType) {
+    headers['Content-Type'] = 'application/json';
+  }
+  return headers;
+};
+// ─────────────────────────────────────────────────────────────────────────────
 const CLINICAL_API_BASE = `${API_BASE_URL}/api/clinical`;
 
 // Type definitions
@@ -486,14 +519,12 @@ const ClinicalStaffDashboard: React.FC<ClinicalStaffDashboardProps> = ({ user, o
     
     post: async <T = any>(endpoint: string, data: Record<string, any>): Promise<ApiResponse<T>> => {
     try {
+      await fetchCsrfCookie();
       console.log(`POST to ${endpoint} with data:`, data);
       const response = await fetch(`${CLINICAL_API_BASE}/${endpoint}`, {
         method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${AUTH_TOKEN}`,
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-        },
+        credentials: 'include',
+        headers: getMutatingHeaders(AUTH_TOKEN),
         body: JSON.stringify(data)
       });
       
@@ -527,14 +558,12 @@ const ClinicalStaffDashboard: React.FC<ClinicalStaffDashboardProps> = ({ user, o
     
     put: async <T = any>(endpoint: string, data: Record<string, any>): Promise<ApiResponse<T>> => {
       try {
+        await fetchCsrfCookie();
         console.log(`PUT to ${endpoint} with data:`, data);
         const response = await fetch(`${CLINICAL_API_BASE}/${endpoint}`, {
           method: 'PUT',
-          headers: {
-            'Authorization': `Bearer ${AUTH_TOKEN}`,
-            'Content-Type': 'application/json',
-            'Accept': 'application/json',
-          },
+          credentials: 'include',
+          headers: getMutatingHeaders(AUTH_TOKEN),
           body: JSON.stringify(data)
         });
         
@@ -568,13 +597,11 @@ const ClinicalStaffDashboard: React.FC<ClinicalStaffDashboardProps> = ({ user, o
     
     delete: async <T = any>(endpoint: string): Promise<ApiResponse<T>> => {
       try {
+        await fetchCsrfCookie();
         const response = await fetch(`${CLINICAL_API_BASE}/${endpoint}`, {
           method: 'DELETE',
-          headers: { 
-            'Authorization': `Bearer ${AUTH_TOKEN}`,
-            'Content-Type': 'application/json',
-            'Accept': 'application/json',
-          }
+          credentials: 'include',
+          headers: getMutatingHeaders(AUTH_TOKEN)
         });
         
         const responseText = await response.text();
@@ -1191,12 +1218,17 @@ const saveProfile = async (e?: React.FormEvent): Promise<void> => {
   try {
     console.log('Saving profile with data:', userProfile);
     
+    await fetchCsrfCookie();  // ← ADD THIS
+    
     const response = await fetch(`${CLINICAL_API_BASE}/profile`, {
       method: 'POST',
+      credentials: 'include',  // ← ADD THIS
       headers: {
         'Authorization': `Bearer ${AUTH_TOKEN}`,
         'Content-Type': 'application/json',
         'Accept': 'application/json',
+        'X-Requested-With': 'XMLHttpRequest',  // ← ADD THIS
+        'X-XSRF-TOKEN': getXsrfToken(),  // ← ADD THIS
       },
       body: JSON.stringify({
         name: userProfile.name,
@@ -1246,7 +1278,6 @@ const saveProfile = async (e?: React.FormEvent): Promise<void> => {
           console.error('Failed to parse error JSON:', parseError);
         }
       } else {
-        // It's HTML - show generic error
         errorMessage = 'Server error occurred. Please check the backend.';
       }
       
@@ -1261,58 +1292,93 @@ const saveProfile = async (e?: React.FormEvent): Promise<void> => {
 };
 
   const handleImageUpload = async (file: File | null): Promise<void> => {
-    if (!file) return;
-    
-    const maxSize = 5 * 1024 * 1024; // 5MB
-    const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp'];
-    
-    if (file.size > maxSize) {
-      showMessage('error', 'File size must be less than 5MB');
-      return;
-    }
+  if (!file) return;
+  
+  const maxSize = 5 * 1024 * 1024;
+  const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp'];
+  
+  if (file.size > maxSize) {
+    showMessage('error', 'File size must be less than 5MB');
+    return;
+  }
 
-    if (!allowedTypes.includes(file.type)) {
-      showMessage('error', 'Invalid file type. Please upload JPEG, PNG, GIF, or WebP');
-      return;
-    }
-    
+  if (!allowedTypes.includes(file.type)) {
+    showMessage('error', 'Invalid file type. Please upload JPEG, PNG, GIF, or WebP');
+    return;
+  }
+
+  const previousAvatar = userProfile.avatar_url;
+
+  try {
+    // Show preview
+    const reader = new FileReader();
+    reader.onload = (e: ProgressEvent<FileReader>) => {
+      setUserProfile(prev => ({ ...prev, avatar_url: e.target?.result as string }));
+    };
+    reader.readAsDataURL(file);
+
+    // ✅ Get CSRF cookie and WAIT
+    await fetchCsrfCookie();
+
     setProfileSaving(true);
     const formData = new FormData();
     formData.append('avatar', file);
     
-    try {
-      const response = await fetch(`${API_BASE_URL}/api/auth/profile/avatar`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${AUTH_TOKEN}`
-        },
-        body: formData
-      });
+    const response = await fetch(`${API_BASE_URL}/api/auth/profile/avatar`, {
+      method: 'POST',
+      credentials: 'include',
+      headers: {
+        'Authorization': `Bearer ${AUTH_TOKEN}`,
+        'Accept': 'application/json',
+        'X-Requested-With': 'XMLHttpRequest',
+        'X-XSRF-TOKEN': getXsrfToken(),
+      },
+      body: formData
+    });
 
-      if (response.ok) {
-        const data = await response.json();
-        setUserProfile(prev => ({ ...prev, avatar_url: data.avatar_url }));
-        showMessage('success', 'Profile photo updated successfully!');
-      } else {
-        const errorData = await response.json().catch(() => ({}));
-        showMessage('error', errorData.message || 'Failed to upload photo');
+    if (response.ok) {
+      const data = await response.json();
+      
+      let imageUrl = data.avatar_url || data.url || data.path || data.image_url;
+      
+      if (imageUrl && !imageUrl.startsWith('http://') && !imageUrl.startsWith('https://')) {
+        const cleanPath = imageUrl.startsWith('/') ? imageUrl.substring(1) : imageUrl;
+        imageUrl = `${API_BASE_URL}/${cleanPath}`;
       }
-    } catch (error) {
-      console.error('Error uploading photo:', error);
-      showMessage('error', 'Failed to upload photo');
-    } finally {
-      setProfileSaving(false);
-      if (fileInputRef.current) fileInputRef.current.value = '';
+      
+      setUserProfile(prev => ({ ...prev, avatar_url: imageUrl }));
+      showMessage('success', 'Profile photo updated successfully!');
+    } else {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.message || 'Failed to upload photo');
     }
-  };
+  } catch (error) {
+    console.error('Error uploading photo:', error);
+    setUserProfile(prev => ({ ...prev, avatar_url: previousAvatar }));
+    showMessage('error', error instanceof Error ? error.message : 'Failed to upload photo');
+  } finally {
+    setProfileSaving(false);
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  }
+};
 
   const handlePhotoRemove = async (): Promise<void> => {
-  setProfileSaving(true);
+  if (!window.confirm('Are you sure you want to remove your profile photo?')) return;
+
   try {
+    await fetchCsrfCookie();
+
+    setProfileSaving(true);
+    
     const response = await fetch(`${API_BASE_URL}/api/auth/profile/avatar`, {
       method: 'DELETE',
+      credentials: 'include',
       headers: {
-        'Authorization': `Bearer ${AUTH_TOKEN}`
+        'Authorization': `Bearer ${AUTH_TOKEN}`,
+        'Accept': 'application/json',
+        'Content-Type': 'application/json',
+        'X-Requested-With': 'XMLHttpRequest',
+        'X-XSRF-TOKEN': getXsrfToken(),
       }
     });
 
@@ -1321,11 +1387,11 @@ const saveProfile = async (e?: React.FormEvent): Promise<void> => {
       showMessage('success', 'Profile photo removed successfully!');
     } else {
       const errorData = await response.json().catch(() => ({}));
-      showMessage('error', errorData.message || 'Failed to remove photo');
+      throw new Error(errorData.message || 'Failed to remove photo');
     }
   } catch (error) {
     console.error('Error removing photo:', error);
-    showMessage('error', 'Failed to remove photo');
+    showMessage('error', error instanceof Error ? error.message : 'Failed to remove photo');
   } finally {
     setProfileSaving(false);
   }
@@ -1390,12 +1456,11 @@ const saveProfile = async (e?: React.FormEvent): Promise<void> => {
     if (error.message?.includes('423')) {
       // Try to extract the JSON response from the error
       try {
+        await fetchCsrfCookie();
         const response = await fetch(`${CLINICAL_API_BASE}/student-requests/${requestId}/approve`, {
           method: 'POST',
-          headers: { 
-            'Authorization': `Bearer ${AUTH_TOKEN}`,
-            'Content-Type': 'application/json',
-          },
+          credentials: 'include',
+          headers: getMutatingHeaders(AUTH_TOKEN),
           body: JSON.stringify({ doctor_id: doctorId, notes, status })
         });
         
@@ -3822,13 +3887,16 @@ const AppointmentsTab: React.FC = () => {
                     <PhoneInput
                       country={'tr'}
                       value={userProfile.phone}
-                      onChange={(phone) => setUserProfile({ ...userProfile, phone })}
-                      placeholder="Enter your phone number"
+                      onChange={(phone) => setUserProfile(prev => ({ ...prev, phone }))}
+                      enableSearch={false}        // ← ADD THIS
+                      disableSearchIcon={true}    // ← ADD THIS
                       inputProps={{
-                        className: 'form-control',
-                        required: true
+                        name: 'phone',
+                        required: true,
+                        autoFocus: false          // ← ADD THIS TOO
                       }}
-                      containerClass="phone-input-container w-100"
+                      containerClass="phone-input-container"
+                      inputClass="form-control"
                     />
                   </div>
 

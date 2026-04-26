@@ -9,7 +9,8 @@ return [
         'http://127.0.0.1:3000', 
         'http://localhost:5173', 
         'http://127.0.0.1:5173',
-        'https://fiu-health.cmpespace.top',  // ✅ ADD THIS
+        'https://fiu-clinic.fnlsrv.website',  // ✅ ADD THIS
+        'https://fiu-health.cmpespace.top',
     ],
 
     'allowed_origins_patterns' => [],
@@ -20,5 +21,5 @@ return [
 
     'max_age' => 0,
 
-    'supports_credentials' => true,
+    'supports_credentials' => true,  // ✅ VERIFY THIS IS TRUE
 ];

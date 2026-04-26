@@ -66,3 +66,29 @@ div[style*="overflowY: auto"]::-webkit-scrollbar-thumb:hover {
   max-height: 200px;
   overflow-y: auto;
 }
+
+.profile-layout {
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
+}
+
+.profile-picture-section {
+  width: 100%;
+}
+
+/* Desktop: side-by-side */
+@media (min-width: 768px) {
+  .profile-layout {
+    flex-direction: row;
+  }
+  
+  .profile-picture-section {
+    flex: 0 0 400px;
+    max-width: 400px;
+  }
+  
+  .profile-form-section {
+    flex: 1;
+  }
+}
