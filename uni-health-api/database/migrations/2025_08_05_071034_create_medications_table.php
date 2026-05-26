@@ -11,8 +11,12 @@ return new class extends Migration
      * Run the migrations.
      */
     public function up(): void
-    {
-        Schema::create('medications', function (Blueprint $table) {
+{
+    if (Schema::hasTable('medications')) {
+        return;
+    }
+
+    Schema::create('medications', function (Blueprint $table) {
             $table->id();
             $table->string('name');
             $table->string('generic_name')->nullable();

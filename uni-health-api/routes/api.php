@@ -74,6 +74,19 @@ Route::get('/roles', function () {
 // Make departments index route public
 Route::get('/departments', [DepartmentController::class, 'index']);
 
+Route::get('/config', function () {
+    return response()->json([
+        'app_name'         => config('branding.app_name'),
+        'institution_name' => config('branding.institution_name'),
+        'institution_short'=> config('branding.institution_short'),
+        'support_email'    => config('branding.support_email'),
+        'clinic_hours'     => [
+            'open'  => config('branding.clinic_open'),
+            'close' => config('branding.clinic_close'),
+        ],
+    ]);
+});
+
 // Protected routes (authentication required)
 Route::middleware('auth:sanctum')->group(function () {
     

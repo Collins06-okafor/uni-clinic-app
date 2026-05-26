@@ -15,14 +15,14 @@ import type { User } from './types/user';
 import './transitions.css';
 import ForgotPasswordPage from './components/ForgotPasswordPage';
 import ResetPasswordPage from './components/ResetPasswordPage';
+import { BrandingProvider } from './contexts/BrandingContext';  // ← ADD
 
-// Define the common props interface for all dashboard components
 interface DashboardProps {
   user: User | null;
   onLogout?: () => void;
 }
 
-function App() {
+function AppRoutes() {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [transitioning, setTransitioning] = useState(false);
@@ -38,11 +38,8 @@ function App() {
   const refreshUser = async () => {
     try {
       const userData = await fetchUser();
-      console.log('User data fetched:', userData);
       setUser(userData);
-      console.log('User state updated with role:', userData?.role);
     } catch (error) {
-      console.error('Failed to refresh user:', error);
       setUser(null);
       localStorage.removeItem('token');
       if (location.pathname !== '/' && location.pathname !== '/register') {
@@ -51,69 +48,36 @@ function App() {
     }
   };
 
-  // Navigate user to their role-specific dashboard - now memoized
   const navigateToRoleDashboard = useCallback((userRole: string) => {
-    console.log('Navigating user with role:', userRole, 'to dashboard');
     switch (userRole) {
-      case 'student':
-        console.log('Redirecting to student dashboard');
-        navigate('/student/dashboard', { replace: true });
-        break;
-      case 'admin':
-        console.log('Redirecting to admin dashboard');
-        navigate('/admin/dashboard', { replace: true });
-        break;
-      case 'doctor':
-        console.log('Redirecting to doctor dashboard');
-        navigate('/doctor/dashboard', { replace: true });
-        break;
-      case 'clinical_staff':
-        console.log('Redirecting to clinical staff dashboard');
-        navigate('/clinical/dashboard', { replace: true });
-        break;
-      case 'academic_staff':
-        console.log('Redirecting to academic staff dashboard');
-        navigate('/academic-staff/dashboard', { replace: true });
-        break;
-      case 'superadmin':
-        console.log('Redirecting to superadmin dashboard');
-        navigate('/superadmin/dashboard', { replace: true });
-        break;
-      default:
-        console.log('Unknown role, redirecting to default dashboard:', userRole);
-        navigate('/dashboard', { replace: true });
+      case 'student':        navigate('/student/dashboard',        { replace: true }); break;
+      case 'admin':          navigate('/admin/dashboard',          { replace: true }); break;
+      case 'doctor':         navigate('/doctor/dashboard',         { replace: true }); break;
+      case 'clinical_staff': navigate('/clinical/dashboard',       { replace: true }); break;
+      case 'academic_staff': navigate('/academic-staff/dashboard', { replace: true }); break;
+      case 'superadmin':     navigate('/superadmin/dashboard',     { replace: true }); break;
+      default:               navigate('/dashboard',                { replace: true });
     }
   }, [navigate]);
 
   useEffect(() => {
     const initializeUser = async () => {
       const token = localStorage.getItem('token');
-      if (token) {
-        await refreshUser();
-      }
+      if (token) await refreshUser();
       setLoading(false);
     };
     initializeUser();
-  }, []); // This is correct - no dependencies needed for initialization
+  }, []);
 
-  const handleLoginSuccess = async () => {
-    await refreshUser();
-    // Don't navigate here - let the useEffect handle it after user is set
-  };
+  const handleLoginSuccess = async () => { await refreshUser(); };
+  const handleRegistrationSuccess = async () => { await refreshUser(); };
 
-  const handleRegistrationSuccess = async () => {
-    await refreshUser();
-    // Don't navigate here - let the useEffect handle it after user is set
-  };
-
-  // Navigate to role dashboard when user is loaded - now with correct dependencies
   useEffect(() => {
     if (user && (location.pathname === '/' || location.pathname === '/register' || location.pathname === '/dashboard')) {
       navigateToRoleDashboard(user.role);
     }
   }, [user, location.pathname, navigateToRoleDashboard]);
 
-  // Handle page transitions
   useEffect(() => {
     setTransitioning(true);
     const timer = setTimeout(() => setTransitioning(false), 50);
@@ -133,15 +97,11 @@ function App() {
     );
   }
 
-  // Helper function to get redirect path for authenticated users
   const getRedirectPath = (userRole: string): string => {
     switch (userRole) {
-      case 'academic_staff':
-        return '/academic-staff/dashboard';
-      case 'clinical_staff':
-        return '/clinical/dashboard';
-      default:
-        return `/${userRole}/dashboard`;
+      case 'academic_staff': return '/academic-staff/dashboard';
+      case 'clinical_staff': return '/clinical/dashboard';
+      default:               return `/${userRole}/dashboard`;
     }
   };
 
@@ -149,92 +109,54 @@ function App() {
     <div className="app-container">
       <div className={`page-container ${transitioning ? 'transitioning' : ''}`}>
         <Routes>
-          <Route 
-            path="/" 
-            element={
-              user ? (
-                // Redirect authenticated users to their role-specific dashboard
-                <Navigate 
-                  to={getRedirectPath(user.role)} 
-                  replace 
-                />
-              ) : (
-                <LoginPage onLoginSuccess={handleLoginSuccess} />
-              )
-            } 
-          />
-          <Route 
-            path="/register" 
-            element={<RegisterPage onRegistrationSuccess={handleRegistrationSuccess} />} 
-          />
-          
-          {/* Default dashboard - only for unknown roles */}
           <Route
-            path="/dashboard"
+            path="/"
             element={
-              <ProtectedRoute user={user}>
-                <Dashboard user={user} onLogout={handleLogout} />
-              </ProtectedRoute>
+              user
+                ? <Navigate to={getRedirectPath(user.role)} replace />
+                : <LoginPage onLoginSuccess={handleLoginSuccess} />
             }
           />
-          
-          {/* Role-specific dashboard routes */}
-          <Route
-            path="/student/dashboard"
-            element={
-              <ProtectedRoute user={user} requiredRole="student">
-                <StudentDashboard user={user} onLogout={handleLogout} />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/admin/dashboard"
-            element={
-              <ProtectedRoute user={user} requiredRole="admin">
-                <AdminDashboard user={user} onLogout={handleLogout} />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/doctor/dashboard"
-            element={
-              <ProtectedRoute user={user} requiredRole="doctor">
-                <DoctorDashboard user={user} onLogout={handleLogout} />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/clinical/dashboard"
-            element={
-              <ProtectedRoute user={user} requiredRole="clinical_staff">
-                <ClinicalStaffDashboard user={user} onLogout={handleLogout} />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/academic-staff/dashboard"
-            element={
-              <ProtectedRoute user={user} requiredRole="academic_staff">
-                <AcademicStaffDashboard user={user} onLogout={handleLogout} />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/superadmin/dashboard"
-            element={
-              <ProtectedRoute user={user} requiredRole="superadmin">
-                <SuperAdminDashboard user={user} onLogout={handleLogout} />
-              </ProtectedRoute>
-            }
-          />
-          
-          <Route path="*" element={<Navigate to="/" replace />} />
+          <Route path="/register" element={<RegisterPage onRegistrationSuccess={handleRegistrationSuccess} />} />
+
+          <Route path="/dashboard" element={
+            <ProtectedRoute user={user}><Dashboard user={user} onLogout={handleLogout} /></ProtectedRoute>
+          } />
+          <Route path="/student/dashboard" element={
+            <ProtectedRoute user={user} requiredRole="student"><StudentDashboard user={user} onLogout={handleLogout} /></ProtectedRoute>
+          } />
+          <Route path="/admin/dashboard" element={
+            <ProtectedRoute user={user} requiredRole="admin"><AdminDashboard user={user} onLogout={handleLogout} /></ProtectedRoute>
+          } />
+          <Route path="/doctor/dashboard" element={
+            <ProtectedRoute user={user} requiredRole="doctor"><DoctorDashboard user={user} onLogout={handleLogout} /></ProtectedRoute>
+          } />
+          <Route path="/clinical/dashboard" element={
+            <ProtectedRoute user={user} requiredRole="clinical_staff"><ClinicalStaffDashboard user={user} onLogout={handleLogout} /></ProtectedRoute>
+          } />
+          <Route path="/academic-staff/dashboard" element={
+            <ProtectedRoute user={user} requiredRole="academic_staff"><AcademicStaffDashboard user={user} onLogout={handleLogout} /></ProtectedRoute>
+          } />
+          <Route path="/superadmin/dashboard" element={
+            <ProtectedRoute user={user} requiredRole="superadmin"><SuperAdminDashboard user={user} onLogout={handleLogout} /></ProtectedRoute>
+          } />
 
           <Route path="/forgot-password" element={<ForgotPasswordPage />} />
-          <Route path="/reset-password" element={<ResetPasswordPage />} />
+          <Route path="/reset-password"  element={<ResetPasswordPage />} />
+          <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </div>
     </div>
+  );
+}
+
+// ─── Root: BrandingProvider wraps everything ──────────────────────────────────
+
+function App() {
+  return (
+    <BrandingProvider>
+      <AppRoutes />
+    </BrandingProvider>
   );
 }
 

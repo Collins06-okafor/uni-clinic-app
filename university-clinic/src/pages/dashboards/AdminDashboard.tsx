@@ -11,6 +11,7 @@ import PhoneInput from "react-phone-input-2";
 import "react-phone-input-2/lib/style.css";
 import AdminDashboardKPIs from '../../components/AdminDashboardKPIs';
 import Select from 'react-select';
+import { useBranding } from '../../contexts/BrandingContext';
 
 
 // API configuration
@@ -135,6 +136,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
 }) => {
 
   const { t } = useTranslation();
+  const branding = useBranding();
 
   // Handle null user case - provide default values
   const currentUser = user || { 
@@ -696,8 +698,8 @@ const Sidebar = () => {
                 }}
               >
                 <img
-                  src="/logo6.png"
-                  alt="FIU Logo"
+                  src={(branding as any)?.logo || '/default-logo.png'}
+                  alt={(branding as any)?.companyName || 'Company Logo'}
                   style={{
                     width: '32px',
                     height: '32px',
@@ -707,7 +709,7 @@ const Sidebar = () => {
               </div>
               <div>
                 <h6 style={{ color: '#ffffff', margin: 0, fontSize: '1.05rem', fontWeight: 700 }}>
-                  FIU Admin
+                  {(branding as any)?.companyName || 'Admin Portal'}
                 </h6>
                 <small style={{ color: 'rgba(255, 255, 255, 0.6)', fontSize: '0.8rem', fontWeight: 500 }}>
                   {t('admin.admin_portal', 'Admin Portal')}
@@ -728,7 +730,11 @@ const Sidebar = () => {
                 margin: '0 auto',
               }}
             >
-              <img src="/logo6.png" alt="FIU Logo" style={{ width: '32px', height: '32px', objectFit: 'cover' }} />
+              <img 
+                src={(branding as any)?.logo || '/default-logo.png'} 
+                alt={(branding as any)?.companyName || 'Logo'} 
+                style={{ width: '32px', height: '32px', objectFit: 'cover' }} 
+              />
             </div>
           )}
 
@@ -963,8 +969,8 @@ const Sidebar = () => {
         }}
       >
         <img
-          src="/logo6.png"
-          alt="Final International University"
+          src={(branding as any)?.logo || '/default-logo.png'}
+          alt={(branding as any)?.companyName || 'Company Name'}
           style={{ 
             width: 50, 
             height: 50, 
@@ -982,7 +988,7 @@ const Sidebar = () => {
               marginBottom: 2
             }}
           >
-            Final International University
+            {(branding as any)?.companyName || 'Admin Portal'}
           </div>
           <small 
             className="text-muted"
@@ -2581,7 +2587,9 @@ const renderUsers = () => {
       >
         ☰
       </button>
-      <h6 style={{ margin: 0, marginLeft: '15px', fontWeight: 600 }}>FIU Admin</h6>
+      <h6 style={{ margin: 0, marginLeft: '15px', fontWeight: 600 }}>
+        {(branding as any)?.companyName || 'Admin Portal'}
+      </h6>
     </div>
 
     {/* Main Content Wrapper */}

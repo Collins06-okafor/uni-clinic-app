@@ -17,6 +17,7 @@ import Select from 'react-select';
 import './DoctorDashboard.css';
 import EnhancedMedicalCardViewer from '../../components/clinical/EnhancedMedicalCardViewer';
 import { formatTime, formatDate, formatDateForAPI } from '../../utils/timeFormatUtils';
+import { useBranding } from '../../contexts/BrandingContext';  // ← ADD
 
 // Types
 interface User {
@@ -301,6 +302,7 @@ const getStatusBadgeClass = (status: string): string => {
 const EnhancedDoctorDashboard: React.FC<EnhancedDoctorDashboardProps> = ({ user, onLogout }) => {
 
    const { t, i18n } = useTranslation();
+   const branding = useBranding();
 
   const [activeTab, setActiveTab] = useState<string>('dashboard');
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);  // ADD THIS
@@ -2376,7 +2378,7 @@ useEffect(() => {
         if ('Notification' in window && Notification.permission === 'granted') {
           new Notification('Patient Walked In!', {
             body: `${alert.patient.name} is ready for consultation`,
-            icon: '/logo6.png',
+            icon: (branding as any)?.logo || '/default-logo.png',
             tag: 'walk-in-' + alert.appointment_id
           });
         }
@@ -3547,7 +3549,7 @@ const Sidebar = () => {
   
   <div className="d-flex align-items-center">
     <Stethoscope size={24} className="me-2" />
-    <span className="fw-bold">UniHealth</span>
+    <span className="fw-bold">{(branding as any)?.companyName || 'Medical Center'}</span>
   </div>
   
   <LanguageSwitcher />
@@ -3627,8 +3629,8 @@ const Sidebar = () => {
                 }}
               >
                 <img
-                  src="/logo6.png"
-                  alt="FIU Logo"
+                  src={(branding as any)?.logo || '/default-logo.png'}
+                  alt={(branding as any)?.companyName || 'Logo'}
                   style={{
                     width: isMobile ? '24px' : '28px',
                     height: isMobile ? '24px' : '28px',
@@ -3647,7 +3649,7 @@ const Sidebar = () => {
                     lineHeight: 1.2,
                   }}
                 >
-                  FIU Medical
+                  {(branding as any)?.companyName || 'Medical Center'}
                 </h6>
                 <small
                   style={{
@@ -3676,8 +3678,8 @@ const Sidebar = () => {
               }}
             >
               <img
-                src="/logo6.png"
-                alt="FIU Logo"
+                src={(branding as any)?.logo || '/default-logo.png'}
+                alt={(branding as any)?.companyName || 'Logo'}
                 style={{
                   width: '28px',
                   height: '28px',
@@ -4145,7 +4147,7 @@ const Sidebar = () => {
         ☰
       </button>
       <h6 style={{ margin: 0, marginLeft: '15px', fontWeight: 600, }}>
-        FIU Medical
+        {(branding as any)?.companyName || 'Medical Center'}
       </h6>
     </div>
 

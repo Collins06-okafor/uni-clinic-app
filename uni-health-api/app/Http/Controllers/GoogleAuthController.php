@@ -165,15 +165,14 @@ class GoogleAuthController extends Controller
      */
     private function determineRoleFromEmail(string $email): string
     {
-        $domain = substr(strrchr($email, "@"), 1);
-        $allowedDomains = ['university.edu', 'uni.edu', 'final.edu.tr', 'student.edu'];
-        
-        // Default to student if university email, otherwise require manual verification
-        if (in_array($domain, $allowedDomains)) {
-            return 'student';
+        $allowedDomains = config('branding.allowed_email_domains', []);
+        if (!empty($allowedDomains)) {
+            $domain = substr(strrchr($email, "@"), 1);
+            if (in_array($domain, $allowedDomains)) {
+                return 'student';
+            }
         }
-        
-        return 'student'; // Default role
+        return 'student'; // default role
     }
 
     /**

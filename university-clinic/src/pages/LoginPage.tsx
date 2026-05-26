@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { login, isAuthenticated, googleLogin } from '../services/auth';
 import LanguageSwitcher from '../components/LanguageSwitcher';
+import { useBranding } from '../contexts/BrandingContext';  // ← ADD
 import './LoginPage.css';
 
 interface LoginPageProps {
@@ -16,109 +17,82 @@ declare global {
 }
 
 const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
-  const navigate = useNavigate();
-  const { t } = useTranslation();
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [error, setError] = useState('');
-  const [loading, setLoading] = useState(false);
+  const navigate  = useNavigate();
+  const { t }     = useTranslation();
+  const branding  = useBranding();                           // ← ADD
+
+  const [email,         setEmail]         = useState('');
+  const [password,      setPassword]      = useState('');
+  const [error,         setError]         = useState('');
+  const [loading,       setLoading]       = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
-  const [showPassword, setShowPassword] = useState(false);
-  const [rememberMe, setRememberMe] = useState(false);
+  const [showPassword,  setShowPassword]  = useState(false);
+  const [rememberMe,    setRememberMe]    = useState(false);
 
   useEffect(() => {
     if (isAuthenticated()) {
       navigate('/dashboard');
     }
-    
-    // Load remembered credentials
-    const rememberedEmail = localStorage.getItem('rememberedEmail');
+
+    const rememberedEmail    = localStorage.getItem('rememberedEmail');
     const rememberedPassword = localStorage.getItem('rememberedPassword');
-    
+
     if (rememberedEmail && rememberedPassword) {
       setEmail(rememberedEmail);
       try {
         setPassword(atob(rememberedPassword));
         setRememberMe(true);
-      } catch (e) {
+      } catch {
         localStorage.removeItem('rememberedEmail');
         localStorage.removeItem('rememberedPassword');
       }
     }
 
     // Load Google Sign-In script
-    const script = document.createElement('script');
-    script.src = 'https://accounts.google.com/gsi/client';
-    script.async = true;
-    script.defer = true;
+    const script    = document.createElement('script');
+    script.src      = 'https://accounts.google.com/gsi/client';
+    script.async    = true;
+    script.defer    = true;
     document.body.appendChild(script);
 
     script.onload = () => {
       if (window.google) {
         window.google.accounts.id.initialize({
           client_id: import.meta.env.VITE_GOOGLE_CLIENT_ID,
-          callback: handleGoogleResponse,
+          callback:  handleGoogleResponse,
         });
-
         window.google.accounts.id.renderButton(
           document.getElementById('google-signin-button'),
-          { 
-            theme: 'outline', 
-            size: 'large',
-            width: 400,
-            text: 'continue_with',
-            shape: 'rectangular',
-            logo_alignment: 'left'
-          }
+          { theme: 'outline', size: 'large', width: 400, text: 'continue_with', shape: 'rectangular', logo_alignment: 'left' }
         );
       }
     };
 
-    return () => {
-      document.body.removeChild(script);
-    };
+    return () => { document.body.removeChild(script); };
   }, [navigate]);
+
+  const navigateByRole = (role?: string) => {
+    switch (role) {
+      case 'student':        navigate('/student/dashboard',        { replace: true }); break;
+      case 'admin':          navigate('/admin/dashboard',          { replace: true }); break;
+      case 'doctor':         navigate('/doctor/dashboard',         { replace: true }); break;
+      case 'clinical_staff': navigate('/clinical/dashboard',       { replace: true }); break;
+      case 'academic_staff': navigate('/academic-staff/dashboard', { replace: true }); break;
+      case 'superadmin':     navigate('/superadmin/dashboard',     { replace: true }); break;
+      default:               navigate('/dashboard',                { replace: true });
+    }
+  };
 
   const handleGoogleResponse = async (response: any) => {
     setGoogleLoading(true);
     setError('');
-
     try {
       const result = await googleLogin(response.credential);
-      
       if (result.token) {
         await onLoginSuccess();
-        
-        // Navigate based on role
-        if (result.user?.role) {
-          switch (result.user.role) {
-            case 'student':
-              navigate('/student/dashboard', { replace: true });
-              break;
-            case 'admin':
-              navigate('/admin/dashboard', { replace: true });
-              break;
-            case 'doctor':
-              navigate('/doctor/dashboard', { replace: true });
-              break;
-            case 'clinical_staff':
-              navigate('/clinical/dashboard', { replace: true });
-              break;
-            case 'academic_staff':
-              navigate('/academic-staff/dashboard', { replace: true });
-              break;
-            case 'superadmin':
-              navigate('/superadmin/dashboard', { replace: true });
-              break;
-            default:
-              navigate('/dashboard', { replace: true });
-          }
-        } else {
-          navigate('/dashboard', { replace: true });
-        }
+        navigateByRole(result.user?.role);
       }
     } catch (err: any) {
-      console.error('Google login error:', err);
       setError(err.message || t('error.google_login_failed'));
     } finally {
       setGoogleLoading(false);
@@ -129,52 +103,20 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
     e.preventDefault();
     setError('');
     setLoading(true);
-
     try {
       const response = await login({ email, password });
-      
       if (response.token) {
-        // Handle Remember Me
         if (rememberMe) {
-          localStorage.setItem('rememberedEmail', email);
+          localStorage.setItem('rememberedEmail',    email);
           localStorage.setItem('rememberedPassword', btoa(password));
         } else {
           localStorage.removeItem('rememberedEmail');
           localStorage.removeItem('rememberedPassword');
         }
-        
         await onLoginSuccess();
-        
-        // Role-based navigation
-        if (response.user?.role) {
-          switch (response.user.role) {
-            case 'student':
-              navigate('/student/dashboard', { replace: true });
-              break;
-            case 'admin':
-              navigate('/admin/dashboard', { replace: true });
-              break;
-            case 'doctor':
-              navigate('/doctor/dashboard', { replace: true });
-              break;
-            case 'clinical_staff':
-              navigate('/clinical/dashboard', { replace: true });
-              break;
-            case 'academic_staff':
-              navigate('/academic-staff/dashboard', { replace: true });
-              break;
-            case 'superadmin':
-              navigate('/superadmin/dashboard', { replace: true });
-              break;
-            default:
-              navigate('/dashboard', { replace: true });
-          }
-        } else {
-          navigate('/dashboard', { replace: true });
-        }
+        navigateByRole(response.user?.role);
       }
     } catch (err: any) {
-      console.error('Login error:', err);
       setError(err.message || t('error.login_error'));
     } finally {
       setLoading(false);
@@ -188,8 +130,16 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
       <div className="wehealth-card">
         <div className="login-panel">
           <div className="logo-section">
-            <img src="/logo6.png" alt="Final International University" className="brand-logo" />
-            <h2 className="brand-name">{t('login.brand_name')}</h2>
+            {/* ↓ CHANGED: was hardcoded /logo6.png and "Final International University" */}
+            <img
+              src={branding.logo_url}
+              alt={branding.institution_name}
+              className="brand-logo"
+            />
+            <h2 className="brand-name">{branding.app_name}</h2>
+            <p className="institution-name" style={{ fontSize: '0.85rem', opacity: 0.7, marginTop: '4px' }}>
+              {branding.institution_name}
+            </p>
           </div>
 
           <div className="login-form-container">
@@ -203,7 +153,7 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
               </div>
             )}
 
-            {/* Google Sign-In Button */}
+            {/* Google Sign-In */}
             <div style={{ marginBottom: '20px' }}>
               <div id="google-signin-button" style={{ width: '100%' }}></div>
               {googleLoading && (
@@ -214,12 +164,7 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
             </div>
 
             {/* Divider */}
-            <div style={{ 
-              display: 'flex', 
-              alignItems: 'center', 
-              margin: '20px 0',
-              gap: '10px'
-            }}>
+            <div style={{ display: 'flex', alignItems: 'center', margin: '20px 0', gap: '10px' }}>
               <div style={{ flex: 1, height: '1px', background: '#e5e7eb' }}></div>
               <span style={{ color: '#6b7280', fontSize: '14px' }}>or</span>
               <div style={{ flex: 1, height: '1px', background: '#e5e7eb' }}></div>
@@ -231,7 +176,7 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
                   type="email"
                   placeholder={t('login.email')}
                   value={email}
-                  onChange={(e) => setEmail(e.target.value)}
+                  onChange={e => setEmail(e.target.value)}
                   required
                   autoComplete="email"
                   className="form-input"
@@ -241,19 +186,15 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
               <div className="form-group">
                 <div className="password-wrapper">
                   <input
-                    type={showPassword ? "text" : "password"}
+                    type={showPassword ? 'text' : 'password'}
                     placeholder={t('login.password')}
                     value={password}
-                    onChange={(e) => setPassword(e.target.value)}
+                    onChange={e => setPassword(e.target.value)}
                     required
                     autoComplete="current-password"
                     className="form-input"
                   />
-                  <button
-                    type="button"
-                    className="password-toggle"
-                    onClick={() => setShowPassword(!showPassword)}
-                  >
+                  <button type="button" className="password-toggle" onClick={() => setShowPassword(!showPassword)}>
                     <i className={`fas ${showPassword ? 'fa-eye-slash' : 'fa-eye'}`}></i>
                   </button>
                 </div>
@@ -261,24 +202,17 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
 
               <div className="form-options">
                 <label className="checkbox-container">
-                  <input 
-                    type="checkbox" 
-                    checked={rememberMe}
-                    onChange={(e) => setRememberMe(e.target.checked)}
-                  />
+                  <input type="checkbox" checked={rememberMe} onChange={e => setRememberMe(e.target.checked)} />
                   <span className="checkmark"></span>
                   {t('login.remember_me')}
                 </label>
-                
                 <Link to="/forgot-password" className="forgot-password-link">
                   {t('login.forgot_password')}
                 </Link>
               </div>
 
               <button type="submit" disabled={loading || googleLoading} className="login-button">
-                {loading && (
-                  <span className="spinner"></span>
-                )}
+                {loading && <span className="spinner"></span>}
                 {loading ? t('login.signing_in') : t('login.sign_in')}
               </button>
             </form>
@@ -290,7 +224,6 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
             <div className="doctor-image-container">
               <img src="/female-doctor-hospital-with-stethoscope.png" alt="Healthcare Professional" className="doctor-image" />
             </div>
-            
             <div className="info-bubble">
               <div className="bubble-icon">
                 <i className="fas fa-stethoscope"></i>
@@ -301,7 +234,6 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
               </div>
             </div>
           </div>
-          
           <div className="signup-section">
             <p>{t('login.no_account')}</p>
             <Link to="/register" className="signup-link">{t('login.create_account')}</Link>

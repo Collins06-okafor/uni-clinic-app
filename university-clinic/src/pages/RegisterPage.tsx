@@ -9,6 +9,7 @@ import Select from 'react-select';
 import LanguageSwitcher from '../components/LanguageSwitcher';
 import './RegisterPage.css';
 import type { RegisterData } from '../types/user';
+import { useBranding } from '../contexts/BrandingContext';
 
 interface FormData {
   name: string;
@@ -50,6 +51,7 @@ interface SelectOption {
 const RegisterPage: React.FC<RegisterPageProps> = ({ onRegistrationSuccess }) => {
   const navigate = useNavigate();
   const { t } = useTranslation();
+  const branding = useBranding(); 
   const [form, setForm] = useState<FormData>({
     name: '',
     email: '',
@@ -607,8 +609,11 @@ const customSelectStyles = {
         {/* Left Panel - Register Form */}
         <div className="register-panel">
           <div className="register-logo-section">
-            <img src="/logo6.png" alt="Final International University" className="register-brand-logo" />
-            <h2 className="register-brand-name">{t('login.brand_name')}</h2>
+            <img src={branding.logo_url} alt={branding.institution_name} className="register-brand-logo" />
+            <h2 className="register-brand-name">{branding.app_name}</h2>
+            <p style={{ fontSize: '0.85rem', opacity: 0.7, marginTop: '4px' }}>
+              {branding.institution_name}
+            </p>
           </div>
 
           <div className="register-form-container">

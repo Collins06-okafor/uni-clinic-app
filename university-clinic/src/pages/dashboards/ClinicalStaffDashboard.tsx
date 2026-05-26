@@ -33,6 +33,7 @@ import "react-phone-input-2/lib/style.css";
 import Select from 'react-select';
 import './ClinicalStaffDashboard.css';
 import { formatTime, formatDate } from '../../utils/timeFormatUtils';
+import { useBranding } from '../../contexts/BrandingContext';  // ← ADD
 
 ChartJS.register(
   CategoryScale,
@@ -427,6 +428,7 @@ const MedicationForm: React.FC<MedicationFormProps> = React.memo(({ onSubmit, in
 const ClinicalStaffDashboard: React.FC<ClinicalStaffDashboardProps> = ({ user, onLogout }) => {
 
   const { t, i18n } = useTranslation();
+  const branding = useBranding();
   const [unreadNotifications, setUnreadNotifications] = useState(0);
   const [isConnected, setIsConnected] = useState(false);
 
@@ -1822,8 +1824,8 @@ const Sidebar = () => {
                 }}
               >
                 <img
-                  src="/logo6.png"
-                  alt="FIU Logo"
+                  src={(branding as any)?.logo || '/default-logo.png'}
+                  alt={(branding as any)?.companyName || 'Logo'}
                   style={{
                     width: isMobile ? '24px' : '28px',
                     height: isMobile ? '24px' : '28px',
@@ -1842,7 +1844,7 @@ const Sidebar = () => {
                     lineHeight: 1.2,
                   }}
                 >
-                  FIU Medical
+                  {(branding as any)?.companyName || 'Medical Center'}
                 </h6>
                 <small
                   style={{
@@ -1871,8 +1873,8 @@ const Sidebar = () => {
               }}
             >
               <img
-                src="/logo6.png"
-                alt="FIU Logo"
+                src={(branding as any)?.logo || '/default-logo.png'}
+                alt={(branding as any)?.companyName || 'Logo'}
                 style={{
                   width: '28px',
                   height: '28px',
@@ -4133,7 +4135,7 @@ const AppointmentsTab: React.FC = () => {
         ☰
       </button>
       <h6 style={{ margin: 0, marginLeft: '15px', fontWeight: 600 }}>
-        FIU Medical
+        {(branding as any)?.companyName || 'Medical Center'}
       </h6>
     </div>
 

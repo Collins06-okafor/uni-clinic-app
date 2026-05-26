@@ -16,6 +16,7 @@ import "react-phone-input-2/lib/style.css";
 import { ClinicHoursCard, AppointmentTipsCard, EmergencyContactsCard } from '../../components/ClinicInfoSidebar';
 import './AcademicStaffDashboard.css'
 import { apiHelper } from '../../services/apiHelper';
+import { useBranding } from '../../contexts/BrandingContext';  // ← ADD
 
 // API configuration
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://127.0.0.1:8000";
@@ -153,6 +154,7 @@ interface AcademicStaffDashboardProps {
 
 const AcademicStaffDashboard: React.FC<AcademicStaffDashboardProps> = ({ user, onLogout }) => {
   const { t } = useTranslation();
+  const branding = useBranding();
   
   const [activeTab, setActiveTab] = useState<string>('overview');
   const [sidebarOpen, setSidebarOpen] = useState<boolean>(false);
@@ -1244,11 +1246,15 @@ const Sidebar = () => {
                   boxShadow: '0 4px 12px rgba(220, 53, 69, 0.3)',
                 }}
               >
-                <img src="/logo6.png" alt="FIU Logo" style={{ width: isMobile ? '24px' : '28px', height: isMobile ? '24px' : '28px', objectFit: 'cover' }} />
+                <img 
+                  src={(branding as any)?.logo || '/default-logo.png'} 
+                  alt={(branding as any)?.companyName || 'Logo'} 
+                  style={{ width: isMobile ? '24px' : '28px', height: isMobile ? '24px' : '28px', objectFit: 'cover' }} 
+                />
               </div>
               <div>
                 <h6 style={{ color: '#ffffff', margin: 0, fontSize: isMobile ? '0.9rem' : '1rem', fontWeight: 700, lineHeight: 1.2 }}>
-                  FIU Medical
+                  {(branding as any)?.companyName || 'Medical Center'}
                 </h6>
                 <small style={{ color: 'rgba(255, 255, 255, 0.6)', fontSize: isMobile ? '0.68rem' : '0.75rem' }}>
                   {t('academic.academic_staff_portal')}
@@ -1268,7 +1274,11 @@ const Sidebar = () => {
                 margin: '0 auto',
               }}
             >
-              <img src="/logo6.png" alt="FIU Logo" style={{ width: '28px', height: '28px', objectFit: 'cover' }} />
+              <img 
+                src={(branding as any)?.logo || '/default-logo.png'} 
+                alt={(branding as any)?.companyName || 'Logo'} 
+                style={{ width: '28px', height: '28px', objectFit: 'cover' }} 
+              />
             </div>
           )}
 
@@ -1694,7 +1704,9 @@ const Sidebar = () => {
           >
             ☰
           </button>
-          <h5 style={{ margin: 0, fontWeight: 700 }}>Academic Staff</h5>
+          <h5 style={{ margin: 0, fontWeight: 700 }}>
+            {(branding as any)?.companyName || 'Academic Staff'}
+          </h5>
           <div style={{ width: '40px' }} />
         </div>
       )}

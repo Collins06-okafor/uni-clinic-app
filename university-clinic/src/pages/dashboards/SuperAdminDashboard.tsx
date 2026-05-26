@@ -25,6 +25,7 @@ import { useTranslation } from 'react-i18next';
 import i18n from "../../services/i18n";
 import Select from 'react-select';
 import ClinicSettingsManager from '../../components/ClinicSettingsManager';
+import { useBranding } from '../../contexts/BrandingContext';
 
 // Type definitions
 interface User {
@@ -82,6 +83,7 @@ interface SuperAdminDashboardProps {
 
 const EnhancedSuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({ user, onLogout }) => {
   const { t } = useTranslation();
+  const branding = useBranding();
   const navigate = useNavigate();
   
   const [activeTab, setActiveTab] = useState('dashboard');
@@ -975,19 +977,19 @@ const Sidebar = () => {
                 }}
               >
                 <img
-                  src="/logo6.png"
-                  alt="FIU Logo"
-                  style={{
-                    width: '32px',
-                    height: '32px',
-                    objectFit: 'cover',
-                  }}
-                />
+  src={(branding as any).logo || '/default-logo.png'}
+  alt={(branding as any).companyName || 'Company Logo'}
+  style={{
+    width: '32px',
+    height: '32px',
+    objectFit: 'cover',
+  }}
+/>
               </div>
               <div>
                 <h6 style={{ color: '#ffffff', margin: 0, fontSize: '1.05rem', fontWeight: 700 }}>
-                  FIU Admin
-                </h6>
+  {(branding as any).companyName || 'Admin Portal'}
+</h6>
                 <small style={{ color: 'rgba(255, 255, 255, 0.6)', fontSize: '0.8rem', fontWeight: 500 }}>
                   Super Admin Portal
                 </small>
@@ -1007,7 +1009,7 @@ const Sidebar = () => {
                 margin: '0 auto',
               }}
             >
-              <img src="/logo6.png" alt="FIU Logo" style={{ width: '32px', height: '32px', objectFit: 'cover' }} />
+              <img src={(branding as any).logo || '/default-logo.png'} alt={(branding as any).companyName || 'Logo'} style={{ width: '32px', height: '32px', objectFit: 'cover' }} />
             </div>
           )}
 
@@ -1260,8 +1262,8 @@ const Sidebar = () => {
         ☰
       </button>
       <h6 style={{ margin: 0, marginLeft: '15px', fontWeight: 600 }}>
-        FIU Super Admin
-      </h6>
+  {(branding as any).companyName || 'Super Admin'}
+</h6>
     </div>
 
     {/* Main Content Wrapper */}

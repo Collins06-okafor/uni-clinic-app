@@ -32,12 +32,14 @@ public function register(Request $request)
             'email',
             'unique:users,email',
             function ($attribute, $value, $fail) use ($role) {
-                // Only allow university domains for students & academic staff
                 if (in_array($role, ['student', 'academic_staff'])) {
-                    $allowedDomains = ['university.edu', 'uni.edu', 'final.edu.tr', 'student.edu'];
+                    $allowedDomains = config('branding.allowed_email_domains', []);
+                    // If no domains configured, allow any email
+                    if (empty($allowedDomains)) return;
                     $domain = substr(strrchr($value, "@"), 1);
                     if (!in_array($domain, $allowedDomains)) {
-                        $fail("Email must be from a university domain for {$role} role.");
+                        $institutionName = config('branding.institution_name', 'your institution');
+                        $fail("Email must be from an approved domain for {$institutionName}.");
                     }
                 }
             }

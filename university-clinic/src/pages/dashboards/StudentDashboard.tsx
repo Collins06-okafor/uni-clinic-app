@@ -13,6 +13,7 @@ import LanguageSwitcher from '../../components/LanguageSwitcher';
 import websocketService from '../../services/websocket';
 import apiService from '../../services/api';
 import Select from 'react-select';
+import { useBranding } from '../../contexts/BrandingContext';  // ← ADD
 // CORRECT - Use the viewing component
 import { ClinicHoursCard, AppointmentTipsCard, EmergencyContactsCard } from '../../components/ClinicInfoSidebar';
 // Configuration
@@ -163,6 +164,7 @@ const StudentAppointmentSystem: React.FC<Props> = ({
 }) => {
 
   const { t, i18n } = useTranslation();
+  const branding = useBranding();
   const [isConnected, setIsConnected] = useState(false);
   const [unreadNotifications, setUnreadNotifications] = useState(0);
 
@@ -1428,8 +1430,8 @@ const Sidebar = () => {
                 }}
               >
                 <img
-                  src="/logo6.png"
-                  alt="FIU Logo"
+                  src={(branding as any)?.logo || '/default-logo.png'}
+                  alt={(branding as any)?.companyName || 'Logo'}
                   style={{
                     width: isMobile ? '24px' : '28px',
                     height: isMobile ? '24px' : '28px',
@@ -1448,7 +1450,7 @@ const Sidebar = () => {
                     lineHeight: 1.2,
                   }}
                 >
-                  FIU Medical
+                  {(branding as any)?.companyName || 'Medical Center'}
                 </h6>
                 <small
                   style={{
@@ -1477,8 +1479,8 @@ const Sidebar = () => {
               }}
             >
               <img
-                src="/logo6.png"
-                alt="FIU Logo"
+                src={(branding as any)?.logo || '/default-logo.png'}
+                alt={(branding as any)?.companyName || 'Logo'}
                 style={{
                   width: '28px',
                   height: '28px',
@@ -1976,7 +1978,9 @@ const Sidebar = () => {
           >
             ☰
           </button>
-          <h5 style={{ margin: 0, fontWeight: 700 }}>Student Dashboard</h5>
+          <h5 style={{ margin: 0, fontWeight: 700 }}>
+            {(branding as any)?.companyName || 'Student Dashboard'}
+          </h5>
           <div style={{ width: '40px' }} />
         </div>
       )}

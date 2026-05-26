@@ -851,8 +851,8 @@ private function validateSection(string $section, array $data): void
             
             $defaults = [
                 'general' => [
-                    'site_name' => 'University Health System',
-                    'site_description' => 'Comprehensive university Health platform',
+                    'site_name' => config('branding.app_name', 'ClinicFlow Pro'),
+                    'site_description' => config('branding.institution_name', 'Your Institution') . ' Health Management System',
                     'timezone' => 'UTC+3',
                     'default_language' => 'en',
                     'maintenance_mode' => false,
